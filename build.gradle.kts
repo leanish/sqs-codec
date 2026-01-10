@@ -43,7 +43,7 @@ dependencies {
     // BOMs
     compileOnly(platform("software.amazon.awssdk:bom:2.41.4"))
     testImplementation(platform("software.amazon.awssdk:bom:2.41.4"))
-    testImplementation(platform("org.junit:junit-bom:5.11.3"))
+    testImplementation(platform("org.junit:junit-bom:6.0.2"))
     testImplementation(platform("org.mockito:mockito-bom:5.15.2"))
 
     // Consumers provide AWS SDK versions; keep it compileOnly to avoid forcing a version.

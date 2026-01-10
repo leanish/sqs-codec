@@ -1,0 +1,132 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="warning"/>
+    <property name="fileExtensions" value="java, properties"/>
+
+    <!-- Suppressions configuration -->
+    <module name="SuppressionFilter">
+        <property name="file" value="${config_loc}/suppressions.xml"/>
+    </module>
+
+    <!-- Checks for whitespace -->
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+    </module>
+
+    <module name="LineLength">
+        <property name="max" value="160"/>
+        <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+    </module>
+
+    <module name="TreeWalker">
+        <module name="JavadocMethod">
+            <property name="allowMissingReturnTag" value="true"/>
+            <property name="allowMissingParamTags" value="true"/>
+        </module>
+        <module name="SuppressWarningsHolder"/>
+        <!-- Checks for Naming Conventions -->
+        <module name="ConstantName">
+            <property name="format" value="^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$|^logger$"/>
+        </module>
+        <module name="LocalFinalVariableName"/>
+        <module name="LocalVariableName"/>
+        <module name="MemberName"/>
+        <module name="MethodName">
+            <property name="format" value="^[a-z][a-zA-Z0-9]*(_[a-zA-Z0-9]+)*$"/>
+        </module>
+        <module name="PackageName"/>
+        <module name="ParameterName"/>
+        <module name="StaticVariableName"/>
+        <module name="TypeName"/>
+        <module name="AbbreviationAsWordInName">
+            <property name="allowedAbbreviationLength" value="1"/>
+            <property name="allowedAbbreviations" value="QL"/>
+            <property name="ignoreFinal" value="false"/>
+            <property name="ignoreStatic" value="false"/>
+        </module>
+
+        <!-- Checks for imports -->
+        <module name="AvoidStarImport"/>
+        <module name="AvoidStaticImport">
+            <property name="excludes"
+                      value="org.mockito.ArgumentMatchers.*,org.mockito.Matchers.*,org.mockito.Mockito.*,org.junit.Assert.*,org.junit.jupiter.api.Assertions.*,org.assertj.core.api.Assertions.*,org.assertj.core.api.AssertionsForClassTypes.*,com.github.tomakehurst.wiremock.client.WireMock.*,org.awaitility.Awaitility.*,org.hamcrest.Matchers.*,org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*,org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*,org.springframework.test.web.servlet.result.MockMvcResultMatchers.*,java.util.concurrent.TimeUnit.*"/>
+        </module>
+        <module name="IllegalImport">
+            <property name="illegalClasses"
+                      value="android.annotation.NonNull,android.annotation.Nullable,androidx.annotation.NonNull,androidx.annotation.Nullable,androidx.annotation.RecentlyNonNull,androidx.annotation.RecentlyNullable,com.google.code.findbugs.annotations.CheckForNull,com.google.code.findbugs.annotations.NonNull,com.google.code.findbugs.annotations.Nullable,com.google.common.base.Nullable,edu.umd.cs.findbugs.annotations.CheckForNull,edu.umd.cs.findbugs.annotations.NonNull,edu.umd.cs.findbugs.annotations.Nullable,jakarta.annotation.Nonnull,jakarta.annotation.Nullable,javax.annotation.CheckForNull,javax.annotation.Nonnull,javax.annotation.Nullable,javax.annotation.ParametersAreNonnullByDefault,javax.annotation.ParametersAreNullableByDefault,org.eclipse.jdt.annotation.NonNull,org.eclipse.jdt.annotation.NonNullByDefault,org.eclipse.jdt.annotation.Nullable,org.jetbrains.annotations.NotNull,org.jetbrains.annotations.Nullable,org.jetbrains.annotations.UnknownNullability,org.springframework.lang.NonNull,org.springframework.lang.NonNullApi,org.springframework.lang.NonNullFields,org.springframework.lang.Nullable"/>
+        </module>
+        <module name="RedundantImport"/>
+        <module name="ImportOrder">
+            <property name="groups" value="java,javax,org,com,*"/>
+            <property name="ordered" value="true"/>
+            <property name="separated" value="true"/>
+            <property name="option" value="top"/>
+            <property name="sortStaticImportsAlphabetically" value="true"/>
+        </module>
+        <module name="UnusedImports">
+            <property name="processJavadoc" value="true"/>
+        </module>
+
+        <!-- Checks for blocks -->
+        <module name="EmptyBlock">
+            <property name="option" value="TEXT"/>
+            <property name="tokens" value="LITERAL_TRY, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, LITERAL_SWITCH"/>
+        </module>
+        <module name="NeedBraces"/>
+        <module name="LeftCurly"/>
+        <module name="RightCurly"/>
+
+        <!-- Checks for whitespace/padding -->
+        <module name="MethodParamPad"/>
+        <module name="NoWhitespaceAfter"/>
+        <module name="NoWhitespaceBefore"/>
+        <module name="ParenPad"/>
+        <module name="TypecastParenPad"/>
+        <module name="WhitespaceAfter">
+            <property name="tokens" value="COMMA, TYPECAST"/>
+        </module>
+        <module name="WhitespaceAround">
+            <property name="allowEmptyTypes" value="true"/>
+            <property name="allowEmptyConstructors" value="true"/>
+            <property name="allowEmptyMethods" value="true"/>
+        </module>
+
+        <!-- Checks for common coding problems -->
+        <module name="EmptyStatement"/>
+        <module name="EqualsHashCode"/>
+        <module name="IllegalInstantiation"/>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <module name="AvoidNestedBlocks">
+            <property name="allowInSwitchCase" value="true"/>
+        </module>
+        <module name="StringLiteralEquality"/>
+        <module name="IllegalToken">
+            <property name="tokens" value="INSTANCE_INIT"/>
+        </module>
+        <module name="SuppressionCommentFilter"/>
+        <module name="IllegalCatchCheck">
+            <property name="illegalClassNames" value="Throwable, Error"/>
+        </module>
+
+        <!-- Checks for class design -->
+        <module name="HideUtilityClassConstructor"/>
+        <module name="InterfaceIsType"/>
+        <module name="VisibilityModifier"/>
+        <module name="InnerTypeLast"/>
+        <module name="ModifierOrder"/>
+        <module name="RedundantModifier"/>
+
+        <!-- Miscellaneous other checks -->
+        <module name="ArrayTypeStyle"/>
+        <module name="TodoComment"/>
+        <module name="UpperEll"/>
+    </module>
+    <module name="SuppressWarningsFilter"/>
+    <module name="UniqueProperties"/>
+</module>

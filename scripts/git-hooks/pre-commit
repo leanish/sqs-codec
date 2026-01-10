@@ -1,0 +1,22 @@
+#!/bin/sh
+
+echo "Running spotlessApply and checkstyle..."
+
+echo "Running spotlessApply..."
+./gradlew spotlessApply
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+    echo "❌ spotlessApply failed. Please fix the issues before committing."
+    exit 1
+fi
+
+echo "Running checkstyle..."
+./gradlew checkstyleMain checkstyleTest
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+    echo "❌ Checkstyle failed. Please fix the issues before committing."
+    exit 1
+fi
+
+echo "✅ Spotless and checkstyle passed!"
+exit 0

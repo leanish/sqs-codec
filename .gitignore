@@ -1,0 +1,9 @@
+.gradle
+/.gradle-*/
+build
+
+### IDE ###
+.idea/
+
+### OS ###
+**/.DS_Store

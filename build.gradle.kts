@@ -5,7 +5,7 @@ plugins {
     `maven-publish`
     checkstyle
     id("com.diffplug.spotless") version "8.1.0"
-    id("net.ltgt.errorprone") version "4.3.0"
+    id("net.ltgt.errorprone") version "4.4.0"
 }
 
 group = "io.github.leanish"

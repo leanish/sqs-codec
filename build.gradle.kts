@@ -62,7 +62,7 @@ dependencies {
     // IDE test runners use the launcher when not delegating to Gradle.
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    errorprone("com.google.errorprone:error_prone_core:2.45.0")
+    errorprone("com.google.errorprone:error_prone_core:2.46.0")
     errorprone("com.uber.nullaway:nullaway:0.12.15")
 }
 
@@ -78,6 +78,8 @@ tasks.withType<Test>().configureEach {
 }
 
 tasks.withType<JavaCompile>().configureEach {
+    // Required from errorprone 2.46.0+ on JDK 21
+    options.compilerArgs.add("-XDaddTypeAnnotationsToSymbol=true")
     options.errorprone {
         disableWarningsInGeneratedCode.set(true)
         errorproneArgs.addAll(

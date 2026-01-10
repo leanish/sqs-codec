@@ -57,7 +57,7 @@ dependencies {
     testImplementation("software.amazon.awssdk:sqs")
 
     testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("org.assertj:assertj-core:3.27.6")
     testImplementation("org.mockito:mockito-core")
     // IDE test runners use the launcher when not delegating to Gradle.
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

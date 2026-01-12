@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +29,10 @@ import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.attributes.MessageAttributeUtils;
+import io.github.leanish.sqs.codec.attributes.PayloadChecksumAttributeHandler;
 import io.github.leanish.sqs.codec.attributes.PayloadCodecAttributes;
 import io.github.leanish.sqs.codec.attributes.PayloadCodecConfigurationAttributeHandler;
+import io.github.leanish.sqs.codec.attributes.PayloadRawLengthAttributeHandler;
 import software.amazon.awssdk.core.SdkRequest;
 import software.amazon.awssdk.core.SdkResponse;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
@@ -288,6 +291,72 @@ class SqsPayloadCodecInterceptorTest {
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                 .withEncodingAlgorithm(EncodingAlgorithm.NONE)
                 .withChecksumAlgorithm(otherChecksumAlgorithm(checksumAlgorithm));
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) interceptor.modifyResponse(
+                new ModifyResponseContext(response),
+                new ExecutionAttributes());
+
+        assertThat(decoded.messages()).hasSize(1);
+        assertThat(decoded.messages().getFirst().body()).isEqualTo(PAYLOAD);
+    }
+
+    @ParameterizedTest(name = "message={0}/{1}, interceptor={2}/{3}")
+    @MethodSource("codecConfigurationPairs")
+    void modifyResponseUsesAttributeCodecAcrossConfigurations(
+            CompressionAlgorithm messageCompression,
+            EncodingAlgorithm messageEncoding,
+            CompressionAlgorithm interceptorCompression,
+            EncodingAlgorithm interceptorEncoding) {
+        byte[] payloadBytes = PAYLOAD.getBytes(StandardCharsets.UTF_8);
+        PayloadCodec codec = new PayloadCodec(messageCompression, messageEncoding);
+        String encodedBody = new String(codec.encode(payloadBytes), StandardCharsets.UTF_8);
+        Map<String, MessageAttributeValue> attributes = codecAttributes(
+                payloadBytes,
+                messageCompression,
+                messageEncoding,
+                ChecksumAlgorithm.NONE);
+        ReceiveMessageResponse response = ReceiveMessageResponse.builder()
+                .messages(Message.builder()
+                        .body(encodedBody)
+                        .messageAttributes(attributes)
+                        .build())
+                .build();
+        SqsPayloadCodecInterceptor interceptor = new SqsPayloadCodecInterceptor()
+                .withCompressionAlgorithm(interceptorCompression)
+                .withEncodingAlgorithm(interceptorEncoding)
+                .withChecksumAlgorithm(ChecksumAlgorithm.SHA256);
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) interceptor.modifyResponse(
+                new ModifyResponseContext(response),
+                new ExecutionAttributes());
+
+        assertThat(decoded.messages()).hasSize(1);
+        assertThat(decoded.messages().getFirst().body()).isEqualTo(PAYLOAD);
+    }
+
+    @ParameterizedTest(name = "message={0}, interceptor={1}")
+    @MethodSource("checksumConfigurationPairs")
+    void modifyResponseUsesAttributeChecksumAcrossConfigurations(
+            ChecksumAlgorithm messageChecksum,
+            ChecksumAlgorithm interceptorChecksum) {
+        byte[] payloadBytes = PAYLOAD.getBytes(StandardCharsets.UTF_8);
+        PayloadCodec codec = new PayloadCodec(CompressionAlgorithm.ZSTD, EncodingAlgorithm.NONE);
+        String encodedBody = new String(codec.encode(payloadBytes), StandardCharsets.UTF_8);
+        Map<String, MessageAttributeValue> attributes = codecAttributes(
+                payloadBytes,
+                CompressionAlgorithm.ZSTD,
+                EncodingAlgorithm.NONE,
+                messageChecksum);
+        ReceiveMessageResponse response = ReceiveMessageResponse.builder()
+                .messages(Message.builder()
+                        .body(encodedBody)
+                        .messageAttributes(attributes)
+                        .build())
+                .build();
+        SqsPayloadCodecInterceptor interceptor = new SqsPayloadCodecInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
+                .withEncodingAlgorithm(EncodingAlgorithm.BASE64_STD)
+                .withChecksumAlgorithm(interceptorChecksum);
 
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) interceptor.modifyResponse(
                 new ModifyResponseContext(response),
@@ -740,6 +809,24 @@ class SqsPayloadCodecInterceptorTest {
                 Arguments.of(blankVersion, CompressionAlgorithm.NONE, EncodingAlgorithm.NONE));
     }
 
+    private static Stream<Arguments> codecConfigurationPairs() {
+        return Arrays.stream(CompressionAlgorithm.values())
+                .flatMap(messageCompression -> Arrays.stream(EncodingAlgorithm.values())
+                        .flatMap(messageEncoding -> Arrays.stream(CompressionAlgorithm.values())
+                                .flatMap(interceptorCompression -> Arrays.stream(EncodingAlgorithm.values())
+                                        .map(interceptorEncoding -> Arguments.of(
+                                                messageCompression,
+                                                messageEncoding,
+                                                interceptorCompression,
+                                                interceptorEncoding)))));
+    }
+
+    private static Stream<Arguments> checksumConfigurationPairs() {
+        return Arrays.stream(ChecksumAlgorithm.values())
+                .flatMap(messageChecksum -> Arrays.stream(ChecksumAlgorithm.values())
+                        .map(interceptorChecksum -> Arguments.of(messageChecksum, interceptorChecksum)));
+    }
+
     private static Stream<ChecksumAlgorithm> checksumAlgorithms() {
         return Stream.of(ChecksumAlgorithm.MD5, ChecksumAlgorithm.SHA256);
     }
@@ -786,18 +873,17 @@ class SqsPayloadCodecInterceptorTest {
             CompressionAlgorithm compressionAlgorithm,
             EncodingAlgorithm encodingAlgorithm,
             ChecksumAlgorithm checksumAlgorithm) {
+        PayloadCodecConfiguration configuration = new PayloadCodecConfiguration(
+                compressionAlgorithm,
+                encodingAlgorithm,
+                checksumAlgorithm);
         Map<String, MessageAttributeValue> attributes = new HashMap<>();
-        EncodingAlgorithm effectiveEncoding = EncodingAlgorithm.effectiveFor(compressionAlgorithm, encodingAlgorithm);
-        attributes.put(PayloadCodecAttributes.COMPRESSION_ALG, MessageAttributeUtils.stringAttribute(compressionAlgorithm.id()));
-        attributes.put(PayloadCodecAttributes.ENCODING_ALG, MessageAttributeUtils.stringAttribute(effectiveEncoding.id()));
-        attributes.put(PayloadCodecAttributes.VERSION, MessageAttributeUtils.numberAttribute(PayloadCodecAttributes.VERSION_VALUE));
-        attributes.put(PayloadCodecAttributes.RAW_LENGTH, MessageAttributeUtils.numberAttribute(payloadBytes.length));
-        if (checksumAlgorithm != ChecksumAlgorithm.NONE) {
-            attributes.put(PayloadCodecAttributes.CHECKSUM_ALG, MessageAttributeUtils.stringAttribute(checksumAlgorithm.id()));
-            attributes.put(PayloadCodecAttributes.CHECKSUM, MessageAttributeUtils.stringAttribute(
-                    checksumAlgorithm.digestor().checksum(payloadBytes)));
-        }
-
+        PayloadCodecConfigurationAttributeHandler.forOutbound(configuration)
+                .applyTo(attributes);
+        PayloadRawLengthAttributeHandler.forOutbound(payloadBytes.length)
+                .applyTo(attributes);
+        PayloadChecksumAttributeHandler.forOutbound(checksumAlgorithm, payloadBytes)
+                .applyTo(attributes);
         return attributes;
     }
 

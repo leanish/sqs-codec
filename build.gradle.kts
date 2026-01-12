@@ -60,7 +60,7 @@ dependencies {
     implementation("org.xerial.snappy:snappy-java:1.1.10.8")
 
     compileOnly("org.jspecify:jspecify:1.0.0")
-    compileOnly("org.jetbrains:annotations:24.1.0")
+    compileOnly("org.jetbrains:annotations:26.0.2-1")
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
 

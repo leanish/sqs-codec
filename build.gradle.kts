@@ -61,8 +61,8 @@ dependencies {
 
     compileOnly("org.jspecify:jspecify:1.0.0")
     compileOnly("org.jetbrains:annotations:24.1.0")
-    compileOnly("org.projectlombok:lombok:1.18.36")
-    annotationProcessor("org.projectlombok:lombok:1.18.36")
+    compileOnly("org.projectlombok:lombok:1.18.42")
+    annotationProcessor("org.projectlombok:lombok:1.18.42")
 
     testImplementation("software.amazon.awssdk:sqs")
 
@@ -73,8 +73,8 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-localstack")
     // IDE test runners use the launcher when not delegating to Gradle.
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testCompileOnly("org.projectlombok:lombok:1.18.36")
-    testAnnotationProcessor("org.projectlombok:lombok:1.18.36")
+    testCompileOnly("org.projectlombok:lombok:1.18.42")
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.42")
 
     errorprone("com.google.errorprone:error_prone_core:2.46.0")
     errorprone("com.uber.nullaway:nullaway:0.12.15")

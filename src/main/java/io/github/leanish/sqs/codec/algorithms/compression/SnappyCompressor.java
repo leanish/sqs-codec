@@ -13,7 +13,7 @@ import org.xerial.snappy.Snappy;
 /**
  * Snappy implementation of the compressor strategy.
  */
-public final class SnappyCompressor implements Compressor {
+public class SnappyCompressor implements Compressor {
 
     @Override
     public byte[] compress(byte[] payload) {

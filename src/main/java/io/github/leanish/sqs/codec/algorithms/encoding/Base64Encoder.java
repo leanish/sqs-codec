@@ -10,7 +10,7 @@ import java.util.Base64;
 /**
  * URL-safe Base64 encoder implementation.
  */
-public final class Base64Encoder implements Encoder {
+public class Base64Encoder implements Encoder {
 
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder();
     private static final Base64.Decoder DECODER = Base64.getUrlDecoder();

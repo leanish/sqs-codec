@@ -3,7 +3,7 @@
  * Licensed under the MIT License.
  * See LICENSE file in the project root for full license information.
  */
-package io.github.leanish.sqs.codec;
+package io.github.leanish.sqs.codec.algorithms.encoding;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -11,11 +11,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Test;
-
-import io.github.leanish.sqs.codec.algorithms.encoding.Base64Encoder;
-import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
-import io.github.leanish.sqs.codec.algorithms.encoding.NoOpEncoder;
-import io.github.leanish.sqs.codec.algorithms.encoding.StandardBase64Encoder;
 
 class EncodingTest {
 
@@ -31,8 +26,10 @@ class EncodingTest {
         byte[] encoded = noOpEncoder.encode(payload.getBytes(StandardCharsets.UTF_8));
         byte[] decoded = noOpEncoder.decode(encoded);
 
-        assertThat(new String(encoded, StandardCharsets.UTF_8)).isEqualTo(payload);
-        assertThat(new String(decoded, StandardCharsets.UTF_8)).isEqualTo(payload);
+        assertThat(new String(encoded, StandardCharsets.UTF_8))
+                .isEqualTo(payload);
+        assertThat(new String(decoded, StandardCharsets.UTF_8))
+                .isEqualTo(payload);
     }
 
     @Test
@@ -52,7 +49,7 @@ class EncodingTest {
     }
 
     @Test
-    void base64VariantsDifferences() {
+    void base64_variantsDifferences() {
         byte[] payload = new byte[] {(byte) 0xfb, (byte) 0xef, (byte) 0xff};
 
         assertThat(new String(urlEncoder.encode(payload), StandardCharsets.UTF_8)).isEqualTo("--__");

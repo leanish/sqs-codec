@@ -12,7 +12,7 @@ import java.util.Base64;
 /**
  * SHA-256 digest implementation.
  */
-public final class Sha256Digestor implements Digestor {
+public class Sha256Digestor implements Digestor {
 
     private static final Base64.Encoder BASE64_ENCODER = Base64.getUrlEncoder();
 

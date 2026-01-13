@@ -19,29 +19,32 @@ import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 class PayloadCodecTest {
 
     @Test
-    void defaultCodecUsesPlaintextEncoding() {
+    void encode_default() {
         PayloadCodec codec = new PayloadCodec();
         String payload = "payload-42";
 
         byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
 
-        assertThat(new String(encoded, StandardCharsets.UTF_8)).isEqualTo(payload);
-        assertThat(new String(codec.decode(encoded), StandardCharsets.UTF_8)).isEqualTo(payload);
+        assertThat(new String(encoded, StandardCharsets.UTF_8))
+                .isEqualTo(payload);
+        assertThat(new String(codec.decode(encoded), StandardCharsets.UTF_8))
+                .isEqualTo(payload);
     }
 
     @Test
-    void compressedRoundTripPreservesPayload() {
+    void encode_happyCase() {
         PayloadCodec codec = new PayloadCodec(CompressionAlgorithm.ZSTD, EncodingAlgorithm.NONE);
         String payload = "{\"value\":42}";
         byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
 
         String decoded = new String(codec.decode(encoded), StandardCharsets.UTF_8);
 
-        assertThat(decoded).isEqualTo(payload);
+        assertThat(decoded)
+                .isEqualTo(payload);
     }
 
     @Test
-    void decodeWrapsInvalidBase64() {
+    void decode_invalidBase64() {
         PayloadCodec codec = new PayloadCodec(CompressionAlgorithm.NONE, EncodingAlgorithm.BASE64);
 
         assertThatThrownBy(() -> codec.decode("!!!".getBytes(StandardCharsets.UTF_8)))

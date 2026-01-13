@@ -8,7 +8,7 @@ package io.github.leanish.sqs.codec.algorithms.compression;
 /**
  * No-op compressor that passes payload bytes through unchanged.
  */
-public final class NoOpCompressor implements Compressor {
+public class NoOpCompressor implements Compressor {
 
     @Override
     public byte[] compress(byte[] payload) {

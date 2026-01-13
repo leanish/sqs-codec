@@ -3,7 +3,7 @@
  * Licensed under the MIT License.
  * See LICENSE file in the project root for full license information.
  */
-package io.github.leanish.sqs.codec;
+package io.github.leanish.sqs.codec.algorithms;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,10 +15,6 @@ import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-
-import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
-import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
-import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 
 class AlgorithmIdsTest {
 

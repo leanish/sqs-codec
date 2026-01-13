@@ -16,7 +16,7 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 /**
  * Creates and validates checksum-related SQS message attributes.
  */
-public final class PayloadChecksumAttributeHandler {
+public class PayloadChecksumAttributeHandler {
 
     private final String checksumValue;
 

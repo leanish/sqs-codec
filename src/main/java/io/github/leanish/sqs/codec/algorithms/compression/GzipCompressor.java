@@ -17,7 +17,7 @@ import java.util.zip.GZIPOutputStream;
 /**
  * Gzip implementation of the compressor strategy.
  */
-public final class GzipCompressor implements Compressor {
+public class GzipCompressor implements Compressor {
 
     @Override
     public byte[] compress(byte[] payload) {

@@ -8,7 +8,7 @@ package io.github.leanish.sqs.codec.attributes;
 /**
  * Constants for codec attribute names and the current codec version.
  */
-public final class PayloadCodecAttributes {
+public class PayloadCodecAttributes {
 
     public static final String CHECKSUM = "x-codec-checksum";
     public static final String CONF = "x-codec-conf";

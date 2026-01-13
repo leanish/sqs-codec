@@ -85,7 +85,8 @@ public class SqsPayloadCodecInterceptor implements ExecutionInterceptor {
     @SuppressWarnings("DuplicatedCode") // known but sadly SendMessageRequest and SendMessageBatchRequestEntry are not polymorphic
     private SendMessageRequest encodeSendMessage(SendMessageRequest request) {
         if (PayloadCodecConfigurationAttributeHandler.hasCodecAttributes(request.messageAttributes())) {
-            // Already encoded upstream; avoid double-encoding or overwriting attributes.
+            // Already encoded upstream; avoid double-encoding or overwriting attributes (if valid)
+            PayloadCodecConfigurationAttributeHandler.fromAttributes(request.messageAttributes());
             return request;
         }
 
@@ -122,7 +123,8 @@ public class SqsPayloadCodecInterceptor implements ExecutionInterceptor {
     @SuppressWarnings("DuplicatedCode") // known but sadly SendMessageRequest and SendMessageBatchRequestEntry are not polymorphic
     private SendMessageBatchRequestEntry encodeSendMessageEntry(SendMessageBatchRequestEntry entry) {
         if (PayloadCodecConfigurationAttributeHandler.hasCodecAttributes(entry.messageAttributes())) {
-            // Already encoded upstream; avoid double-encoding or overwriting attributes.
+            // Already encoded upstream; avoid double-encoding or overwriting attributes (if valid)
+            PayloadCodecConfigurationAttributeHandler.fromAttributes(entry.messageAttributes());
             return entry;
         }
 

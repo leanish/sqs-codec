@@ -14,7 +14,7 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 /**
  * Helpers for reading and creating SQS message attributes.
  */
-public final class MessageAttributeUtils {
+public class MessageAttributeUtils {
 
     private MessageAttributeUtils() {
     }

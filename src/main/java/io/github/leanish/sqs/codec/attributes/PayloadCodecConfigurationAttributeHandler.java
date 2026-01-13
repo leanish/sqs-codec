@@ -20,7 +20,7 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 /**
  * Parses and writes codec configuration attributes for SQS messages.
  */
-public final class PayloadCodecConfigurationAttributeHandler {
+public class PayloadCodecConfigurationAttributeHandler {
 
     private final PayloadCodecConfiguration configuration;
 

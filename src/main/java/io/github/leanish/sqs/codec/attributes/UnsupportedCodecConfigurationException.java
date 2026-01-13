@@ -10,7 +10,7 @@ import io.github.leanish.sqs.codec.PayloadCodecException;
 /**
  * Thrown when codec configuration attributes are malformed or unsupported.
  */
-public final class UnsupportedCodecConfigurationException extends PayloadCodecException {
+public class UnsupportedCodecConfigurationException extends PayloadCodecException {
     public UnsupportedCodecConfigurationException(String message) {
         super(message);
     }

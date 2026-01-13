@@ -12,7 +12,7 @@ import java.util.Base64;
 /**
  * MD5 digest implementation.
  */
-public final class Md5Digestor implements Digestor {
+public class Md5Digestor implements Digestor {
 
     private static final Base64.Encoder BASE64_ENCODER = Base64.getUrlEncoder();
 

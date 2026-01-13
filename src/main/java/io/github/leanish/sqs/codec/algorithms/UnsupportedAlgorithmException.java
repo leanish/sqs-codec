@@ -10,7 +10,7 @@ import io.github.leanish.sqs.codec.PayloadCodecException;
 /**
  * Thrown when an unsupported algorithm id is encountered.
  */
-public final class UnsupportedAlgorithmException extends PayloadCodecException {
+public class UnsupportedAlgorithmException extends PayloadCodecException {
 
     public UnsupportedAlgorithmException(String message) {
         super(message);

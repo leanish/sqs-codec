@@ -10,7 +10,7 @@ import java.util.Base64;
 /**
  * Standard Base64 encoder implementation.
  */
-public final class StandardBase64Encoder implements Encoder {
+public class StandardBase64Encoder implements Encoder {
 
     private static final Base64.Encoder ENCODER = Base64.getEncoder();
     private static final Base64.Decoder DECODER = Base64.getDecoder();

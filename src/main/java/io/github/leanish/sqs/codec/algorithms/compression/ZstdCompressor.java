@@ -18,7 +18,7 @@ import com.github.luben.zstd.ZstdOutputStreamNoFinalizer;
 /**
  * Zstandard implementation of the compressor strategy.
  */
-public final class ZstdCompressor implements Compressor {
+public class ZstdCompressor implements Compressor {
 
     @Override
     public byte[] compress(byte[] payload) {

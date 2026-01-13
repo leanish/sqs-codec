@@ -12,7 +12,7 @@ import io.github.leanish.sqs.codec.PayloadCodecException;
 /**
  * Thrown when checksum attributes are missing or fail validation.
  */
-public final class ChecksumValidationException extends PayloadCodecException {
+public class ChecksumValidationException extends PayloadCodecException {
 
     private final @Nullable String detail;
 

@@ -52,7 +52,7 @@ class SqsPayloadCodecInterceptorIntegrationTest {
             .withServices("sqs");
 
     @Test
-    void happyPath() {
+    void happyCase() {
         String payload = "{\"value\":42}";
         byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
 
@@ -90,7 +90,7 @@ class SqsPayloadCodecInterceptorIntegrationTest {
     }
 
     @Test
-    void checksumNone() {
+    void noChecksum() {
         String payload = "payload-no-checksum";
 
         try (SqsClient client = sqsClient(
@@ -116,7 +116,7 @@ class SqsPayloadCodecInterceptorIntegrationTest {
     }
 
     @Test
-    void happyPathBatchMessages() {
+    void happyCaseBatchMessages() {
         List<String> payloads = List.of(
                 "{\"value\":1}",
                 "{\"value\":2}",

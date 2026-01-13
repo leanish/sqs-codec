@@ -10,7 +10,7 @@ import io.github.leanish.sqs.codec.PayloadCodecException;
 /**
  * Thrown when a payload cannot be decoded.
  */
-public final class InvalidPayloadException extends PayloadCodecException {
+public class InvalidPayloadException extends PayloadCodecException {
 
     public InvalidPayloadException(String message, Throwable cause) {
         super(message, cause);

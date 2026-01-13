@@ -10,7 +10,7 @@ import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.compression.Compressor;
 import io.github.leanish.sqs.codec.algorithms.encoding.Encoder;
 
-final class PayloadCodec {
+class PayloadCodec {
 
     private final Compressor compressor;
     private final Encoder encoder;

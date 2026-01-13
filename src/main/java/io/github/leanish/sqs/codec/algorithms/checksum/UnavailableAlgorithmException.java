@@ -10,7 +10,7 @@ import io.github.leanish.sqs.codec.PayloadCodecException;
 /**
  * Thrown when a digest algorithm is unavailable at runtime.
  */
-public final class UnavailableAlgorithmException extends PayloadCodecException {
+public class UnavailableAlgorithmException extends PayloadCodecException {
 
     public UnavailableAlgorithmException(String message) {
         super(message);

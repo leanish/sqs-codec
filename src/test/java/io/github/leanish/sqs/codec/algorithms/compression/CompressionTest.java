@@ -3,7 +3,7 @@
  * Licensed under the MIT License.
  * See LICENSE file in the project root for full license information.
  */
-package io.github.leanish.sqs.codec;
+package io.github.leanish.sqs.codec.algorithms.compression;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,27 +21,22 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import com.github.luben.zstd.ZstdIOException;
 
-import io.github.leanish.sqs.codec.algorithms.compression.Compressor;
-import io.github.leanish.sqs.codec.algorithms.compression.GzipCompressor;
-import io.github.leanish.sqs.codec.algorithms.compression.NoOpCompressor;
-import io.github.leanish.sqs.codec.algorithms.compression.SnappyCompressor;
-import io.github.leanish.sqs.codec.algorithms.compression.ZstdCompressor;
-
 class CompressionTest {
 
     @ParameterizedTest
     @MethodSource("compressorCases")
-    void compressionRoundTripPreservesPayload(Compressor compressor) {
+    void compress_happyCase(Compressor compressor) {
         byte[] payload = "payload-42".getBytes(StandardCharsets.UTF_8);
 
         byte[] compressed = compressor.compress(payload);
         byte[] decoded = compressor.decompress(compressed);
 
-        assertThat(decoded).isEqualTo(payload);
+        assertThat(decoded)
+                .isEqualTo(payload);
     }
 
     @Test
-    void uncompressedCompressorReturnsSameInstance() {
+    void compress_noOp() {
         NoOpCompressor compressor = new NoOpCompressor();
         byte[] payload = "payload-42".getBytes(StandardCharsets.UTF_8);
 
@@ -53,7 +48,7 @@ class CompressionTest {
 
     @ParameterizedTest
     @MethodSource("invalidDecompressionCases")
-    void decompressRejectsInvalidPayload(
+    void decompress_invalidPayload(
             Compressor compressor,
             String payload,
             Class<? extends IOException> expectedCause) {

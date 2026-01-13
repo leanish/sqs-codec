@@ -14,7 +14,7 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 /**
  * Handles the raw payload length attribute for SQS messages.
  */
-public final class PayloadRawLengthAttributeHandler {
+public class PayloadRawLengthAttributeHandler {
 
     @Nullable
     private final Integer rawLength;

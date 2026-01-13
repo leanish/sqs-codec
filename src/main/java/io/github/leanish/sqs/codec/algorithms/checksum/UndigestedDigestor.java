@@ -8,7 +8,7 @@ package io.github.leanish.sqs.codec.algorithms.checksum;
 /**
  * Digestor implementation that always throws for NONE.
  */
-public final class UndigestedDigestor implements Digestor {
+public class UndigestedDigestor implements Digestor {
 
     @Override
     public String checksum(byte[] payload) {

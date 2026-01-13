@@ -8,7 +8,7 @@ package io.github.leanish.sqs.codec.algorithms.encoding;
 /**
  * No-op encoder that passes payload bytes through unchanged.
  */
-public final class NoOpEncoder implements Encoder {
+public class NoOpEncoder implements Encoder {
 
     @Override
     public byte[] encode(byte[] payload) {

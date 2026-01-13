@@ -47,6 +47,7 @@ import software.amazon.awssdk.http.SdkHttpRequest;
 import software.amazon.awssdk.http.SdkHttpResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
 import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequestEntry;
@@ -152,6 +153,71 @@ class SqsPayloadCodecInterceptorTest {
 
         assertThat(modified)
                 .isSameAs(request);
+    }
+
+    @Test
+    void modifyRequestAddsCodecAttributesToReceiveMessageRequest() {
+        ReceiveMessageRequest request = ReceiveMessageRequest.builder()
+                .queueUrl("queue")
+                .messageAttributeNames("shopId")
+                .build();
+
+        SdkRequest modified = SqsPayloadCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(modified)
+                .isInstanceOf(ReceiveMessageRequest.class);
+        ReceiveMessageRequest updated = (ReceiveMessageRequest) modified;
+        assertThat(updated.messageAttributeNames())
+                .contains(
+                        "shopId",
+                        PayloadCodecAttributes.CONF,
+                        PayloadCodecAttributes.CHECKSUM,
+                        PayloadCodecAttributes.RAW_LENGTH);
+    }
+
+    @Test
+    void modifyRequestAddsOnlyCodecAttributesWhenMissingOnReceive() {
+        ReceiveMessageRequest request = ReceiveMessageRequest.builder()
+                .queueUrl("queue")
+                .build();
+
+        ReceiveMessageRequest updated = (ReceiveMessageRequest) SqsPayloadCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(updated.messageAttributeNames()).containsExactlyInAnyOrder(
+                PayloadCodecAttributes.CONF,
+                PayloadCodecAttributes.CHECKSUM,
+                PayloadCodecAttributes.RAW_LENGTH);
+    }
+
+    @Test
+    void modifyRequestSkipsReceiveMessageRequestWhenCodecAttributesPresent() {
+        ReceiveMessageRequest request = ReceiveMessageRequest.builder()
+                .queueUrl("queue")
+                .messageAttributeNames(
+                        PayloadCodecAttributes.CONF,
+                        PayloadCodecAttributes.CHECKSUM,
+                        PayloadCodecAttributes.RAW_LENGTH)
+                .build();
+
+        SdkRequest modified = SqsPayloadCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(modified).isSameAs(request);
+    }
+
+    @Test
+    void modifyRequestSkipsReceiveMessageRequestWhenAllAttributesRequested() {
+        ReceiveMessageRequest request = ReceiveMessageRequest.builder()
+                .queueUrl("queue")
+                .messageAttributeNames("All")
+                .build();
+
+        SdkRequest modified = SqsPayloadCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(modified).isSameAs(request);
     }
 
     @Test

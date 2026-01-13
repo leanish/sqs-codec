@@ -7,8 +7,12 @@ package io.github.leanish.sqs.codec;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
@@ -28,6 +32,7 @@ import software.amazon.awssdk.core.interceptor.ExecutionAttributes;
 import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
 import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequestEntry;
@@ -44,6 +49,10 @@ public class SqsPayloadCodecInterceptor implements ExecutionInterceptor {
             CompressionAlgorithm.NONE,
             EncodingAlgorithm.NONE,
             ChecksumAlgorithm.MD5);
+    private static final List<String> CODEC_ATTRIBUTE_NAMES = List.of(
+            PayloadCodecAttributes.CONF,
+            PayloadCodecAttributes.CHECKSUM,
+            PayloadCodecAttributes.RAW_LENGTH);
 
     private final CompressionAlgorithm compressionAlgorithm;
     private final EncodingAlgorithm encodingAlgorithm;
@@ -57,6 +66,9 @@ public class SqsPayloadCodecInterceptor implements ExecutionInterceptor {
         }
         if (request instanceof SendMessageBatchRequest sendMessageBatchRequest) {
             return encodeSendMessageBatch(sendMessageBatchRequest);
+        }
+        if (request instanceof ReceiveMessageRequest receiveMessageRequest) {
+            return ensureCodecAttributesRequested(receiveMessageRequest);
         }
         return request;
     }
@@ -130,6 +142,19 @@ public class SqsPayloadCodecInterceptor implements ExecutionInterceptor {
         return entry.toBuilder()
                 .messageBody(encodedBody)
                 .messageAttributes(attributes)
+                .build();
+    }
+
+    private ReceiveMessageRequest ensureCodecAttributesRequested(ReceiveMessageRequest request) {
+        Set<String> attributeNames = new HashSet<>(request.messageAttributeNames());
+        if (attributeNames.contains("All") || attributeNames.containsAll(CODEC_ATTRIBUTE_NAMES)) {
+            return request;
+        }
+
+        Set<String> neededAttributeNames = Stream.concat(attributeNames.stream(), CODEC_ATTRIBUTE_NAMES.stream())
+                .collect(Collectors.toUnmodifiableSet());
+        return request.toBuilder()
+                .messageAttributeNames(neededAttributeNames)
                 .build();
     }
 

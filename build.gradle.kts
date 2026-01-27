@@ -78,7 +78,7 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok:1.18.42")
 
     errorprone("com.google.errorprone:error_prone_core:2.46.0")
-    errorprone("com.uber.nullaway:nullaway:0.12.15")
+    errorprone("com.uber.nullaway:nullaway:0.13.1")
 }
 
 tasks.withType<JavaExec>().configureEach {

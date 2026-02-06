@@ -59,7 +59,7 @@ dependencies {
     implementation("com.github.luben:zstd-jni:1.5.7-7")
     implementation("org.xerial.snappy:snappy-java:1.1.10.8")
 
-    compileOnly("com.google.errorprone:error_prone_annotations:2.46.0")
+    compileOnly("com.google.errorprone:error_prone_annotations:2.47.0")
     compileOnly("org.jspecify:jspecify:1.0.0")
     compileOnly("org.jetbrains:annotations:26.0.2-1")
     compileOnly("org.projectlombok:lombok:1.18.42")
@@ -77,7 +77,7 @@ dependencies {
     testCompileOnly("org.projectlombok:lombok:1.18.42")
     testAnnotationProcessor("org.projectlombok:lombok:1.18.42")
 
-    errorprone("com.google.errorprone:error_prone_core:2.46.0")
+    errorprone("com.google.errorprone:error_prone_core:2.47.0")
     errorprone("com.uber.nullaway:nullaway:0.13.1")
 }
 

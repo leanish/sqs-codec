@@ -8,6 +8,10 @@ updates:
       - dependency-name: "software.amazon.awssdk:bom"
         update-types:
           - "version-update:semver-patch"
+    groups:
+      patch-updates:
+        update-types:
+          - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

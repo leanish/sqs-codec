@@ -1,6 +1,6 @@
 plugins {
     `java-library`
-    id("io.github.leanish.java-conventions") version "0.3.0"
+    id("io.github.leanish.java-conventions") version "0.3.1"
 }
 
 group = "io.github.leanish"

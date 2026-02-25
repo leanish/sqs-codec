@@ -60,7 +60,8 @@ class SqsCodecInterceptorTest {
     @Test
     void modifyRequest_happyCase() {
         SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
-                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+                .withPreferSmallerPayloadEnabled(false);
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(PAYLOAD)
                 .messageAttributes(Map.of("shopId", MessageAttributeUtils.stringAttribute("shop-1")))
@@ -88,6 +89,27 @@ class SqsCodecInterceptorTest {
                 .isEqualTo(PAYLOAD);
         assertThat(encoded.messageAttributes().get(CodecAttributes.CHECKSUM).stringValue())
                 .isEqualTo(ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void modifyRequest_prefersOriginalPayloadWhenCompressedPayloadIsLarger() {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .build();
+
+        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+
+        assertThat(encoded.messageBody())
+                .isEqualTo(PAYLOAD);
+        assertThat(encoded.messageAttributes().get(CodecAttributes.CONF).stringValue())
+                .isEqualTo("v=1;c=none;e=none;h=md5");
+        assertThat(encoded.messageAttributes())
+                .containsKey(CodecAttributes.CHECKSUM)
+                .doesNotContainKey(CodecAttributes.RAW_LENGTH);
     }
 
     @Test
@@ -268,7 +290,8 @@ class SqsCodecInterceptorTest {
         SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                 .withEncodingAlgorithm(EncodingAlgorithm.BASE64_STD)
-                .withChecksumAlgorithm(ChecksumAlgorithm.MD5);
+                .withChecksumAlgorithm(ChecksumAlgorithm.MD5)
+                .withPreferSmallerPayloadEnabled(false);
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(PAYLOAD)
                 .build();
@@ -392,7 +415,8 @@ class SqsCodecInterceptorTest {
                 .build();
         SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
-                .withEncodingAlgorithm(EncodingAlgorithm.NONE);
+                .withEncodingAlgorithm(EncodingAlgorithm.NONE)
+                .withPreferSmallerPayloadEnabled(false);
 
         SdkRequest modified = interceptor.modifyRequest(
                 new ModifyRequestContext(request),

@@ -54,11 +54,18 @@ Defaults:
 - Checksum: `MD5`
 - Raw length attribute (`x-codec-raw-length`): disabled
 - If encoding is `NONE` and compression is not `NONE`, the effective encoding is `BASE64`.
+- When `withPreferSmallerPayloadEnabled(true)` (default), if a compressed+encoded payload would be larger than the original body, the interceptor sends the original body and writes `c=none;e=none`.
 
 Enable raw length metadata when you want extra observability (it consumes one SQS message-attribute slot):
 ```java
 SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
         .withRawLengthAttributeEnabled(true);
+```
+
+Disable payload-size optimization and always use the configured compression/encoding:
+```java
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        .withPreferSmallerPayloadEnabled(false);
 ```
 
 ## Attributes

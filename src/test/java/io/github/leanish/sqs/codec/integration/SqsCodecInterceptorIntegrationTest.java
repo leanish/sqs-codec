@@ -301,7 +301,9 @@ class SqsCodecInterceptorIntegrationTest {
                         SqsCodecInterceptor.defaultInterceptor()
                                 .withCompressionAlgorithm(compressionAlgorithm)
                                 .withEncodingAlgorithm(encodingAlgorithm)
-                                .withChecksumAlgorithm(checksumAlgorithm)))
+                                .withChecksumAlgorithm(checksumAlgorithm)
+                                // Keep integration expectations deterministic for tiny test payloads.
+                                .withPreferSmallerPayloadEnabled(false)))
                 .checksumValidationEnabled(false)
                 .build();
     }

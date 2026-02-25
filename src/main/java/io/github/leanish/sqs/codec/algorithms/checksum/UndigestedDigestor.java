@@ -15,6 +15,6 @@ public class UndigestedDigestor implements Digestor {
 
     @Override
     public String checksum(byte[] payload) {
-        throw new UnavailableAlgorithmException("Digestor algorithm is none");
+        throw new IllegalStateException("Digestor algorithm is none");
     }
 }

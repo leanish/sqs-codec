@@ -32,7 +32,7 @@ class ChecksumTest {
         UndigestedDigestor digestor = new UndigestedDigestor();
 
         assertThatThrownBy(() -> digestor.checksum("payload".getBytes(StandardCharsets.UTF_8)))
-                .isInstanceOf(UnavailableAlgorithmException.class)
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Digestor algorithm is none");
     }
 }

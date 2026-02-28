@@ -34,11 +34,4 @@ public class MessageAttributeUtils {
                 .stringValue(value)
                 .build();
     }
-
-    public static MessageAttributeValue numberAttribute(int value) {
-        return MessageAttributeValue.builder()
-                .dataType("Number")
-                .stringValue(Integer.toString(value))
-                .build();
-    }
 }

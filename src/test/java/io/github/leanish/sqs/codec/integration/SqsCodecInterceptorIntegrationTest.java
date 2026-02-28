@@ -72,19 +72,15 @@ class SqsCodecInterceptorIntegrationTest {
 
             assertThat(message.body())
                     .isEqualTo(payload);
-                assertThat(message.messageAttributes())
-                        .containsKeys(
-                                CodecAttributes.CONF,
-                                CodecAttributes.CHECKSUM,
-                                "shopId");
+            assertThat(message.messageAttributes())
+                    .containsKeys(
+                            CodecAttributes.META,
+                            "shopId");
 
             Map<String, MessageAttributeValue> attributes = message.messageAttributes();
-                assertThat(attributes.get(CodecAttributes.CONF).stringValue())
-                        .isEqualTo("v=1;c=zstd;e=base64;h=md5");
-                assertThat(attributes)
-                        .doesNotContainKey(CodecAttributes.RAW_LENGTH);
-                assertThat(attributes.get(CodecAttributes.CHECKSUM).stringValue())
-                        .isEqualTo(ChecksumAlgorithm.MD5.implementation().checksum(payloadBytes));
+            String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(payloadBytes);
+            assertThat(attributes.get(CodecAttributes.META).stringValue())
+                    .isEqualTo("v=1;c=zstd;e=base64;h=md5;s=" + expectedChecksum + ";l=12");
         }
     }
 
@@ -108,9 +104,9 @@ class SqsCodecInterceptorIntegrationTest {
             assertThat(message.body())
                     .isEqualTo(payload);
             assertThat(message.messageAttributes())
-                    .doesNotContainKeys(CodecAttributes.CHECKSUM, CodecAttributes.RAW_LENGTH);
-            assertThat(message.messageAttributes().get(CodecAttributes.CONF).stringValue())
-                    .isEqualTo("v=1;c=none;e=none;h=none");
+                    .containsOnlyKeys(CodecAttributes.META);
+            assertThat(message.messageAttributes().get(CodecAttributes.META).stringValue())
+                    .isEqualTo("v=1;c=none;e=none;h=none;l=19");
         }
     }
 
@@ -154,15 +150,14 @@ class SqsCodecInterceptorIntegrationTest {
 
                 assertThat(attributes)
                         .containsKeys(
-                                CodecAttributes.CONF,
-                                CodecAttributes.CHECKSUM,
+                                CodecAttributes.META,
                                 "shopId");
-                assertThat(attributes)
-                        .doesNotContainKey(CodecAttributes.RAW_LENGTH);
-                assertThat(attributes.get(CodecAttributes.CONF).stringValue())
-                        .isEqualTo("v=1;c=gzip;e=base64-std;h=sha256");
-                assertThat(attributes.get(CodecAttributes.CHECKSUM).stringValue())
-                        .isEqualTo(ChecksumAlgorithm.SHA256.implementation().checksum(payloadBytes));
+                assertThat(attributes.get(CodecAttributes.META).stringValue())
+                        .isEqualTo(
+                                "v=1;c=gzip;e=base64-std;h=sha256;s="
+                                        + ChecksumAlgorithm.SHA256.implementation().checksum(payloadBytes)
+                                        + ";l="
+                                        + payloadBytes.length);
             }
         }
     }
@@ -180,8 +175,8 @@ class SqsCodecInterceptorIntegrationTest {
                     .queueUrl(queueUrl)
                     .messageBody("!!")
                     .messageAttributes(Map.of(
-                            CodecAttributes.CONF,
-                            MessageAttributeUtils.stringAttribute("v=1;c=none;e=base64;h=none")))
+                            CodecAttributes.META,
+                            MessageAttributeUtils.stringAttribute("v=1;c=none;e=base64;h=none;l=2")))
                     .build());
 
             assertReceiveThrows(
@@ -207,10 +202,8 @@ class SqsCodecInterceptorIntegrationTest {
                     .queueUrl(queueUrl)
                     .messageBody(payload)
                     .messageAttributes(Map.of(
-                            CodecAttributes.CONF,
-                            MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=md5"),
-                            CodecAttributes.CHECKSUM,
-                            MessageAttributeUtils.stringAttribute("bad")))
+                            CodecAttributes.META,
+                            MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=md5;s=bad;l=16")))
                     .build());
 
             assertReceiveThrows(

@@ -5,6 +5,11 @@
  */
 package io.github.leanish.sqs.codec.algorithms;
 
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import io.github.leanish.sqs.codec.algorithms.encoding.Base64Encoder;
 import io.github.leanish.sqs.codec.algorithms.encoding.Encoder;
 import io.github.leanish.sqs.codec.algorithms.encoding.NoOpEncoder;
@@ -20,6 +25,11 @@ public enum EncodingAlgorithm {
     BASE64_STD("base64-std", new StandardBase64Encoder()),
     /** No encoding; payload is treated as UTF-8 bytes. */
     NONE("none", new NoOpEncoder());
+
+    private static final Map<String, EncodingAlgorithm> BY_ID = Arrays.stream(values())
+            .collect(Collectors.toUnmodifiableMap(
+                    algorithm -> algorithm.id.toLowerCase(Locale.ROOT),
+                    algorithm -> algorithm));
 
     private final String id;
     private final Encoder implementation;
@@ -41,12 +51,11 @@ public enum EncodingAlgorithm {
         if (value.isBlank()) {
             throw UnsupportedAlgorithmException.encoding(value);
         }
-        for (EncodingAlgorithm encoding : values()) {
-            if (encoding.id.equalsIgnoreCase(value)) {
-                return encoding;
-            }
+        EncodingAlgorithm encoding = BY_ID.get(value.toLowerCase(Locale.ROOT));
+        if (encoding == null) {
+            throw UnsupportedAlgorithmException.encoding(value);
         }
-        throw UnsupportedAlgorithmException.encoding(value);
+        return encoding;
     }
 
     public static EncodingAlgorithm effectiveFor(

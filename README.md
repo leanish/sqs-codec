@@ -52,15 +52,7 @@ Defaults:
 - Compression: `NONE`
 - Encoding: `NONE`
 - Checksum: `MD5`
-- Raw length attribute (`x-codec-raw-length`): disabled
-- If encoding is `NONE` and compression is not `NONE`, the effective encoding is `BASE64`.
 - When `withPreferSmallerPayloadEnabled(true)` (default), if a compressed+encoded payload would be larger than the original body, the interceptor sends the original body and writes `c=none;e=none`.
-
-Enable raw length metadata when you want extra observability (it consumes one SQS message-attribute slot):
-```java
-SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
-        .withRawLengthAttributeEnabled(true);
-```
 
 Disable payload-size optimization and always use the configured compression/encoding:
 ```java
@@ -70,30 +62,30 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
 
 ## Attributes
 
-Codec configuration is stored in a single attribute:
-- `x-codec-conf` (String), for example: `v=1;c=zstd;e=base64;h=md5`
+Codec metadata is stored in a single attribute:
+- `x-codec-meta` (String), for example: `v=1;c=zstd;e=base64;h=md5;s=t2tngCwK9b7C9eqVQunqfg==;l=12`
 
 Keys:
 - `v`: codec version
 - `c`: compression (`zstd`, `gzip`, `snappy`, `none`)
 - `e`: encoding (`base64`, `base64-std`, `none`)
 - `h`: checksum (`md5`, `sha256`, `none`)
+- `s`: checksum value (present only when `h` is not `none`)
+- `l`: raw payload byte length (before compression/encoding)
 
 Notes:
 - Order does not matter; keys and values are case-insensitive.
-- Missing keys default to `none` (including `h`), and `v` defaults to `1`.
+- Missing `v` defaults to `1`, and missing `c/e/h` keys default to `none`.
+- `s` is required when `h` is not `none`.
+- `l` is always written by the interceptor, but ignored if missing/invalid on read (debug-only metadata).
 - The interceptor defaults to `h=md5` when encoding.
 - Unknown keys are ignored for forward compatibility.
-- When `x-codec-conf` is already present on send, the interceptor validates that body and checksum match the declared configuration before skipping re-encoding.
-- If compression is not `none` and encoding is `none`, the effective encoding is `base64` (and is written in `x-codec-conf`).
-
-Other attributes:
-- `x-codec-checksum` (String)
-- `x-codec-raw-length` (Number, optional debug/observability metadata; disabled by default)
+- When `x-codec-meta` is already present on send, the interceptor validates that body and checksum match the declared metadata before skipping re-encoding.
+- If compression is not `none` and encoding is `none`, the effective encoding is `base64` (and is written in `x-codec-meta`).
 
 SQS attribute limit:
 - SQS supports at most 10 message attributes per message.
-- `sqs-codec` adds `x-codec-conf`, optionally `x-codec-checksum`, and optionally `x-codec-raw-length`.
+- `sqs-codec` adds exactly one attribute: `x-codec-meta`.
 - The interceptor fails fast on send when the final attribute count would exceed the SQS limit.
 
 ## Error handling
@@ -123,8 +115,8 @@ try {
     // interceptor validates checksum/attributes during receive
 } catch (ChecksumValidationException e) {
     // missing algorithm/attribute or checksum mismatch; inspect e.detail()
-} catch (UnsupportedCodecConfigurationException e) {
-    // malformed/duplicate/unsupported codec configuration
+} catch (UnsupportedCodecMetadataException e) {
+    // malformed/duplicate/unsupported codec metadata
 } catch (UnsupportedAlgorithmException e) {
     // unsupported compression/encoding/checksum values
 } catch (CodecException e) {

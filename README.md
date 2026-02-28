@@ -52,6 +52,13 @@ Defaults:
 - Compression: `NONE`
 - Encoding: `NONE`
 - Checksum: `MD5`
+- When `withPreferSmallerPayloadEnabled(true)` (default), if a compressed+encoded payload would be larger than the original body, the interceptor sends the original body and writes `c=none;e=none`.
+
+Disable payload-size optimization and always use the configured compression/encoding:
+```java
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        .withPreferSmallerPayloadEnabled(false);
+```
 
 ## Attributes
 

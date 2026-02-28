@@ -5,8 +5,6 @@
  */
 package io.github.leanish.sqs.codec.algorithms;
 
-import org.apache.commons.lang3.StringUtils;
-
 import io.github.leanish.sqs.codec.algorithms.checksum.Digestor;
 import io.github.leanish.sqs.codec.algorithms.checksum.Md5Digestor;
 import io.github.leanish.sqs.codec.algorithms.checksum.Sha256Digestor;
@@ -40,7 +38,7 @@ public enum ChecksumAlgorithm {
     }
 
     public static ChecksumAlgorithm fromId(String value) {
-        if (StringUtils.isBlank(value)) {
+        if (value.isBlank()) {
             throw UnsupportedAlgorithmException.checksum(value);
         }
         for (ChecksumAlgorithm algorithm : values()) {

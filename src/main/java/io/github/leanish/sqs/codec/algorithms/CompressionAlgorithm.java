@@ -5,8 +5,6 @@
  */
 package io.github.leanish.sqs.codec.algorithms;
 
-import org.apache.commons.lang3.StringUtils;
-
 import io.github.leanish.sqs.codec.algorithms.compression.Compressor;
 import io.github.leanish.sqs.codec.algorithms.compression.GzipCompressor;
 import io.github.leanish.sqs.codec.algorithms.compression.NoOpCompressor;
@@ -43,7 +41,7 @@ public enum CompressionAlgorithm {
     }
 
     public static CompressionAlgorithm fromId(String value) {
-        if (StringUtils.isBlank(value)) {
+        if (value.isBlank()) {
             throw UnsupportedAlgorithmException.compression(value);
         }
         for (CompressionAlgorithm compression : values()) {

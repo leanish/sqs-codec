@@ -7,7 +7,6 @@ package io.github.leanish.sqs.codec.attributes;
 
 import java.util.Map;
 
-import org.apache.commons.lang3.StringUtils;
 import org.jspecify.annotations.Nullable;
 
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
@@ -50,7 +49,7 @@ public class PayloadChecksumAttributeHandler {
             }
             return;
         }
-        if (!checksumAttributePresent || StringUtils.isBlank(checksumValue)) {
+        if (!checksumAttributePresent || checksumValue == null || checksumValue.isBlank()) {
             throw ChecksumValidationException.missingAttribute(CodecAttributes.CHECKSUM);
         }
 
@@ -62,7 +61,7 @@ public class PayloadChecksumAttributeHandler {
     }
 
     public void applyTo(Map<String, MessageAttributeValue> attributes) {
-        if (StringUtils.isNotBlank(checksumValue)) {
+        if (!checksumValue.isBlank()) {
             attributes.put(CodecAttributes.CHECKSUM, MessageAttributeUtils.stringAttribute(checksumValue));
         }
     }

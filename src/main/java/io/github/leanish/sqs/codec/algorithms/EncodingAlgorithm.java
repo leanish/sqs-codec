@@ -5,8 +5,6 @@
  */
 package io.github.leanish.sqs.codec.algorithms;
 
-import org.apache.commons.lang3.StringUtils;
-
 import io.github.leanish.sqs.codec.algorithms.encoding.Base64Encoder;
 import io.github.leanish.sqs.codec.algorithms.encoding.Encoder;
 import io.github.leanish.sqs.codec.algorithms.encoding.NoOpEncoder;
@@ -40,7 +38,7 @@ public enum EncodingAlgorithm {
     }
 
     public static EncodingAlgorithm fromId(String value) {
-        if (StringUtils.isBlank(value)) {
+        if (value.isBlank()) {
             throw UnsupportedAlgorithmException.encoding(value);
         }
         for (EncodingAlgorithm encoding : values()) {

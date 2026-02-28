@@ -9,8 +9,6 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import org.apache.commons.lang3.StringUtils;
-
 import io.github.leanish.sqs.codec.CodecConfiguration;
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
@@ -49,7 +47,7 @@ public class CodecConfigurationAttributeHandler {
     public static CodecConfigurationAttributeHandler fromAttributes(Map<String, MessageAttributeValue> attributes) {
         String confValue = MessageAttributeUtils.attributeValue(attributes, CodecAttributes.CONF);
         if (attributes.containsKey(CodecAttributes.CONF)) {
-            if (StringUtils.isBlank(confValue)) {
+            if (confValue == null || confValue.isBlank()) {
                 throw UnsupportedCodecConfigurationException.malformed(String.valueOf(confValue));
             }
             CodecConfiguration configuration = parseConf(confValue);
@@ -83,7 +81,7 @@ public class CodecConfigurationAttributeHandler {
         EncodingAlgorithm encodingAlgorithm = EncodingAlgorithm.NONE;
         ChecksumAlgorithm checksumAlgorithm = ChecksumAlgorithm.NONE;
 
-        String[] parts = StringUtils.split(trimmed, ';');
+        String[] parts = trimmed.split(";");
         Map<String, String> values = new HashMap<>();
         for (String part : parts) {
             String entry = part.trim();

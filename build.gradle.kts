@@ -25,7 +25,6 @@ dependencies {
     // Consumers provide AWS SDK versions; keep it compileOnly to avoid forcing a version.
     compileOnly("software.amazon.awssdk:sqs")
 
-    implementation("org.apache.commons:commons-lang3:3.20.0")
     implementation("com.github.luben:zstd-jni:1.5.7-7")
     implementation("org.xerial.snappy:snappy-java:1.1.10.8")
 

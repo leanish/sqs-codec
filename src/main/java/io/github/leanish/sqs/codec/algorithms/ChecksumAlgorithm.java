@@ -5,6 +5,11 @@
  */
 package io.github.leanish.sqs.codec.algorithms;
 
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import io.github.leanish.sqs.codec.algorithms.checksum.Digestor;
 import io.github.leanish.sqs.codec.algorithms.checksum.Md5Digestor;
 import io.github.leanish.sqs.codec.algorithms.checksum.Sha256Digestor;
@@ -20,6 +25,11 @@ public enum ChecksumAlgorithm {
     SHA256("sha256", new Sha256Digestor()),
     /** No checksum; integrity attributes are omitted. */
     NONE("none", new UndigestedDigestor());
+
+    private static final Map<String, ChecksumAlgorithm> BY_ID = Arrays.stream(values())
+            .collect(Collectors.toUnmodifiableMap(
+                    algorithm -> algorithm.id.toLowerCase(Locale.ROOT),
+                    algorithm -> algorithm));
 
     private final String id;
     private final Digestor implementation;
@@ -41,11 +51,10 @@ public enum ChecksumAlgorithm {
         if (value.isBlank()) {
             throw UnsupportedAlgorithmException.checksum(value);
         }
-        for (ChecksumAlgorithm algorithm : values()) {
-            if (algorithm.id.equalsIgnoreCase(value)) {
-                return algorithm;
-            }
+        ChecksumAlgorithm algorithm = BY_ID.get(value.toLowerCase(Locale.ROOT));
+        if (algorithm == null) {
+            throw UnsupportedAlgorithmException.checksum(value);
         }
-        throw UnsupportedAlgorithmException.checksum(value);
+        return algorithm;
     }
 }

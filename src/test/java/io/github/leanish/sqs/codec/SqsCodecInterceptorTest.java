@@ -76,14 +76,11 @@ class SqsCodecInterceptorTest {
                 .containsKeys(
                         CodecAttributes.CONF,
                         CodecAttributes.CHECKSUM,
-                        CodecAttributes.RAW_LENGTH,
                         "shopId");
         assertThat(encoded.messageAttributes().get(CodecAttributes.CONF).stringValue())
                 .isEqualTo("v=1;c=zstd;e=base64;h=md5");
-        assertThat(encoded.messageAttributes().get(CodecAttributes.RAW_LENGTH).dataType())
-                .isEqualTo("Number");
-        assertThat(encoded.messageAttributes().get(CodecAttributes.RAW_LENGTH).stringValue())
-                .isEqualTo(Integer.toString(PAYLOAD.getBytes(StandardCharsets.UTF_8).length));
+        assertThat(encoded.messageAttributes())
+                .doesNotContainKey(CodecAttributes.RAW_LENGTH);
         assertThat(encoded.messageBody())
                 .isNotEqualTo(PAYLOAD);
         Codec codec = new Codec(CompressionAlgorithm.ZSTD, EncodingAlgorithm.NONE);
@@ -91,6 +88,27 @@ class SqsCodecInterceptorTest {
                 .isEqualTo(PAYLOAD);
         assertThat(encoded.messageAttributes().get(CodecAttributes.CHECKSUM).stringValue())
                 .isEqualTo(ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void modifyRequest_rawLengthAttributeEnabled() {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+                .withRawLengthAttributeEnabled(true);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .build();
+
+        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+
+        assertThat(encoded.messageAttributes())
+                .containsKey(CodecAttributes.RAW_LENGTH);
+        assertThat(encoded.messageAttributes().get(CodecAttributes.RAW_LENGTH).dataType())
+                .isEqualTo("Number");
+        assertThat(encoded.messageAttributes().get(CodecAttributes.RAW_LENGTH).stringValue())
+                .isEqualTo(Integer.toString(PAYLOAD.getBytes(StandardCharsets.UTF_8).length));
     }
 
     @Test
@@ -309,13 +327,42 @@ class SqsCodecInterceptorTest {
 
         assertThat(encoded.messageBody()).isEqualTo(PAYLOAD);
         assertThat(encoded.messageAttributes())
-                .containsKeys(
-                        CodecAttributes.CONF,
-                        CodecAttributes.RAW_LENGTH);
+                .containsKey(CodecAttributes.CONF);
         assertThat(encoded.messageAttributes().get(CodecAttributes.CONF).stringValue())
                 .isEqualTo("v=1;c=none;e=none;h=none");
         assertThat(encoded.messageAttributes())
-                .doesNotContainKeys(CodecAttributes.CHECKSUM);
+                .doesNotContainKeys(CodecAttributes.CHECKSUM, CodecAttributes.RAW_LENGTH);
+    }
+
+    @Test
+    void modifyRequest_attributeLimitExceeded() {
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .messageAttributes(customAttributes(9))
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(CodecException.class)
+                .hasMessageContaining("SQS supports at most 10 message attributes")
+                .hasMessageContaining("request has 11")
+                .hasMessageContaining("reduce custom attributes");
+    }
+
+    @Test
+    void modifyRequest_attributeLimitExceededWithRawLengthEnabled() {
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .messageAttributes(customAttributes(8))
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .withRawLengthAttributeEnabled(true)
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(CodecException.class)
+                .hasMessageContaining("SQS supports at most 10 message attributes")
+                .hasMessageContaining("request has 11")
+                .hasMessageContaining("withRawLengthAttributeEnabled(false)");
     }
 
     @Test
@@ -364,8 +411,9 @@ class SqsCodecInterceptorTest {
         assertThat(encodedEntry.messageAttributes())
                 .containsKeys(
                         CodecAttributes.CONF,
-                        CodecAttributes.CHECKSUM,
-                        CodecAttributes.RAW_LENGTH);
+                        CodecAttributes.CHECKSUM);
+        assertThat(encodedEntry.messageAttributes())
+                .doesNotContainKey(CodecAttributes.RAW_LENGTH);
         assertThat(encodedEntry.messageBody()).isNotEqualTo(PAYLOAD);
         Codec codec = new Codec(CompressionAlgorithm.ZSTD, EncodingAlgorithm.NONE);
         assertThat(new String(codec.decode(encodedEntry.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
@@ -442,7 +490,7 @@ class SqsCodecInterceptorTest {
 
     @ParameterizedTest
     @MethodSource("checksumAlgorithms")
-    void modifyResponsemissingCodecAttributes(ChecksumAlgorithm checksumAlgorithm) {
+    void modifyResponse_missingCodecAttributes(ChecksumAlgorithm checksumAlgorithm) {
         byte[] payloadBytes = PAYLOAD.getBytes(StandardCharsets.UTF_8);
         Map<String, MessageAttributeValue> attributes = new HashMap<>();
         attributes.put(
@@ -978,6 +1026,14 @@ class SqsCodecInterceptorTest {
                 .applyTo(attributes);
         PayloadChecksumAttributeHandler.forOutbound(checksumAlgorithm, payloadBytes)
                 .applyTo(attributes);
+        return attributes;
+    }
+
+    private static Map<String, MessageAttributeValue> customAttributes(int count) {
+        Map<String, MessageAttributeValue> attributes = new HashMap<>();
+        for (int index = 0; index < count; index++) {
+            attributes.put("custom-" + index, MessageAttributeUtils.stringAttribute("value-" + index));
+        }
         return attributes;
     }
 

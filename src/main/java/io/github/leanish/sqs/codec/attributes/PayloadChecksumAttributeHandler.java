@@ -17,19 +17,18 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
  */
 public class PayloadChecksumAttributeHandler {
 
+    @Nullable
     private final String checksumValue;
 
-    private PayloadChecksumAttributeHandler(String checksumValue) {
+    private PayloadChecksumAttributeHandler(@Nullable String checksumValue) {
         this.checksumValue = checksumValue;
     }
 
     public static PayloadChecksumAttributeHandler forOutbound(ChecksumAlgorithm checksumAlgorithm, byte[] payloadBytes) {
-        String checksumValue = "";
-        if (checksumAlgorithm != ChecksumAlgorithm.NONE) {
-            checksumValue = checksumAlgorithm.implementation()
-                    .checksum(payloadBytes);
+        if (checksumAlgorithm == ChecksumAlgorithm.NONE) {
+            return new PayloadChecksumAttributeHandler(null);
         }
-        return new PayloadChecksumAttributeHandler(checksumValue);
+        return new PayloadChecksumAttributeHandler(checksumAlgorithm.implementation().checksum(payloadBytes));
     }
 
     public static boolean needsValidation(
@@ -61,8 +60,9 @@ public class PayloadChecksumAttributeHandler {
     }
 
     public void applyTo(Map<String, MessageAttributeValue> attributes) {
-        if (!checksumValue.isBlank()) {
-            attributes.put(CodecAttributes.CHECKSUM, MessageAttributeUtils.stringAttribute(checksumValue));
+        if (checksumValue == null) {
+            return;
         }
+        attributes.put(CodecAttributes.CHECKSUM, MessageAttributeUtils.stringAttribute(checksumValue));
     }
 }

@@ -5,7 +5,6 @@ execution interceptor.
 
 ## Commands
 - `./gradlew check` (tests, checkstyle, spotless, jacoco)
-- `./gradlew check -DexcludeTags=integration` (skip LocalStack integration tests)
 
 Integration tests use LocalStack and require Docker.
 Always run `./gradlew check` after each code change.

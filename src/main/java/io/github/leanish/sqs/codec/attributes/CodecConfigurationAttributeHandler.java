@@ -20,6 +20,16 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
  */
 public class CodecConfigurationAttributeHandler {
 
+    private static final String VERSION_KEY = "v";
+    private static final String COMPRESSION_KEY = "c";
+    private static final String ENCODING_KEY = "e";
+    private static final String CHECKSUM_KEY = "h";
+    private static final CodecConfiguration DEFAULT_CONFIGURATION = new CodecConfiguration(
+            CodecAttributes.VERSION_VALUE,
+            CompressionAlgorithm.NONE,
+            EncodingAlgorithm.NONE,
+            ChecksumAlgorithm.NONE);
+
     private final CodecConfiguration configuration;
 
     private CodecConfigurationAttributeHandler(
@@ -45,20 +55,15 @@ public class CodecConfigurationAttributeHandler {
     }
 
     public static CodecConfigurationAttributeHandler fromAttributes(Map<String, MessageAttributeValue> attributes) {
-        String confValue = MessageAttributeUtils.attributeValue(attributes, CodecAttributes.CONF);
-        if (attributes.containsKey(CodecAttributes.CONF)) {
-            if (confValue == null || confValue.isBlank()) {
-                throw UnsupportedCodecConfigurationException.malformed(String.valueOf(confValue));
-            }
-            CodecConfiguration configuration = parseConf(confValue);
-            return new CodecConfigurationAttributeHandler(configuration);
+        if (!attributes.containsKey(CodecAttributes.CONF)) {
+            return new CodecConfigurationAttributeHandler(DEFAULT_CONFIGURATION);
         }
-        CodecConfiguration configuration = new CodecConfiguration(
-                CodecAttributes.VERSION_VALUE,
-                CompressionAlgorithm.NONE,
-                EncodingAlgorithm.NONE,
-                ChecksumAlgorithm.NONE);
-        return new CodecConfigurationAttributeHandler(configuration);
+
+        String confValue = MessageAttributeUtils.attributeValue(attributes, CodecAttributes.CONF);
+        if (confValue == null || confValue.isBlank()) {
+            throw UnsupportedCodecConfigurationException.malformed(String.valueOf(confValue));
+        }
+        return new CodecConfigurationAttributeHandler(parseConf(confValue));
     }
 
     public CodecConfiguration configuration() {
@@ -81,7 +86,7 @@ public class CodecConfigurationAttributeHandler {
         EncodingAlgorithm encodingAlgorithm = EncodingAlgorithm.NONE;
         ChecksumAlgorithm checksumAlgorithm = ChecksumAlgorithm.NONE;
 
-        String[] parts = trimmed.split(";");
+        String[] parts = trimmed.split(";", -1);
         Map<String, String> values = new HashMap<>();
         for (String part : parts) {
             String entry = part.trim();
@@ -102,7 +107,7 @@ public class CodecConfigurationAttributeHandler {
             }
         }
 
-        String versionValue = values.get("v");
+        String versionValue = values.get(VERSION_KEY);
         if (versionValue != null) {
             try {
                 version = Integer.parseInt(versionValue);
@@ -114,15 +119,15 @@ public class CodecConfigurationAttributeHandler {
             }
         }
 
-        String compressionValue = values.get("c");
+        String compressionValue = values.get(COMPRESSION_KEY);
         if (compressionValue != null) {
             compressionAlgorithm = CompressionAlgorithm.fromId(compressionValue);
         }
-        String encodingValue = values.get("e");
+        String encodingValue = values.get(ENCODING_KEY);
         if (encodingValue != null) {
             encodingAlgorithm = EncodingAlgorithm.fromId(encodingValue);
         }
-        String checksumValue = values.get("h");
+        String checksumValue = values.get(CHECKSUM_KEY);
         if (checksumValue != null) {
             checksumAlgorithm = ChecksumAlgorithm.fromId(checksumValue);
         }

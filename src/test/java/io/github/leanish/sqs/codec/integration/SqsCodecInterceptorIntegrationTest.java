@@ -75,15 +75,14 @@ class SqsCodecInterceptorIntegrationTest {
             assertThat(message.messageAttributes())
                     .containsKeys(
                             CodecAttributes.CONF,
-                            CodecAttributes.RAW_LENGTH,
                             CodecAttributes.CHECKSUM,
                             "shopId");
 
             Map<String, MessageAttributeValue> attributes = message.messageAttributes();
             assertThat(attributes.get(CodecAttributes.CONF).stringValue())
                     .isEqualTo("v=1;c=zstd;e=base64;h=md5");
-            assertThat(attributes.get(CodecAttributes.RAW_LENGTH).stringValue())
-                    .isEqualTo(Integer.toString(payloadBytes.length));
+            assertThat(attributes)
+                    .doesNotContainKey(CodecAttributes.RAW_LENGTH);
             assertThat(attributes.get(CodecAttributes.CHECKSUM).stringValue())
                     .isEqualTo(ChecksumAlgorithm.MD5.implementation().checksum(payloadBytes));
         }
@@ -109,7 +108,7 @@ class SqsCodecInterceptorIntegrationTest {
             assertThat(message.body())
                     .isEqualTo(payload);
             assertThat(message.messageAttributes())
-                    .doesNotContainKeys(CodecAttributes.CHECKSUM);
+                    .doesNotContainKeys(CodecAttributes.CHECKSUM, CodecAttributes.RAW_LENGTH);
             assertThat(message.messageAttributes().get(CodecAttributes.CONF).stringValue())
                     .isEqualTo("v=1;c=none;e=none;h=none");
         }
@@ -156,13 +155,12 @@ class SqsCodecInterceptorIntegrationTest {
                 assertThat(attributes)
                         .containsKeys(
                                 CodecAttributes.CONF,
-                                CodecAttributes.RAW_LENGTH,
                                 CodecAttributes.CHECKSUM,
                                 "shopId");
+                assertThat(attributes)
+                        .doesNotContainKey(CodecAttributes.RAW_LENGTH);
                 assertThat(attributes.get(CodecAttributes.CONF).stringValue())
                         .isEqualTo("v=1;c=gzip;e=base64-std;h=sha256");
-                assertThat(attributes.get(CodecAttributes.RAW_LENGTH).stringValue())
-                        .isEqualTo(Integer.toString(payloadBytes.length));
                 assertThat(attributes.get(CodecAttributes.CHECKSUM).stringValue())
                         .isEqualTo(ChecksumAlgorithm.SHA256.implementation().checksum(payloadBytes));
             }

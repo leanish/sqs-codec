@@ -7,8 +7,6 @@ package io.github.leanish.sqs.codec.attributes;
 
 import java.util.Map;
 
-import org.jspecify.annotations.Nullable;
-
 import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 
 /**
@@ -18,10 +16,9 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
  */
 public class PayloadRawLengthAttributeHandler {
 
-    @Nullable
-    private final Integer rawLength;
+    private final int rawLength;
 
-    private PayloadRawLengthAttributeHandler(@Nullable Integer rawLength) {
+    private PayloadRawLengthAttributeHandler(int rawLength) {
         this.rawLength = rawLength;
     }
 
@@ -30,8 +27,6 @@ public class PayloadRawLengthAttributeHandler {
     }
 
     public void applyTo(Map<String, MessageAttributeValue> attributes) {
-        if (rawLength != null) {
-            attributes.put(CodecAttributes.RAW_LENGTH, MessageAttributeUtils.numberAttribute(rawLength));
-        }
+        attributes.put(CodecAttributes.RAW_LENGTH, MessageAttributeUtils.numberAttribute(rawLength));
     }
 }

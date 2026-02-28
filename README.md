@@ -52,7 +52,14 @@ Defaults:
 - Compression: `NONE`
 - Encoding: `NONE`
 - Checksum: `MD5`
+- Raw length attribute (`x-codec-raw-length`): disabled
 - If encoding is `NONE` and compression is not `NONE`, the effective encoding is `BASE64`.
+
+Enable raw length metadata when you want extra observability (it consumes one SQS message-attribute slot):
+```java
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        .withRawLengthAttributeEnabled(true);
+```
 
 ## Attributes
 
@@ -75,7 +82,12 @@ Notes:
 
 Other attributes:
 - `x-codec-checksum` (String)
-- `x-codec-raw-length` (Number, debug/observability metadata only)
+- `x-codec-raw-length` (Number, optional debug/observability metadata; disabled by default)
+
+SQS attribute limit:
+- SQS supports at most 10 message attributes per message.
+- `sqs-codec` adds `x-codec-conf`, optionally `x-codec-checksum`, and optionally `x-codec-raw-length`.
+- The interceptor fails fast on send when the final attribute count would exceed the SQS limit.
 
 ## Error handling
 

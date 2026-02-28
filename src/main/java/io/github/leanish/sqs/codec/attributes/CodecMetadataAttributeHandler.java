@@ -22,21 +22,18 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
  */
 public class CodecMetadataAttributeHandler {
 
-    private static final CodecConfiguration DEFAULT_CONFIGURATION = new CodecConfiguration(
-            CodecAttributes.VERSION_VALUE,
-            CompressionAlgorithm.NONE,
-            EncodingAlgorithm.NONE,
-            ChecksumAlgorithm.NONE);
-
     private final CodecConfiguration configuration;
+    private final EncodingAlgorithm metadataEncodingAlgorithm;
     private final @Nullable String checksumValue;
     private final int rawLength;
 
     private CodecMetadataAttributeHandler(
             CodecConfiguration configuration,
+            EncodingAlgorithm metadataEncodingAlgorithm,
             @Nullable String checksumValue,
             int rawLength) {
         this.configuration = configuration;
+        this.metadataEncodingAlgorithm = metadataEncodingAlgorithm;
         this.checksumValue = checksumValue;
         this.rawLength = rawLength;
     }
@@ -49,24 +46,23 @@ public class CodecMetadataAttributeHandler {
         EncodingAlgorithm effectiveEncoding = EncodingAlgorithm.effectiveFor(
                 configuration.compressionAlgorithm(),
                 configuration.encodingAlgorithm());
-        CodecConfiguration effectiveConfiguration = new CodecConfiguration(
-                configuration.version(),
-                configuration.compressionAlgorithm(),
-                effectiveEncoding,
-                configuration.checksumAlgorithm());
         @Nullable
         String checksumValue = null;
-        if (effectiveConfiguration.checksumAlgorithm() != ChecksumAlgorithm.NONE) {
-            checksumValue = effectiveConfiguration.checksumAlgorithm()
+        if (configuration.checksumAlgorithm() != ChecksumAlgorithm.NONE) {
+            checksumValue = configuration.checksumAlgorithm()
                     .implementation()
                     .checksum(payloadBytes);
         }
-        return new CodecMetadataAttributeHandler(effectiveConfiguration, checksumValue, payloadBytes.length);
+        return new CodecMetadataAttributeHandler(
+                configuration,
+                effectiveEncoding,
+                checksumValue,
+                payloadBytes.length);
     }
 
     public static CodecMetadataAttributeHandler fromAttributes(Map<String, MessageAttributeValue> attributes) {
         if (!attributes.containsKey(CodecAttributes.META)) {
-            return new CodecMetadataAttributeHandler(DEFAULT_CONFIGURATION, null, 0);
+            throw new IllegalArgumentException("Missing x-codec-meta attribute; check hasCodecAttributes first");
         }
 
         String metadataValue = MessageAttributeUtils.attributeValue(attributes, CodecAttributes.META);
@@ -155,7 +151,11 @@ public class CodecMetadataAttributeHandler {
                 compressionAlgorithm,
                 encodingAlgorithm,
                 checksumAlgorithm);
-        return new CodecMetadataAttributeHandler(configuration, checksumValue, rawLength);
+        return new CodecMetadataAttributeHandler(
+                configuration,
+                encodingAlgorithm,
+                checksumValue,
+                rawLength);
     }
 
     private static int parseRawLength(Map<String, String> values) {
@@ -191,7 +191,7 @@ public class CodecMetadataAttributeHandler {
     private String formatMetadataValue() {
         String metadataValue = "v=" + configuration.version()
                 + ";c=" + configuration.compressionAlgorithm().id()
-                + ";e=" + configuration.encodingAlgorithm().id()
+                + ";e=" + metadataEncodingAlgorithm.id()
                 + ";h=" + configuration.checksumAlgorithm().id();
         if (checksumValue == null) {
             return metadataValue + ";l=" + rawLength;

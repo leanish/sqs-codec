@@ -10,9 +10,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-
-import org.jspecify.annotations.Nullable;
 
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
@@ -141,7 +140,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         CodecConfiguration configuration = metadata.configuration();
         byte[] payloadBytes = decodePayloadIfNeeded(messageBody, configuration);
         if (shouldValidateChecksum(configuration)) {
-            validateChecksum(configuration, metadata.checksumValue(), payloadBytes);
+            validateChecksum(configuration, requiredChecksumValue(metadata), payloadBytes);
         }
     }
 
@@ -189,7 +188,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
 
         byte[] payloadBytes = decodePayloadIfNeeded(message.body(), configuration);
         if (shouldValidateChecksum) {
-            validateChecksum(configuration, metadata.checksumValue(), payloadBytes);
+            validateChecksum(configuration, requiredChecksumValue(metadata), payloadBytes);
         }
         if (!shouldDecode) {
             return message;
@@ -219,24 +218,20 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private void validateChecksum(
             CodecConfiguration configuration,
-            @Nullable String checksumValue,
+            String checksumValue,
             byte[] payloadBytes) {
-        ChecksumAlgorithm checksumAlgorithm = configuration.checksumAlgorithm();
-        if (checksumAlgorithm == ChecksumAlgorithm.NONE) {
-            if (checksumValue != null) {
-                throw ChecksumValidationException.missingAlgorithm();
-            }
-            return;
-        }
-        if (checksumValue == null || checksumValue.isBlank()) {
-            throw ChecksumValidationException.missingAttribute(CodecAttributes.META_CHECKSUM_VALUE_KEY);
-        }
-
-        String actualChecksum = checksumAlgorithm.implementation()
+        String actualChecksum = configuration.checksumAlgorithm()
+                .implementation()
                 .checksum(payloadBytes);
         if (!actualChecksum.equals(checksumValue)) {
             throw ChecksumValidationException.mismatch();
         }
+    }
+
+    private String requiredChecksumValue(CodecMetadataAttributeHandler metadata) {
+        return Objects.requireNonNull(
+                metadata.checksumValue(),
+                "Invariant violation: checksum metadata value must be present when checksum validation is enabled");
     }
 
     private Codec outboundCodec() {

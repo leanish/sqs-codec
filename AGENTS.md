@@ -10,7 +10,10 @@ Integration tests use LocalStack and require Docker.
 Always run `./gradlew check` after each code change.
 
 ## Conventions
-- JDK 21, Gradle.
+- Java target is JDK 17.
+- Toolchain comes from `java-conventions` (default compile/runtime JDK 25).
+- CI (`ci.yml`) runs full `build` on JDK 25.
+- Legacy runtime checks (`legacy-jdk-check.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
 - Tests use AssertJ assertions.
 - Keep responsibilities well-separated; avoid mixing concerns in the same class.
 - Keep attribute keys in `CodecAttributes`.

@@ -5,14 +5,17 @@ plugins {
 
 group = "io.github.leanish"
 version = "0.4.0-SNAPSHOT"
-description = "AWS SQS payload interceptor for zstd+base64 encoding."
+description = "AWS SQS payload interceptor for automatic compression and encoding."
 
-val jdkVersion = 21
+val targetJavaVersion = 17
+val defaultTestRuntimeJavaVersion = 25
+val testRuntimeJavaVersion = providers.gradleProperty("sqsCodec.testRuntimeJdkVersion")
+    .map(String::toInt)
+    .orElse(defaultTestRuntimeJavaVersion)
+
 java {
-    sourceCompatibility = JavaVersion.toVersion(jdkVersion)
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(jdkVersion))
-    }
+    // Keep IDE/tooling metadata aligned with the compile release target.
+    sourceCompatibility = JavaVersion.toVersion(targetJavaVersion)
 }
 
 dependencies {
@@ -43,6 +46,9 @@ tasks.withType<JavaExec>().configureEach {
 tasks.withType<Test>().configureEach {
     // Required for zstd-jni native access on JDK 21+ to avoid future hard failures.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+    javaLauncher.set(project.extensions.getByType<JavaToolchainService>().launcherFor {
+        languageVersion.set(testRuntimeJavaVersion.map(JavaLanguageVersion::of))
+    })
 }
 
 tasks.jacocoTestCoverageVerification {
@@ -56,5 +62,5 @@ tasks.jacocoTestCoverageVerification {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release.set(jdkVersion)
+    options.release.set(targetJavaVersion)
 }

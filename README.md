@@ -119,6 +119,11 @@ try {
 
 ## Development
 
+Build target is Java 17 bytecode.
+Toolchain comes from `java-conventions` (default compile/runtime JDK 25).
+CI (`ci.yml`) runs full `build` on JDK 25.
+Legacy runtime checks (`legacy-jdk-check.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
+
 Run full checks (tests, checkstyle, spotless, jacoco):
 ```bash
 ./gradlew check

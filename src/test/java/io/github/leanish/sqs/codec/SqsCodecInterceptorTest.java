@@ -411,7 +411,7 @@ class SqsCodecInterceptorTest {
 
         assertThat(decoded.messages())
                 .hasSize(1);
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -443,7 +443,7 @@ class SqsCodecInterceptorTest {
 
         assertThat(decoded.messages())
                 .hasSize(1);
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -469,7 +469,7 @@ class SqsCodecInterceptorTest {
 
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) interceptor.modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -515,9 +515,9 @@ class SqsCodecInterceptorTest {
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst())
+        assertThat(decoded.messages().get(0))
                 .isSameAs(message);
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -567,7 +567,7 @@ class SqsCodecInterceptorTest {
 
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) interceptor.modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -616,7 +616,7 @@ class SqsCodecInterceptorTest {
                 new ModifyResponseContext(response),
                 new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst().body()).isEqualTo(PAYLOAD);
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
     }
 
     @ParameterizedTest
@@ -637,7 +637,7 @@ class SqsCodecInterceptorTest {
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst().body()).isEqualTo(PAYLOAD);
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
     }
 
     @ParameterizedTest

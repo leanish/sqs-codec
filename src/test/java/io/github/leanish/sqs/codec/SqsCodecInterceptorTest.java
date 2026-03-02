@@ -453,7 +453,7 @@ class SqsCodecInterceptorTest {
 
         assertThat(decoded.messages())
                 .hasSize(1);
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -485,7 +485,7 @@ class SqsCodecInterceptorTest {
 
         assertThat(decoded.messages())
                 .hasSize(1);
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -511,7 +511,7 @@ class SqsCodecInterceptorTest {
 
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) interceptor.modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -557,9 +557,9 @@ class SqsCodecInterceptorTest {
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst())
+        assertThat(decoded.messages().get(0))
                 .isSameAs(message);
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -609,7 +609,7 @@ class SqsCodecInterceptorTest {
 
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) interceptor.modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst().body())
+        assertThat(decoded.messages().get(0).body())
                 .isEqualTo(PAYLOAD);
     }
 
@@ -658,7 +658,7 @@ class SqsCodecInterceptorTest {
                 new ModifyResponseContext(response),
                 new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst().body()).isEqualTo(PAYLOAD);
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
     }
 
     @ParameterizedTest
@@ -679,7 +679,7 @@ class SqsCodecInterceptorTest {
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
-        assertThat(decoded.messages().getFirst().body()).isEqualTo(PAYLOAD);
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
     }
 
     @ParameterizedTest
@@ -722,16 +722,11 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyResponse_missingChecksum() {
-        Codec codec = new Codec(CompressionAlgorithm.NONE, EncodingAlgorithm.NONE);
-        String encodedBody = new String(codec.encode(PAYLOAD.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
-        Map<String, MessageAttributeValue> attributes = codecAttributes(
-                PAYLOAD.getBytes(StandardCharsets.UTF_8),
-                CompressionAlgorithm.NONE,
-                EncodingAlgorithm.NONE,
-                ChecksumAlgorithm.MD5);
-        String metadataWithoutChecksum = attributes.get(CodecAttributes.META).stringValue()
-                .replaceFirst(";s=[^;]*", "");
-        attributes.put(CodecAttributes.META, MessageAttributeUtils.stringAttribute(metadataWithoutChecksum));
+        byte[] payloadBytes = PAYLOAD.getBytes(StandardCharsets.UTF_8);
+        String encodedBody = PAYLOAD;
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META,
+                MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=md5;l=" + payloadBytes.length));
         ReceiveMessageResponse response = ReceiveMessageResponse.builder()
                 .messages(Message.builder()
                         .body(encodedBody)
@@ -750,14 +745,10 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyResponse_blankChecksum() {
-        Map<String, MessageAttributeValue> attributes = codecAttributes(
-                PAYLOAD.getBytes(StandardCharsets.UTF_8),
-                CompressionAlgorithm.NONE,
-                EncodingAlgorithm.NONE,
-                ChecksumAlgorithm.MD5);
-        String metadataWithBlankChecksum = attributes.get(CodecAttributes.META).stringValue()
-                .replaceFirst(";s=[^;]*", ";s=");
-        attributes.put(CodecAttributes.META, MessageAttributeUtils.stringAttribute(metadataWithBlankChecksum));
+        byte[] payloadBytes = PAYLOAD.getBytes(StandardCharsets.UTF_8);
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META,
+                MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=md5;s=;l=" + payloadBytes.length));
         ReceiveMessageResponse response = ReceiveMessageResponse.builder()
                 .messages(Message.builder()
                         .body(PAYLOAD)
@@ -776,16 +767,11 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyResponse_checksumMismatch() {
-        Codec codec = new Codec(CompressionAlgorithm.NONE, EncodingAlgorithm.NONE);
-        String encodedBody = new String(codec.encode(PAYLOAD.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
-        Map<String, MessageAttributeValue> attributes = codecAttributes(
-                PAYLOAD.getBytes(StandardCharsets.UTF_8),
-                CompressionAlgorithm.NONE,
-                EncodingAlgorithm.NONE,
-                ChecksumAlgorithm.MD5);
-        String metadataWithBadChecksum = attributes.get(CodecAttributes.META).stringValue()
-                .replaceFirst(";s=[^;]*", ";s=bad");
-        attributes.put(CodecAttributes.META, MessageAttributeUtils.stringAttribute(metadataWithBadChecksum));
+        byte[] payloadBytes = PAYLOAD.getBytes(StandardCharsets.UTF_8);
+        String encodedBody = PAYLOAD;
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META,
+                MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=md5;s=bad;l=" + payloadBytes.length));
         ReceiveMessageResponse response = ReceiveMessageResponse.builder()
                 .messages(Message.builder()
                         .body(encodedBody)

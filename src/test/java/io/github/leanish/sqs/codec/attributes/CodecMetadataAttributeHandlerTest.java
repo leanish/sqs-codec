@@ -156,7 +156,7 @@ class CodecMetadataAttributeHandlerTest {
                                 EncodingAlgorithm.NONE,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=1;c=snappy;e=none;h=none;l=9"),
+                        "v=1;c=snappy;e=base64;h=none;l=9"),
                 Arguments.of(
                         ";;  l=11 ; h=NONE ; e=NONE ; c=NONE ; v=1 ;;  ",
                         new CodecConfiguration(

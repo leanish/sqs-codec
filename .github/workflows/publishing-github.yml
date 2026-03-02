@@ -8,19 +8,19 @@ permissions:
   packages: write
 
 jobs:
-  build-java-25:
-    name: Build (JDK 25)
+  check-java-25:
+    name: Checking on JDK 25
     uses: ./.github/workflows/ci.yml
 
-  legacy-jdk-check:
-    name: Legacy JDK Check
-    uses: ./.github/workflows/legacy-jdk-check.yml
+  test-legacy-jdk:
+    name: Testing on Legacy JDKs
+    uses: ./.github/workflows/testing-legacy-jdk.yml
 
   publish:
     name: Publish to GitHub Packages
     needs:
-      - build-java-25
-      - legacy-jdk-check
+      - check-java-25
+      - test-legacy-jdk
     runs-on: ubuntu-latest
 
     steps:

@@ -9,14 +9,6 @@ description = "AWS SQS payload interceptor for automatic compression and encodin
 
 val targetJavaVersion = 17
 val defaultTestRuntimeJavaVersion = 25
-val testRuntimeJavaVersion = providers.gradleProperty("sqsCodec.testRuntimeJdkVersion")
-    .map(String::toInt)
-    .orElse(defaultTestRuntimeJavaVersion)
-
-java {
-    // Keep IDE/tooling metadata aligned with the compile release target.
-    sourceCompatibility = JavaVersion.toVersion(targetJavaVersion)
-}
 
 dependencies {
     // BOMs
@@ -38,17 +30,34 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-localstack")
 }
 
+java {
+    // Keep IDE/tooling metadata aligned with the compile release target.
+    sourceCompatibility = JavaVersion.toVersion(targetJavaVersion)
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(targetJavaVersion)
+}
+
+val testRuntimeJavaVersion = providers.gradleProperty("sqsCodec.testRuntimeJdkVersion")
+    .map(String::toInt)
+    .orElse(defaultTestRuntimeJavaVersion)
+val testRuntimeLauncher = project.extensions.getByType<JavaToolchainService>().launcherFor {
+    languageVersion.set(testRuntimeJavaVersion.map(JavaLanguageVersion::of))
+}
+
 tasks.withType<JavaExec>().configureEach {
+    // Keep test runtime aligned with the workflow matrix.
+    javaLauncher.set(testRuntimeLauncher)
     // Required for zstd-jni native access on JDK 21+ to avoid future hard failures.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
 tasks.withType<Test>().configureEach {
+    // Keep test runtime aligned with the workflow matrix.
+    javaLauncher.set(testRuntimeLauncher)
     // Required for zstd-jni native access on JDK 21+ to avoid future hard failures.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
-    javaLauncher.set(project.extensions.getByType<JavaToolchainService>().launcherFor {
-        languageVersion.set(testRuntimeJavaVersion.map(JavaLanguageVersion::of))
-    })
 }
 
 tasks.jacocoTestCoverageVerification {
@@ -59,8 +68,4 @@ tasks.jacocoTestCoverageVerification {
             }
         }
     }
-}
-
-tasks.withType<JavaCompile>().configureEach {
-    options.release.set(targetJavaVersion)
 }

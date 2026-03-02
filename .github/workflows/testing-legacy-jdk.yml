@@ -1,4 +1,4 @@
-name: Legacy JDK Check
+name: Testing Legacy JDK
 
 on:
   workflow_dispatch:

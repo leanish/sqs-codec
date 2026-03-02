@@ -15,7 +15,8 @@ import io.github.leanish.sqs.codec.CodecException;
  */
 public class ChecksumValidationException extends CodecException {
 
-    private final @Nullable String detail;
+    @Nullable
+    private final String detail;
 
     private ChecksumValidationException(@Nullable String detail, String message) {
         super(message);
@@ -40,7 +41,8 @@ public class ChecksumValidationException extends CodecException {
                 "Payload checksum mismatch");
     }
 
-    public @Nullable String detail() {
+    @Nullable
+    public String detail() {
         return detail;
     }
 }

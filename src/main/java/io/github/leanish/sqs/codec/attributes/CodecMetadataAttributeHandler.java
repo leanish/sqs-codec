@@ -23,7 +23,8 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 public class CodecMetadataAttributeHandler {
 
     private final CodecConfiguration configuration;
-    private final @Nullable String checksumValue;
+    @Nullable
+    private final String checksumValue;
     private final int rawLength;
 
     private CodecMetadataAttributeHandler(
@@ -40,7 +41,6 @@ public class CodecMetadataAttributeHandler {
     }
 
     public static CodecMetadataAttributeHandler forOutbound(CodecConfiguration configuration, byte[] payloadBytes) {
-        @Nullable
         String checksumValue = null;
         if (configuration.checksumAlgorithm() != ChecksumAlgorithm.NONE) {
             checksumValue = configuration.checksumAlgorithm()
@@ -69,7 +69,8 @@ public class CodecMetadataAttributeHandler {
         return configuration;
     }
 
-    public @Nullable String checksumValue() {
+    @Nullable
+    public String checksumValue() {
         return checksumValue;
     }
 
@@ -137,7 +138,6 @@ public class CodecMetadataAttributeHandler {
         }
 
         int rawLength = parseRawLength(values);
-        @Nullable
         String checksumValue = parseChecksumValue(values, checksumAlgorithm);
         CodecConfiguration configuration = new CodecConfiguration(
                 version,
@@ -166,7 +166,8 @@ public class CodecMetadataAttributeHandler {
         }
     }
 
-    private static @Nullable String parseChecksumValue(Map<String, String> values, ChecksumAlgorithm checksumAlgorithm) {
+    @Nullable
+    private static String parseChecksumValue(Map<String, String> values, ChecksumAlgorithm checksumAlgorithm) {
         String checksumValue = values.get(CodecAttributes.META_CHECKSUM_VALUE_KEY);
         if (checksumAlgorithm == ChecksumAlgorithm.NONE) {
             if (checksumValue != null) {

@@ -244,8 +244,9 @@ class SqsCodecInterceptorTest {
         SdkRequest modified = interceptor.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         SendMessageRequest encoded = (SendMessageRequest) modified;
+        String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8));
         assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
-                .startsWith("v=1;c=zstd;e=base64-std;h=md5;s=");
+                .isEqualTo("v=1;c=zstd;e=base64-std;h=md5;s=" + expectedChecksum + ";l=12");
     }
 
     @Test

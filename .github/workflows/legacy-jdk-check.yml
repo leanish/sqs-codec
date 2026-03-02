@@ -1,0 +1,48 @@
+name: Legacy JDK Check
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test-lts:
+    name: Test (JDK ${{ matrix.java-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: [17, 21]
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 25 (compile toolchain)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up JDK ${{ matrix.java-version }} (test runtime)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java-version }}
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Test
+        run: ./gradlew test -PsqsCodec.testRuntimeJdkVersion=${{ matrix.java-version }}
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: legacy-test-artifacts-jdk-${{ matrix.java-version }}
+          path: |
+            build/test-results/**
+            build/reports/**

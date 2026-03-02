@@ -222,7 +222,7 @@ class SqsCodecInterceptorIntegrationTest {
     }
 
     private static Message receiveSingleMessage(SqsClient client, String queueUrl) {
-        return receiveMessages(client, queueUrl, 1).getFirst();
+        return receiveMessages(client, queueUrl, 1).get(0);
     }
 
     private static List<Message> receiveMessages(SqsClient client, String queueUrl, int expectedCount) {

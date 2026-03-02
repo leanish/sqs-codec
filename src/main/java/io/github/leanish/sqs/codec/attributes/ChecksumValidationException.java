@@ -10,11 +10,13 @@ import org.jspecify.annotations.Nullable;
 import io.github.leanish.sqs.codec.CodecException;
 
 /**
- * Thrown when checksum attributes are missing or fail validation.
+ * Thrown when checksum metadata is inconsistent or when checksum validation fails.
+ * Examples: {@code h=none} with {@code s} present, or {@code h!=none} with missing/blank {@code s}.
  */
 public class ChecksumValidationException extends CodecException {
 
-    private final @Nullable String detail;
+    @Nullable
+    private final String detail;
 
     private ChecksumValidationException(@Nullable String detail, String message) {
         super(message);
@@ -30,7 +32,7 @@ public class ChecksumValidationException extends CodecException {
     public static ChecksumValidationException missingAttribute(String attributeName) {
         return new ChecksumValidationException(
                 attributeName,
-                "Missing required SQS attribute: " + attributeName);
+                "Missing required codec metadata key: " + attributeName);
     }
 
     public static ChecksumValidationException mismatch() {
@@ -39,7 +41,8 @@ public class ChecksumValidationException extends CodecException {
                 "Payload checksum mismatch");
     }
 
-    public @Nullable String detail() {
+    @Nullable
+    public String detail() {
         return detail;
     }
 }

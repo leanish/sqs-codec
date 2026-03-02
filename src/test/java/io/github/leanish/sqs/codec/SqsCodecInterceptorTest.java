@@ -107,9 +107,11 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    void modifyRequest_alwaysIncludesRawLengthMetadata() {
+    void modifyRequest_includesRawLengthMetadataWithoutChecksum() {
         SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
-                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+                .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
+                .withPreferSmallerPayloadEnabled(false);
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(PAYLOAD)
                 .build();
@@ -121,7 +123,30 @@ class SqsCodecInterceptorTest {
         assertThat(encoded.messageAttributes())
                 .containsKey(CodecAttributes.META);
         assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
-                .contains(";l=" + PAYLOAD.getBytes(StandardCharsets.UTF_8).length);
+                .isEqualTo("v=1;c=zstd;e=base64;h=none;l=12");
+    }
+
+    @Test
+    void modifyRequest_keepsCompressedPayloadWhenItIsSmaller() {
+        String compressiblePayload = "a".repeat(2048);
+        int payloadLength = compressiblePayload.getBytes(StandardCharsets.UTF_8).length;
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(compressiblePayload)
+                .build();
+
+        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+
+        String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(compressiblePayload.getBytes(StandardCharsets.UTF_8));
+        assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
+                .isEqualTo("v=1;c=zstd;e=base64;h=md5;s=" + expectedChecksum + ";l=" + payloadLength);
+        assertThat(encoded.messageBody()).isNotEqualTo(compressiblePayload);
+        Codec codec = new Codec(CompressionAlgorithm.ZSTD, EncodingAlgorithm.NONE);
+        assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
+                .isEqualTo(compressiblePayload);
     }
 
     @Test

@@ -13,7 +13,6 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
-import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 
 class CodecTest {
@@ -22,18 +21,20 @@ class CodecTest {
     void encode_default() {
         Codec codec = new Codec();
         String payload = "payload-42";
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
 
-        byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
+        byte[] encoded = codec.encode(payloadBytes);
+        byte[] decoded = codec.decode(encoded);
 
         assertThat(new String(encoded, StandardCharsets.UTF_8))
                 .isEqualTo(payload);
-        assertThat(new String(codec.decode(encoded), StandardCharsets.UTF_8))
+        assertThat(new String(decoded, StandardCharsets.UTF_8))
                 .isEqualTo(payload);
     }
 
     @Test
     void encode_happyCase() {
-        Codec codec = new Codec(CompressionAlgorithm.ZSTD, EncodingAlgorithm.NONE);
+        Codec codec = new Codec(CompressionAlgorithm.ZSTD);
         String payload = "{\"value\":42}";
         byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
 
@@ -45,7 +46,7 @@ class CodecTest {
 
     @Test
     void decode_invalidBase64() {
-        Codec codec = new Codec(CompressionAlgorithm.NONE, EncodingAlgorithm.BASE64);
+        Codec codec = new Codec(CompressionAlgorithm.ZSTD);
 
         assertThatThrownBy(() -> codec.decode("!!!".getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(InvalidPayloadException.class)

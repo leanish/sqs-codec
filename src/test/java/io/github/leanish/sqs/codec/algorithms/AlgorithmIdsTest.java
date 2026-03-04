@@ -31,9 +31,6 @@ class AlgorithmIdsTest {
                     if (value instanceof CompressionAlgorithm algorithm) {
                         return algorithm.id();
                     }
-                    if (value instanceof EncodingAlgorithm algorithm) {
-                        return algorithm.id();
-                    }
                     if (value instanceof ChecksumAlgorithm algorithm) {
                         return algorithm.id();
                     }
@@ -45,7 +42,6 @@ class AlgorithmIdsTest {
     private static Stream<Arguments> algorithmValues() {
         return Stream.of(
                 Arguments.of("CompressionAlgorithm", CompressionAlgorithm.values()),
-                Arguments.of("EncodingAlgorithm", EncodingAlgorithm.values()),
                 Arguments.of("ChecksumAlgorithm", ChecksumAlgorithm.values()));
     }
 }

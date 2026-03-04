@@ -15,7 +15,6 @@ import java.util.Set;
 
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
-import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
 import io.github.leanish.sqs.codec.attributes.CodecMetadataAttributeHandler;
@@ -36,7 +35,10 @@ import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequestEntry;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 /**
- * AWS SDK v2 execution interceptor that encodes/decodes SQS message bodies and manages codec attributes.
+ * AWS SDK v2 execution interceptor that compresses/decompresses SQS message bodies and manages
+ * codec metadata.
+ *
+ * <p>When compression is enabled, compressed binary bytes are encoded with URL-safe Base64.
  */
 @With
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -45,20 +47,12 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private static final int MAX_SQS_MESSAGE_ATTRIBUTES = 10;
     private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
             CompressionAlgorithm.NONE,
-            EncodingAlgorithm.NONE,
-            ChecksumAlgorithm.MD5);
+            ChecksumAlgorithm.MD5,
+            true);
 
     private final CompressionAlgorithm compressionAlgorithm;
-    private final EncodingAlgorithm encodingAlgorithm;
     private final ChecksumAlgorithm checksumAlgorithm;
-    private final boolean preferSmallerPayloadEnabled;
-
-    private SqsCodecInterceptor(
-            CompressionAlgorithm compressionAlgorithm,
-            EncodingAlgorithm encodingAlgorithm,
-            ChecksumAlgorithm checksumAlgorithm) {
-        this(compressionAlgorithm, encodingAlgorithm, checksumAlgorithm, true);
-    }
+    private final boolean skipCompressionWhenLarger;
 
     @Override
     public SdkRequest modifyRequest(Context.ModifyRequest context, ExecutionAttributes executionAttributes) {
@@ -87,7 +81,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     @SuppressWarnings("DuplicatedCode") // known but sadly SendMessageRequest and SendMessageBatchRequestEntry are not polymorphic
     private SendMessageRequest encodeSendMessage(SendMessageRequest request) {
         if (CodecMetadataAttributeHandler.hasCodecAttributes(request.messageAttributes())) {
-            // Already encoded upstream; avoid double-encoding or overwriting attributes (if valid)
+            // Already codec-processed upstream; avoid double-processing or overwriting attributes (if valid)
             validateOutboundAttributeCount(request.messageAttributes());
             validateOutboundPreEncodedPayload(request.messageBody(), request.messageAttributes());
             return request;
@@ -115,7 +109,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     @SuppressWarnings("DuplicatedCode") // known but sadly SendMessageRequest and SendMessageBatchRequestEntry are not polymorphic
     private SendMessageBatchRequestEntry encodeSendMessageEntry(SendMessageBatchRequestEntry entry) {
         if (CodecMetadataAttributeHandler.hasCodecAttributes(entry.messageAttributes())) {
-            // Already encoded upstream; avoid double-encoding or overwriting attributes (if valid)
+            // Already codec-processed upstream; avoid double-processing or overwriting attributes (if valid)
             validateOutboundAttributeCount(entry.messageAttributes());
             validateOutboundPreEncodedPayload(entry.messageBody(), entry.messageAttributes());
             return entry;
@@ -132,13 +126,13 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private EncodedMessage encode(String originalBody, Map<String, MessageAttributeValue> originalAttributes) {
         byte[] payloadBytes = originalBody.getBytes(StandardCharsets.UTF_8);
         EncodedPayload encodedPayload = encodeOutboundPayload(payloadBytes, configuration());
-        CodecConfiguration configuration = encodedPayload.configuration;
+        CodecConfiguration configuration = encodedPayload.configuration();
 
         Map<String, MessageAttributeValue> attributes = new HashMap<>(originalAttributes);
         CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes)
                 .applyTo(attributes);
         validateOutboundAttributeCount(attributes);
-        String encodedBody = new String(encodedPayload.bodyBytes, StandardCharsets.UTF_8);
+        String encodedBody = encodedPayload.body();
 
         return new EncodedMessage(encodedBody, attributes);
     }
@@ -211,13 +205,12 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         if (!shouldDecode(configuration)) {
             return messageBody.getBytes(StandardCharsets.UTF_8);
         }
-        Codec codec = new Codec(configuration.compressionAlgorithm(), configuration.encodingAlgorithm());
+        Codec codec = new Codec(configuration.compressionAlgorithm());
         return codec.decode(messageBody.getBytes(StandardCharsets.UTF_8));
     }
 
     private boolean shouldDecode(CodecConfiguration configuration) {
-        return configuration.compressionAlgorithm() != CompressionAlgorithm.NONE
-                || configuration.encodingAlgorithm() != EncodingAlgorithm.NONE;
+        return configuration.compressionAlgorithm() != CompressionAlgorithm.NONE;
     }
 
     private boolean shouldValidateChecksum(CodecConfiguration configuration) {
@@ -246,34 +239,34 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         return new CodecConfiguration(
                 CodecAttributes.VERSION_VALUE,
                 compressionAlgorithm,
-                encodingAlgorithm,
                 checksumAlgorithm);
     }
 
     private EncodedPayload encodeOutboundPayload(byte[] payloadBytes, CodecConfiguration configuredConfiguration) {
-        Codec codec = new Codec(
-                configuredConfiguration.compressionAlgorithm(),
-                configuredConfiguration.encodingAlgorithm());
+        Codec codec = new Codec(configuredConfiguration.compressionAlgorithm());
         byte[] encodedBytes = codec.encode(payloadBytes);
-        if (!shouldPreferOriginalPayload(payloadBytes, encodedBytes, configuredConfiguration)) {
-            return new EncodedPayload(configuredConfiguration, encodedBytes);
+        if (!shouldSkipCompression(payloadBytes, encodedBytes, configuredConfiguration)) {
+            return new EncodedPayload(
+                    configuredConfiguration,
+                    new String(encodedBytes, StandardCharsets.UTF_8));
         }
 
         CodecConfiguration uncompressedConfiguration = new CodecConfiguration(
                 configuredConfiguration.version(),
                 CompressionAlgorithm.NONE,
-                EncodingAlgorithm.NONE,
                 configuredConfiguration.checksumAlgorithm());
-        return new EncodedPayload(uncompressedConfiguration, payloadBytes);
+        return new EncodedPayload(
+                uncompressedConfiguration,
+                new String(payloadBytes, StandardCharsets.UTF_8));
     }
 
-    private boolean shouldPreferOriginalPayload(
+    private boolean shouldSkipCompression(
             byte[] payloadBytes,
             byte[] encodedBytes,
             CodecConfiguration configuredConfiguration) {
-        return preferSmallerPayloadEnabled
+        return skipCompressionWhenLarger
                 && configuredConfiguration.compressionAlgorithm() != CompressionAlgorithm.NONE
-                && encodedBytes.length > payloadBytes.length;
+                && encodedBytes.length >= payloadBytes.length;
     }
 
     private void validateOutboundAttributeCount(Map<String, MessageAttributeValue> attributes) {
@@ -295,13 +288,6 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private record EncodedMessage(String body, Map<String, MessageAttributeValue> attributes) {
     }
 
-    private static final class EncodedPayload {
-        private final CodecConfiguration configuration;
-        private final byte[] bodyBytes;
-
-        private EncodedPayload(CodecConfiguration configuration, byte[] bodyBytes) {
-            this.configuration = configuration;
-            this.bodyBytes = bodyBytes;
-        }
+    private record EncodedPayload(CodecConfiguration configuration, String body) {
     }
 }

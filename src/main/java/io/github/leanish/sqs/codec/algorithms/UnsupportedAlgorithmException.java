@@ -20,10 +20,6 @@ public class UnsupportedAlgorithmException extends CodecException {
         return new UnsupportedAlgorithmException("Unsupported payload compression: " + value);
     }
 
-    public static UnsupportedAlgorithmException encoding(String value) {
-        return new UnsupportedAlgorithmException("Unsupported payload encoding: " + value);
-    }
-
     public static UnsupportedAlgorithmException checksum(String value) {
         return new UnsupportedAlgorithmException("Unsupported checksum algorithm: " + value);
     }

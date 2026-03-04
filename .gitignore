@@ -1,9 +1,13 @@
-.gradle
+# Gradle
+/.gradle/
 /.gradle-*/
-build
+/build/
 
-### IDE ###
-.idea/
+# IDE
+/.idea/
 
-### OS ###
+# OS
 **/.DS_Store
+
+# Other
+/.claude/

@@ -290,7 +290,4 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private record EncodedPayload(CodecConfiguration configuration, String body) {
     }
-
-    private record EncodedPayload(CodecConfiguration configuration, String body) {
-    }
 }

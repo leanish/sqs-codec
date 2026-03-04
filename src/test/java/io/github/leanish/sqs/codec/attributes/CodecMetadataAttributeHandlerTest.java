@@ -6,6 +6,7 @@
 package io.github.leanish.sqs.codec.attributes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -22,6 +23,52 @@ import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 
 class CodecMetadataAttributeHandlerTest {
+
+    @ParameterizedTest
+    @MethodSource("implicitMd5Cases")
+    void fromAttributes_missingHWithPresentChecksumDefaultsToMd5(
+            String rawMetadata,
+            CompressionAlgorithm compressionAlgorithm,
+            String expectedChecksumValue) {
+        CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(metadataAttributes(rawMetadata));
+
+        assertThat(metadata.configuration()).isEqualTo(new CodecConfiguration(
+                CodecAttributes.VERSION_VALUE,
+                compressionAlgorithm,
+                ChecksumAlgorithm.MD5));
+        assertThat(metadata.checksumValue()).isEqualTo(expectedChecksumValue);
+        assertThat(formattedMetadata(metadata))
+                .isEqualTo("v=1;c=" + compressionAlgorithm.id() + ";h=md5;s=" + expectedChecksumValue + ";l=12");
+    }
+
+    @ParameterizedTest
+    @MethodSource("missingHAndSCases")
+    void fromAttributes_missingHAndSDefaultsToNone(
+            String rawMetadata,
+            CompressionAlgorithm compressionAlgorithm,
+            String expectedCanonicalMetadata) {
+        CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(metadataAttributes(rawMetadata));
+
+        assertThat(metadata.configuration()).isEqualTo(new CodecConfiguration(
+                CodecAttributes.VERSION_VALUE,
+                compressionAlgorithm,
+                ChecksumAlgorithm.NONE));
+        assertThat(metadata.checksumValue()).isNull();
+        assertThat(formattedMetadata(metadata)).isEqualTo(expectedCanonicalMetadata);
+    }
+
+    @ParameterizedTest
+    @MethodSource("explicitHValidationCases")
+    void fromAttributes_explicitHValidationRules(
+            String rawMetadata,
+            String expectedMessage,
+            String expectedDetail) {
+        assertThatThrownBy(() -> CodecMetadataAttributeHandler.fromAttributes(metadataAttributes(rawMetadata)))
+                .isInstanceOfSatisfying(ChecksumValidationException.class, exception -> {
+                    assertThat(exception.getMessage()).isEqualTo(expectedMessage);
+                    assertThat(exception.detail()).isEqualTo(expectedDetail);
+                });
+    }
 
     @ParameterizedTest
     @MethodSource("metadataCombinationCases")
@@ -98,6 +145,33 @@ class CodecMetadataAttributeHandlerTest {
                                     checksumAlgorithm,
                                     checksumValue);
                         }));
+    }
+
+    private static Stream<Arguments> implicitMd5Cases() {
+        return Stream.of(
+                Arguments.of("v=1;c=none;s=abc;l=12", CompressionAlgorithm.NONE, "abc"),
+                Arguments.of("v=1;c=zstd;s=checksum;l=12", CompressionAlgorithm.ZSTD, "checksum"),
+                Arguments.of("  V = 1 ; C = GZIP ; S = xYz ; L = 12  ", CompressionAlgorithm.GZIP, "xYz"));
+    }
+
+    private static Stream<Arguments> missingHAndSCases() {
+        return Stream.of(
+                Arguments.of("v=1;c=none;l=12", CompressionAlgorithm.NONE, "v=1;c=none;h=none;l=12"),
+                Arguments.of("  V = 1 ; C = SNAPPY ; L = 7  ", CompressionAlgorithm.SNAPPY, "v=1;c=snappy;h=none;l=7"));
+    }
+
+    private static Stream<Arguments> explicitHValidationCases() {
+        return Stream.of(
+                Arguments.of("v=1;c=none;h=none;s=abc;l=12", "Missing required checksum algorithm", null),
+                Arguments.of("  V = 1 ; C = NONE ; H = NONE ; S = abc ; L = 12  ", "Missing required checksum algorithm", null),
+                Arguments.of(
+                        "v=1;c=none;h=md5;l=12",
+                        "Missing required codec metadata key: " + CodecAttributes.META_CHECKSUM_VALUE_KEY,
+                        CodecAttributes.META_CHECKSUM_VALUE_KEY),
+                Arguments.of(
+                        "v=1;c=none;h=sha256;s=   ;l=12",
+                        "Missing required codec metadata key: " + CodecAttributes.META_CHECKSUM_VALUE_KEY,
+                        CodecAttributes.META_CHECKSUM_VALUE_KEY));
     }
 
     private static Stream<Arguments> lenientRawLengthCases() {

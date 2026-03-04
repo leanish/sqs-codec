@@ -137,9 +137,13 @@ public class CodecMetadataAttributeHandler {
         if (checksumAlgorithmValue != null) {
             checksumAlgorithm = ChecksumAlgorithm.fromId(checksumAlgorithmValue);
         }
+        String checksumValue = values.get(CodecAttributes.META_CHECKSUM_VALUE_KEY);
+        if (checksumAlgorithmValue == null && checksumValue != null && !checksumValue.isBlank()) {
+            checksumAlgorithm = ChecksumAlgorithm.MD5;
+        }
 
         int rawLength = parseRawLength(values);
-        String checksumValue = parseChecksumValue(values, checksumAlgorithm);
+        checksumValue = parseChecksumValue(values, checksumAlgorithm);
         CodecConfiguration configuration = new CodecConfiguration(
                 version,
                 compressionAlgorithm,

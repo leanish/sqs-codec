@@ -75,9 +75,12 @@ Keys:
 
 Notes:
 - Order does not matter; keys and values are case-insensitive.
-- When parsing `x-codec-meta`, missing `v` defaults to `1`, and missing `c`/`h` keys default to `none`.
+- When parsing `x-codec-meta` on receive, missing `v` defaults to `1` and missing `c` defaults to `none`.
+- On receive, when `h` is missing and `s` is present with a non-blank value, `h` is implicitly treated as `md5`.
+- On receive, when both `h` and `s` are missing, `h` defaults to `none` and checksum validation is skipped.
 - On send, the default interceptor configuration uses checksum `md5`.
 - `s` is required when `h` is not `none`.
+- `h=none` with `s` present is rejected.
 - `l` is always written by the interceptor, but ignored if missing/invalid on read.
 - Unknown keys are ignored for forward compatibility.
 - When `x-codec-meta` is already present on send, the interceptor validates that body and checksum match the declared metadata before skipping re-encoding.

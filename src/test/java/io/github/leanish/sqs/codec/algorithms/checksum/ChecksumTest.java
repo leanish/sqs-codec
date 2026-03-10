@@ -22,9 +22,9 @@ class ChecksumTest {
         Sha256Digestor sha256 = new Sha256Digestor();
 
         assertThat(md5.checksum(payload))
-                .isEqualTo("t2tngCwK9b7C9eqVQunqfg==");
+                .isEqualTo("t2tngCwK9b7C9eqVQunqfg");
         assertThat(sha256.checksum(payload))
-                .isEqualTo("eQTFzG7BGaPUgIUuq8rJBeIyQhPVNOfDTHjJAxb8udg=");
+                .isEqualTo("eQTFzG7BGaPUgIUuq8rJBeIyQhPVNOfDTHjJAxb8udg");
     }
 
     @Test

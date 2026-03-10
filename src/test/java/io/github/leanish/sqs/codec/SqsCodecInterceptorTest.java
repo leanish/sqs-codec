@@ -28,7 +28,7 @@ import org.reactivestreams.Publisher;
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.UnsupportedAlgorithmException;
-import io.github.leanish.sqs.codec.algorithms.encoding.Base64Encoder;
+import io.github.leanish.sqs.codec.algorithms.encoding.Base64Codec;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
@@ -709,7 +709,7 @@ class SqsCodecInterceptorTest {
     @Test
     void modifyResponse_unknownMetadataKeyWithoutCompressionLeavesBodyAsIs() {
         String encodedBody = new String(
-                new Base64Encoder().encode(PAYLOAD.getBytes(StandardCharsets.UTF_8)),
+                Base64Codec.instance().encode(PAYLOAD.getBytes(StandardCharsets.UTF_8)),
                 StandardCharsets.UTF_8);
         byte[] encodedBodyBytes = encodedBody.getBytes(StandardCharsets.UTF_8);
         Message message = Message.builder()

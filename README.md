@@ -3,7 +3,7 @@
 AWS SDK v2 execution interceptor for SQS that compresses message bodies,
 stores codec metadata in a single message attribute, and reverses it on receive.
 
-When compression is enabled, the compressed binary bytes are URL-safe Base64 encoded.
+When compression is enabled, the compressed binary bytes are encoded as unpadded URL-safe Base64.
 
 ## Features
 - Compression: `ZSTD`, `SNAPPY`, `GZIP`, `NONE`
@@ -72,7 +72,7 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
 ## Attributes
 
 Codec metadata is stored in a single attribute:
-- `x-codec-meta` (String), for example: `v=1;c=zstd;h=md5;s=t2tngCwK9b7C9eqVQunqfg==;l=12`
+- `x-codec-meta` (String), for example: `v=1;c=zstd;h=md5;s=t2tngCwK9b7C9eqVQunqfg;l=12`
 
 Keys:
 - `v`: codec version
@@ -89,6 +89,7 @@ Notes:
 - On send, the default interceptor configuration uses checksum `md5`.
 - `s` is required when `h` is not `none`.
 - `s` must be absent when `h=none`.
+- `s` is emitted as unpadded URL-safe Base64 on send.
 - `l` is ignored if missing/invalid on read.
 - On send, `l` is emitted only when compression is actually used (`c!=none` in final metadata) and `withIncludeRawPayloadLength(true)` is enabled.
 - Unknown keys are ignored for forward compatibility.

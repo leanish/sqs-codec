@@ -100,10 +100,7 @@ class SqsCodecInterceptorIntegrationTest {
 
             assertThat(message.body())
                     .isEqualTo(payload);
-            assertThat(message.messageAttributes())
-                    .containsOnlyKeys(CodecAttributes.META);
-            assertThat(message.messageAttributes().get(CodecAttributes.META).stringValue())
-                    .isEqualTo("v=1;c=none;h=none;l=19");
+            assertThat(message.messageAttributes()).isEmpty();
         }
     }
 

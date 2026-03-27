@@ -25,6 +25,16 @@ public class UnsupportedCodecMetadataException extends CodecException {
                 "Duplicate codec metadata key: " + key);
     }
 
+    public static UnsupportedCodecMetadataException missingKey(String key) {
+        return new UnsupportedCodecMetadataException(
+                "Missing required codec metadata key: " + key);
+    }
+
+    public static UnsupportedCodecMetadataException noOp() {
+        return new UnsupportedCodecMetadataException(
+                "Codec metadata must enable compression or checksum");
+    }
+
     public static UnsupportedCodecMetadataException unsupportedVersion(String version) {
         return new UnsupportedCodecMetadataException(
                 "Unsupported codec version: " + version);

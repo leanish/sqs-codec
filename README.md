@@ -53,12 +53,20 @@ Defaults:
 - Compression: `NONE`
 - Checksum: `MD5`
 - `skipCompressionWhenLarger`: `true`
+- `includeRawPayloadLength`: `true`
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if compressed payload would be larger than the original body, the interceptor sends the original body and writes `c=none`.
+- When outbound processing resolves to `c=none` and `h=none`, the interceptor does not add `x-codec-meta`.
 
 Disable `skipCompressionWhenLarger` and always use configured compression:
 ```java
 SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
         .withSkipCompressionWhenLarger(false);
+```
+
+Disable raw payload length metadata (`l`) on send:
+```java
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        .withIncludeRawPayloadLength(false);
 ```
 
 ## Attributes
@@ -71,20 +79,34 @@ Keys:
 - `c`: compression (`zstd`, `gzip`, `snappy`, `none`)
 - `h`: checksum (`md5`, `sha256`, `none`)
 - `s`: checksum value (present only when `h` is not `none`)
-- `l`: raw payload byte length (before compression; debug metadata)
+- `l`: raw payload byte length (before compression); written only when `c` is not `none`
 
 Notes:
 - Order does not matter; keys and values are case-insensitive.
-- When parsing `x-codec-meta`, missing `v` defaults to `1`, and missing `c`/`h` keys default to `none`.
+- `v` is required and must be the current supported version (`1`).
+- Missing `c` or `h` defaults to `none` on read.
+- Metadata is invalid when both `c` and `h` resolve to `none`.
 - On send, the default interceptor configuration uses checksum `md5`.
 - `s` is required when `h` is not `none`.
-- `l` is always written by the interceptor, but ignored if missing/invalid on read.
+- `s` must be absent when `h=none`.
+- `l` is ignored if missing/invalid on read.
+- On send, `l` is emitted only when compression is actually used (`c!=none` in final metadata) and `withIncludeRawPayloadLength(true)` is enabled.
 - Unknown keys are ignored for forward compatibility.
 - When `x-codec-meta` is already present on send, the interceptor validates that body and checksum match the declared metadata before skipping re-encoding.
+- If send-side processing (including `skipCompressionWhenLarger`) ends with `c=none` and `h=none`, no metadata attribute is emitted.
+
+Outbound metadata emission matrix (final per-message decision):
+- `c=none,h=none`: no `x-codec-meta`
+- `c=none,h!=none`: `v;c;h;s` (no `l`)
+- `c!=none,h=none`: `v;c;h;l` (or `v;c;h` when raw length metadata is disabled)
+- `c!=none,h!=none`: `v;c;h;s;l` (or `v;c;h;s` when raw length metadata is disabled)
+
+Compatibility note:
+- Consumers running versions that accept `v`-only or `c=none,h=none` metadata should migrate before producers start enforcing this stricter contract.
 
 SQS attribute limit:
 - SQS supports at most 10 message attributes per message.
-- `sqs-codec` adds exactly one attribute: `x-codec-meta`.
+- `sqs-codec` adds at most one attribute (`x-codec-meta`) and skips it for no-op messages (`c=none,h=none`).
 - The interceptor fails fast on send when the final attribute count would exceed the SQS limit.
 
 ## Error handling

@@ -40,16 +40,25 @@ public class CodecMetadataAttributeHandler {
     }
 
     public static CodecMetadataAttributeHandler forOutbound(CodecConfiguration configuration, byte[] payloadBytes) {
+        return forOutbound(configuration, payloadBytes, true);
+    }
+
+    public static CodecMetadataAttributeHandler forOutbound(
+            CodecConfiguration configuration,
+            byte[] payloadBytes,
+            boolean includeRawPayloadLength) {
+        validateNonNoOpMetadata(configuration.compressionAlgorithm(), configuration.checksumAlgorithm());
         String checksumValue = null;
         if (configuration.checksumAlgorithm() != ChecksumAlgorithm.NONE) {
             checksumValue = configuration.checksumAlgorithm()
                     .implementation()
                     .checksum(payloadBytes);
         }
+        int rawLength = includeRawPayloadLength ? payloadBytes.length : -1;
         return new CodecMetadataAttributeHandler(
                 configuration,
                 checksumValue,
-                payloadBytes.length);
+                rawLength);
     }
 
     public static CodecMetadataAttributeHandler fromAttributes(Map<String, MessageAttributeValue> attributes) {
@@ -83,7 +92,6 @@ public class CodecMetadataAttributeHandler {
             throw UnsupportedCodecMetadataException.malformed(metadataValue);
         }
 
-        int version = CodecAttributes.VERSION_VALUE;
         CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm.NONE;
         ChecksumAlgorithm checksumAlgorithm = ChecksumAlgorithm.NONE;
 
@@ -117,17 +125,7 @@ public class CodecMetadataAttributeHandler {
         }
 
         // Unknown keys are intentionally ignored for forward compatibility.
-        String versionValue = values.get(CodecAttributes.META_VERSION_KEY);
-        if (versionValue != null) {
-            try {
-                version = Integer.parseInt(versionValue);
-            } catch (NumberFormatException e) {
-                throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
-            }
-            if (version != CodecAttributes.VERSION_VALUE) {
-                throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
-            }
-        }
+        int version = parseRequiredVersion(values);
 
         String compressionValue = values.get(CodecAttributes.META_COMPRESSION_KEY);
         if (compressionValue != null) {
@@ -140,6 +138,7 @@ public class CodecMetadataAttributeHandler {
 
         int rawLength = parseRawLength(values);
         String checksumValue = parseChecksumValue(values, checksumAlgorithm);
+        validateNonNoOpMetadata(compressionAlgorithm, checksumAlgorithm);
         CodecConfiguration configuration = new CodecConfiguration(
                 version,
                 compressionAlgorithm,
@@ -148,6 +147,22 @@ public class CodecMetadataAttributeHandler {
                 configuration,
                 checksumValue,
                 rawLength);
+    }
+
+    private static int parseRequiredVersion(Map<String, String> values) {
+        String versionValue = values.get(CodecAttributes.META_VERSION_KEY);
+        if (versionValue == null) {
+            throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_VERSION_KEY);
+        }
+        try {
+            int parsedVersion = Integer.parseInt(versionValue);
+            if (parsedVersion != CodecAttributes.VERSION_VALUE) {
+                throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
+            }
+            return parsedVersion;
+        } catch (NumberFormatException e) {
+            throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
+        }
     }
 
     private static int parseRawLength(Map<String, String> values) {
@@ -181,13 +196,26 @@ public class CodecMetadataAttributeHandler {
         return checksumValue;
     }
 
+    private static void validateNonNoOpMetadata(
+            CompressionAlgorithm compressionAlgorithm,
+            ChecksumAlgorithm checksumAlgorithm) {
+        if (compressionAlgorithm == CompressionAlgorithm.NONE
+                && checksumAlgorithm == ChecksumAlgorithm.NONE) {
+            throw UnsupportedCodecMetadataException.noOp();
+        }
+    }
+
     private String formatMetadataValue() {
         String metadataValue = "v=" + configuration.version()
                 + ";c=" + configuration.compressionAlgorithm().id()
                 + ";h=" + configuration.checksumAlgorithm().id();
-        if (checksumValue == null) {
-            return metadataValue + ";l=" + rawLength;
+        if (checksumValue != null) {
+            metadataValue += ";s=" + checksumValue;
         }
-        return metadataValue + ";s=" + checksumValue + ";l=" + rawLength;
+        if (configuration.compressionAlgorithm() != CompressionAlgorithm.NONE
+                && rawLength >= 0) {
+            metadataValue += ";l=" + rawLength;
+        }
+        return metadataValue;
     }
 }

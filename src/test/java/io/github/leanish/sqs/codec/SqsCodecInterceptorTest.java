@@ -101,7 +101,7 @@ class SqsCodecInterceptorTest {
                 .isEqualTo(PAYLOAD);
         String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8));
         assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
-                .isEqualTo("v=1;c=none;h=md5;s=" + expectedChecksum + ";l=12");
+                .isEqualTo("v=1;c=none;h=md5;s=" + expectedChecksum);
         assertThat(encoded.messageAttributes())
                 .containsOnlyKeys(CodecAttributes.META);
     }
@@ -123,7 +123,7 @@ class SqsCodecInterceptorTest {
         assertThat(encoded.messageBody()).isEqualTo(payload);
         String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(payloadBytes);
         assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
-                .isEqualTo("v=1;c=none;h=md5;s=" + expectedChecksum + ";l=" + payloadBytes.length);
+                .isEqualTo("v=1;c=none;h=md5;s=" + expectedChecksum);
     }
 
     @Test
@@ -144,6 +144,25 @@ class SqsCodecInterceptorTest {
                 .containsKey(CodecAttributes.META);
         assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
                 .isEqualTo("v=1;c=zstd;h=none;l=12");
+    }
+
+    @Test
+    void modifyRequest_omitsRawLengthMetadataWhenConfigured() {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+                .withSkipCompressionWhenLarger(false)
+                .withIncludeRawPayloadLength(false);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .build();
+
+        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+
+        String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8));
+        assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
+                .isEqualTo("v=1;c=zstd;h=md5;s=" + expectedChecksum);
     }
 
     @Test
@@ -302,6 +321,36 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
+    void modifyRequest_missingVersionInConfiguration() {
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .messageAttributes(Map.of(
+                        CodecAttributes.META,
+                        MessageAttributeUtils.stringAttribute("c=zstd;h=none;l=12")))
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Missing required codec metadata key: v");
+    }
+
+    @Test
+    void modifyRequest_noOpMetadataConfiguration() {
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .messageAttributes(Map.of(
+                        CodecAttributes.META,
+                        MessageAttributeUtils.stringAttribute("v=1;c=none;h=none")))
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Codec metadata must enable compression or checksum");
+    }
+
+    @Test
     void modifyRequest_blankConfigurationAttribute() {
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(PAYLOAD)
@@ -380,10 +429,22 @@ class SqsCodecInterceptorTest {
         SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         assertThat(encoded.messageBody()).isEqualTo(PAYLOAD);
-        assertThat(encoded.messageAttributes())
-                .containsOnlyKeys(CodecAttributes.META);
-        assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
-                .isEqualTo("v=1;c=none;h=none;l=12");
+        assertThat(encoded.messageAttributes()).isEmpty();
+    }
+
+    @Test
+    void modifyRequest_skippedCompressionWithoutChecksumOmitsMetadata() {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+                .withChecksumAlgorithm(ChecksumAlgorithm.NONE);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .build();
+
+        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(encoded.messageBody()).isEqualTo(PAYLOAD);
+        assertThat(encoded.messageAttributes()).isEmpty();
     }
 
     @Test
@@ -501,7 +562,7 @@ class SqsCodecInterceptorTest {
         String incompressibleChecksum = ChecksumAlgorithm.MD5.implementation().checksum(incompressiblePayloadBytes);
         assertThat(incompressibleEntry.messageBody()).isEqualTo(PAYLOAD);
         assertThat(incompressibleEntry.messageAttributes().get(CodecAttributes.META).stringValue())
-                .isEqualTo("v=1;c=none;h=md5;s=" + incompressibleChecksum + ";l=" + incompressiblePayloadBytes.length);
+                .isEqualTo("v=1;c=none;h=md5;s=" + incompressibleChecksum);
 
         String compressibleChecksum = ChecksumAlgorithm.MD5.implementation().checksum(compressiblePayloadBytes);
         assertThat(compressibleEntry.messageBody()).isNotEqualTo(compressiblePayload);
@@ -650,11 +711,14 @@ class SqsCodecInterceptorTest {
         String encodedBody = new String(
                 new Base64Encoder().encode(PAYLOAD.getBytes(StandardCharsets.UTF_8)),
                 StandardCharsets.UTF_8);
+        byte[] encodedBodyBytes = encodedBody.getBytes(StandardCharsets.UTF_8);
         Message message = Message.builder()
                 .body(encodedBody)
                 .messageAttributes(Map.of(
                         CodecAttributes.META,
-                        MessageAttributeUtils.stringAttribute("v=1;c=none;x=base64;h=none;l=12")))
+                        MessageAttributeUtils.stringAttribute(
+                                "v=1;c=none;x=base64;h=md5;s="
+                                        + ChecksumAlgorithm.MD5.implementation().checksum(encodedBodyBytes))))
                 .build();
         ReceiveMessageResponse response = ReceiveMessageResponse.builder()
                 .messages(message)
@@ -908,17 +972,15 @@ class SqsCodecInterceptorTest {
 
     private static Stream<Arguments> defaultedAttributeCases() {
         Map<String, MessageAttributeValue> emptyAttributes = Map.of();
-        Map<String, MessageAttributeValue> missingCompression = Map.of(
-                CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;l=12"));
-        Map<String, MessageAttributeValue> missingVersion = Map.of(
-                CodecAttributes.META, MessageAttributeUtils.stringAttribute("c=none;h=none;l=12"));
         Map<String, MessageAttributeValue> missingChecksum = Map.of(
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=gzip;l=12"));
+        Map<String, MessageAttributeValue> missingCompression = Map.of(
+                CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;h=md5;s="
+                        + ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8))));
 
         return Stream.of(
                 Arguments.of(emptyAttributes, CompressionAlgorithm.NONE),
                 Arguments.of(missingCompression, CompressionAlgorithm.NONE),
-                Arguments.of(missingVersion, CompressionAlgorithm.NONE),
                 Arguments.of(missingChecksum, CompressionAlgorithm.GZIP));
     }
 
@@ -980,6 +1042,10 @@ class SqsCodecInterceptorTest {
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=none;h=crc32"));
         Map<String, MessageAttributeValue> unsupportedVersion = Map.of(
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=2;c=none;h=md5"));
+        Map<String, MessageAttributeValue> missingVersion = Map.of(
+                CodecAttributes.META, MessageAttributeUtils.stringAttribute("c=zstd;h=none;l=12"));
+        Map<String, MessageAttributeValue> noOpMetadata = Map.of(
+                CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=none;h=none"));
         Map<String, MessageAttributeValue> invalidFormat = Map.of(
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c"));
         Map<String, MessageAttributeValue> duplicateKey = Map.of(
@@ -998,6 +1064,14 @@ class SqsCodecInterceptorTest {
                         unsupportedVersion,
                         UnsupportedCodecMetadataException.class,
                         "Unsupported codec version: 2"),
+                Arguments.of(
+                        missingVersion,
+                        UnsupportedCodecMetadataException.class,
+                        "Missing required codec metadata key: v"),
+                Arguments.of(
+                        noOpMetadata,
+                        UnsupportedCodecMetadataException.class,
+                        "Codec metadata must enable compression or checksum"),
                 Arguments.of(
                         invalidFormat,
                         UnsupportedCodecMetadataException.class,
@@ -1024,6 +1098,10 @@ class SqsCodecInterceptorTest {
             byte[] payloadBytes,
             CompressionAlgorithm compressionAlgorithm,
             ChecksumAlgorithm checksumAlgorithm) {
+        if (compressionAlgorithm == CompressionAlgorithm.NONE
+                && checksumAlgorithm == ChecksumAlgorithm.NONE) {
+            return Map.of();
+        }
         CodecConfiguration configuration = new CodecConfiguration(
                 CodecAttributes.VERSION_VALUE,
                 compressionAlgorithm,

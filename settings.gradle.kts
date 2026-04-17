@@ -5,7 +5,7 @@ pluginManagement {
     }
 
     plugins {
-        id("io.github.leanish.java-conventions") version "0.5.3"
+        id("io.github.leanish.java-conventions") version "0.5.4"
     }
 }
 

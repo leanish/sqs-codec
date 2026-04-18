@@ -28,6 +28,7 @@ import org.reactivestreams.Publisher;
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.UnsupportedAlgorithmException;
+import io.github.leanish.sqs.codec.algorithms.compression.CompressionException;
 import io.github.leanish.sqs.codec.algorithms.encoding.Base64Codec;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
@@ -283,6 +284,25 @@ class SqsCodecInterceptorTest {
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(InvalidPayloadException.class)
                 .hasMessage("Invalid base64 payload");
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidCompressedPayloadCases")
+    void modifyRequest_alreadyPresentAttributes_invalidCompressedPayload(
+            CompressionAlgorithm compressionAlgorithm,
+            String encodedPayload,
+            String expectedMessage) {
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(encodedPayload)
+                .messageAttributes(Map.of(
+                        CodecAttributes.META,
+                        MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";h=none")))
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(CompressionException.class)
+                .hasMessage(expectedMessage);
     }
 
     @Test
@@ -970,6 +990,28 @@ class SqsCodecInterceptorTest {
                 .hasMessage("Invalid base64 payload");
     }
 
+    @ParameterizedTest
+    @MethodSource("invalidCompressedPayloadCases")
+    void modifyResponse_invalidCompressedPayload(
+            CompressionAlgorithm compressionAlgorithm,
+            String encodedPayload,
+            String expectedMessage) {
+        ReceiveMessageResponse response = ReceiveMessageResponse.builder()
+                .messages(Message.builder()
+                        .body(encodedPayload)
+                        .messageAttributes(Map.of(
+                                CodecAttributes.META,
+                                MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";h=none")))
+                        .build())
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+                new ModifyResponseContext(response),
+                new ExecutionAttributes()))
+                .isInstanceOf(CompressionException.class)
+                .hasMessage(expectedMessage);
+    }
+
     private static Stream<Arguments> defaultedAttributeCases() {
         Map<String, MessageAttributeValue> emptyAttributes = Map.of();
         Map<String, MessageAttributeValue> missingChecksum = Map.of(
@@ -1011,6 +1053,26 @@ class SqsCodecInterceptorTest {
                         List.of("All"),
                         true,
                         List.of("All")));
+    }
+
+    private static Stream<Arguments> invalidCompressedPayloadCases() {
+        return Stream.of(
+                Arguments.of(
+                        CompressionAlgorithm.GZIP,
+                        encodedGarbagePayload("not-gzip"),
+                        "Failed to decompress payload with gzip"),
+                Arguments.of(
+                        CompressionAlgorithm.SNAPPY,
+                        encodedGarbagePayload("not-snappy"),
+                        "Failed to decompress payload with snappy"),
+                Arguments.of(
+                        CompressionAlgorithm.ZSTD,
+                        encodedGarbagePayload("not-zstd"),
+                        "Failed to decompress payload with zstd"));
+    }
+
+    private static String encodedGarbagePayload(String payload) {
+        return Base64Codec.instance().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
     }
 
     private static Stream<Arguments> codecConfigurationPairs() {

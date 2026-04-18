@@ -48,8 +48,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
             CompressionAlgorithm.NONE,
             ChecksumAlgorithm.MD5,
-            true,
-            true);
+            /* skipCompressionWhenLarger= */ true,
+            /* includeRawPayloadLength= */ true);
 
     private final CompressionAlgorithm compressionAlgorithm;
     private final ChecksumAlgorithm checksumAlgorithm;

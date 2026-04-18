@@ -10,9 +10,11 @@ All notable changes to this project are documented in this file.
 - Removed configurable payload encoding from the interceptor API.
 - `SqsCodecInterceptor` now only configures compression and checksum.
 - Compression now always applies unpadded URL-safe Base64 to compressed payload bytes.
+- Decompression failures are now normalized to `CompressionException`, including native-library runtime failures.
 - Checksum values are now emitted as unpadded URL-safe Base64.
 - Added `includeRawPayloadLength` (default `true`) to control whether compressed messages emit raw length metadata (`l`).
 - `x-codec-meta` now requires `v`, rejects no-op metadata (`c=none;h=none`), and omits `l` from canonical metadata when compression resolves to `none`.
+- Canonical metadata no longer invents `l=0` when raw length is absent or invalid on read.
 - Added `skipCompressionWhenLarger` (default `true`): when compressed output is not smaller, send the original payload and write `c=none`.
 - When send-side processing resolves to `c=none;h=none`, the interceptor skips emitting `x-codec-meta`.
 
@@ -22,6 +24,7 @@ All notable changes to this project are documented in this file.
 
 ### Notes
 - This is an intentional breaking change while the library is still pre-release.
+- Upgrading from `0.3.0` is not wire-compatible with messages still carrying the legacy `x-codec-conf` attributes; drain or rewrite queued messages before switching receivers to `0.4.x`.
 
 ## 0.3.0 - 2026-02-14
 

@@ -102,6 +102,7 @@ Outbound metadata emission matrix (final per-message decision):
 - `c=none,h!=none`: `v;c;h;s` (no `l`)
 - `c!=none,h=none`: `v;c;h;l` (or `v;c;h` when raw length metadata is disabled)
 - `c!=none,h!=none`: `v;c;h;s;l` (or `v;c;h;s` when raw length metadata is disabled)
+
 SQS attribute limit:
 - SQS supports at most 10 message attributes per message.
 - `sqs-codec` adds at most one attribute (`x-codec-meta`) and skips it for no-op messages (`c=none,h=none`).

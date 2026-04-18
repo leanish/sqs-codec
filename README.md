@@ -52,6 +52,7 @@ SqsClient client = SqsClient.builder()
 Defaults:
 - Compression: `NONE`
 - Checksum: `MD5`
+- `MD5` is intended for non-adversarial integrity checks; prefer `SHA256` when producers may be attacker-controlled.
 - `skipCompressionWhenLarger`: `true`
 - `includeRawPayloadLength`: `true`
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if compressed payload would be larger than the original body, the interceptor sends the original body and writes `c=none`.

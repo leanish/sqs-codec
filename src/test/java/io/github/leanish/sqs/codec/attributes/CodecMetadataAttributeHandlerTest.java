@@ -105,7 +105,10 @@ class CodecMetadataAttributeHandlerTest {
                 CompressionAlgorithm.NONE,
                 ChecksumAlgorithm.NONE);
 
-        assertThatThrownBy(() -> CodecMetadataAttributeHandler.forOutbound(configuration, "payload".getBytes(StandardCharsets.UTF_8)))
+        assertThatThrownBy(() -> CodecMetadataAttributeHandler.forOutbound(
+                configuration,
+                "payload".getBytes(StandardCharsets.UTF_8),
+                true))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Codec metadata must enable compression or checksum");
     }
@@ -258,6 +261,10 @@ class CodecMetadataAttributeHandlerTest {
                         "Codec metadata must enable compression or checksum"),
                 Arguments.of(
                         "v=1;c=none;h=none",
+                        UnsupportedCodecMetadataException.class,
+                        "Codec metadata must enable compression or checksum"),
+                Arguments.of(
+                        "v=1;c=none;h=none;s=abc",
                         UnsupportedCodecMetadataException.class,
                         "Codec metadata must enable compression or checksum"),
                 Arguments.of(

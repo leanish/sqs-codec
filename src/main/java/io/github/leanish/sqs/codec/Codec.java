@@ -7,11 +7,11 @@ package io.github.leanish.sqs.codec;
 
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.compression.Compressor;
-import io.github.leanish.sqs.codec.algorithms.encoding.Base64Encoder;
+import io.github.leanish.sqs.codec.algorithms.encoding.Base64Codec;
 
 class Codec {
 
-    private static final Base64Encoder BASE64_ENCODER = new Base64Encoder();
+    private static final Base64Codec BASE64_CODEC = Base64Codec.instance();
 
     private final Compressor compressor;
     private final boolean compressionEnabled;
@@ -27,7 +27,7 @@ class Codec {
         }
 
         byte[] compressed = compressor.compress(payload);
-        return BASE64_ENCODER.encode(compressed);
+        return BASE64_CODEC.encode(compressed);
     }
 
     public byte[] decode(byte[] payload) {
@@ -35,7 +35,7 @@ class Codec {
             return payload;
         }
 
-        byte[] decoded = BASE64_ENCODER.decode(payload);
+        byte[] decoded = BASE64_CODEC.decode(payload);
         return compressor.decompress(decoded);
     }
 }

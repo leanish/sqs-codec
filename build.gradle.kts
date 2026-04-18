@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "io.github.leanish"
-version = "0.4.0-SNAPSHOT"
+version = "0.4.0"
 description = "AWS SQS payload interceptor for automatic compression and encoding."
 
 val targetJavaVersion = 17
@@ -58,6 +58,23 @@ tasks.withType<Test>().configureEach {
     javaLauncher.set(testRuntimeLauncher)
     // Required for zstd-jni native access on JDK 21+ to avoid future hard failures.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/lean-ish/sqs-codec")
+            credentials {
+                username = providers.gradleProperty("gpr.user")
+                    .orElse(providers.environmentVariable("GITHUB_ACTOR"))
+                    .orNull
+                password = providers.gradleProperty("gpr.key")
+                    .orElse(providers.environmentVariable("GITHUB_TOKEN"))
+                    .orNull
+            }
+        }
+    }
 }
 
 tasks.jacocoTestCoverageVerification {

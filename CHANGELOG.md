@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.4.0 - 2026-04-18
+
 ### Changed
 - Removed configurable payload encoding from the interceptor API.
 - `SqsCodecInterceptor` now only configures compression and checksum.

@@ -48,11 +48,13 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
             CompressionAlgorithm.NONE,
             ChecksumAlgorithm.MD5,
+            true,
             true);
 
     private final CompressionAlgorithm compressionAlgorithm;
     private final ChecksumAlgorithm checksumAlgorithm;
     private final boolean skipCompressionWhenLarger;
+    private final boolean includeRawPayloadLength;
 
     public static SqsCodecInterceptor defaultInterceptor() {
         return DEFAULT;
@@ -133,8 +135,13 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         CodecConfiguration configuration = encodedPayload.configuration();
 
         Map<String, MessageAttributeValue> attributes = new HashMap<>(originalAttributes);
-        CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes)
-                .applyTo(attributes);
+        if (shouldWriteMetadata(configuration)) {
+            CodecMetadataAttributeHandler.forOutbound(
+                            configuration,
+                            payloadBytes,
+                            includeRawPayloadLength)
+                    .applyTo(attributes);
+        }
         validateOutboundAttributeCount(attributes);
         String encodedBody = encodedPayload.body();
 
@@ -219,6 +226,11 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private boolean shouldValidateChecksum(CodecConfiguration configuration) {
         return configuration.checksumAlgorithm() != ChecksumAlgorithm.NONE;
+    }
+
+    private boolean shouldWriteMetadata(CodecConfiguration configuration) {
+        return shouldDecode(configuration)
+                || shouldValidateChecksum(configuration);
     }
 
     private void validateChecksum(

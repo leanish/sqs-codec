@@ -6,12 +6,15 @@
 package io.github.leanish.sqs.codec.attributes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -29,7 +32,8 @@ class CodecMetadataAttributeHandlerTest {
             String rawMetadata,
             CompressionAlgorithm compressionAlgorithm,
             ChecksumAlgorithm checksumAlgorithm,
-            String expectedChecksumValue) {
+            String expectedChecksumValue,
+            String expectedCanonicalMetadata) {
         CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(metadataAttributes(rawMetadata));
 
         assertThat(metadata.configuration())
@@ -38,7 +42,7 @@ class CodecMetadataAttributeHandlerTest {
                         compressionAlgorithm,
                         checksumAlgorithm));
         assertThat(metadata.checksumValue()).isEqualTo(expectedChecksumValue);
-        assertThat(formattedMetadata(metadata)).endsWith(";l=12");
+        assertThat(formattedMetadata(metadata)).isEqualTo(expectedCanonicalMetadata);
     }
 
     @ParameterizedTest
@@ -46,11 +50,13 @@ class CodecMetadataAttributeHandlerTest {
     void fromAttributes_lenientRawLength(
             String rawMetadata,
             CodecConfiguration expectedConfiguration,
-            String expectedChecksumValue) {
+            String expectedChecksumValue,
+            String expectedCanonicalMetadata) {
         CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(metadataAttributes(rawMetadata));
 
         assertThat(metadata.configuration()).isEqualTo(expectedConfiguration);
         assertThat(metadata.checksumValue()).isEqualTo(expectedChecksumValue);
+        assertThat(formattedMetadata(metadata)).isEqualTo(expectedCanonicalMetadata);
     }
 
     @ParameterizedTest
@@ -81,9 +87,55 @@ class CodecMetadataAttributeHandlerTest {
         assertThat(formattedMetadata(metadata)).isEqualTo(expectedCanonicalMetadata);
     }
 
+    @ParameterizedTest
+    @MethodSource("invalidMetadataCases")
+    void fromAttributes_invalidMetadata(
+            String rawMetadata,
+            Class<? extends RuntimeException> expectedException,
+            String expectedMessage) {
+        assertThatThrownBy(() -> CodecMetadataAttributeHandler.fromAttributes(metadataAttributes(rawMetadata)))
+                .isInstanceOf(expectedException)
+                .hasMessage(expectedMessage);
+    }
+
+    @Test
+    void forOutbound_disallowsNoOpMetadata() {
+        CodecConfiguration configuration = new CodecConfiguration(
+                CodecAttributes.VERSION_VALUE,
+                CompressionAlgorithm.NONE,
+                ChecksumAlgorithm.NONE);
+
+        assertThatThrownBy(() -> CodecMetadataAttributeHandler.forOutbound(
+                configuration,
+                "payload".getBytes(StandardCharsets.UTF_8),
+                true))
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Codec metadata must enable compression or checksum");
+    }
+
+    @Test
+    void forOutbound_omitsRawLengthWhenDisabled() {
+        CodecConfiguration configuration = new CodecConfiguration(
+                CodecAttributes.VERSION_VALUE,
+                CompressionAlgorithm.ZSTD,
+                ChecksumAlgorithm.MD5);
+
+        CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.forOutbound(
+                configuration,
+                "payload".getBytes(StandardCharsets.UTF_8),
+                false);
+
+        assertThat(formattedMetadata(metadata))
+                .isEqualTo(
+                        "v=1;c=zstd;h=md5;s="
+                                + ChecksumAlgorithm.MD5.implementation().checksum("payload".getBytes(StandardCharsets.UTF_8)));
+    }
+
     private static Stream<Arguments> metadataCombinationCases() {
         return Arrays.stream(CompressionAlgorithm.values())
                 .flatMap(compressionAlgorithm -> Arrays.stream(ChecksumAlgorithm.values())
+                        .filter(checksumAlgorithm -> compressionAlgorithm != CompressionAlgorithm.NONE
+                                || checksumAlgorithm != ChecksumAlgorithm.NONE)
                         .map(checksumAlgorithm -> {
                             String checksumValue = checksumAlgorithm == ChecksumAlgorithm.NONE
                                     ? null
@@ -92,11 +144,16 @@ class CodecMetadataAttributeHandlerTest {
                                     + ";h=" + checksumAlgorithm.id()
                                     + (checksumValue == null ? "" : ";s=" + checksumValue)
                                     + ";l=12";
+                            String expectedCanonicalMetadata = "v=1;c=" + compressionAlgorithm.id()
+                                    + ";h=" + checksumAlgorithm.id()
+                                    + (checksumValue == null ? "" : ";s=" + checksumValue)
+                                    + (compressionAlgorithm == CompressionAlgorithm.NONE ? "" : ";l=12");
                             return Arguments.of(
                                     rawMetadata,
                                     compressionAlgorithm,
                                     checksumAlgorithm,
-                                    checksumValue);
+                                    checksumValue,
+                                    expectedCanonicalMetadata);
                         }));
     }
 
@@ -105,19 +162,19 @@ class CodecMetadataAttributeHandlerTest {
                 CodecAttributes.VERSION_VALUE,
                 CompressionAlgorithm.NONE,
                 ChecksumAlgorithm.MD5);
-        CodecConfiguration noneConfiguration = new CodecConfiguration(
+        CodecConfiguration gzipConfiguration = new CodecConfiguration(
                 CodecAttributes.VERSION_VALUE,
-                CompressionAlgorithm.NONE,
+                CompressionAlgorithm.GZIP,
                 ChecksumAlgorithm.NONE);
         return Stream.of(
-                Arguments.of("v=1;c=none;h=none", noneConfiguration, null),
-                Arguments.of("v=1;c=none;h=none;l=", noneConfiguration, null),
-                Arguments.of("v=1;c=none;h=none;l=-1", noneConfiguration, null),
-                Arguments.of("v=1;c=none;h=none;l=abc", noneConfiguration, null),
-                Arguments.of("v=1;c=none;h=md5;s=abc", md5Configuration, "abc"),
-                Arguments.of("v=1;c=none;h=md5;s=abc;l=", md5Configuration, "abc"),
-                Arguments.of("v=1;c=none;h=md5;s=abc;l=-1", md5Configuration, "abc"),
-                Arguments.of("v=1;c=none;h=md5;s=abc;l=abc", md5Configuration, "abc"));
+                Arguments.of("v=1;c=none;h=md5;s=abc", md5Configuration, "abc", "v=1;c=none;h=md5;s=abc"),
+                Arguments.of("v=1;c=none;h=md5;s=abc;l=", md5Configuration, "abc", "v=1;c=none;h=md5;s=abc"),
+                Arguments.of("v=1;c=none;h=md5;s=abc;l=-1", md5Configuration, "abc", "v=1;c=none;h=md5;s=abc"),
+                Arguments.of("v=1;c=none;h=md5;s=abc;l=abc", md5Configuration, "abc", "v=1;c=none;h=md5;s=abc"),
+                Arguments.of("v=1;c=gzip;h=none", gzipConfiguration, null, "v=1;c=gzip;h=none;l=0"),
+                Arguments.of("v=1;c=gzip;h=none;l=", gzipConfiguration, null, "v=1;c=gzip;h=none;l=0"),
+                Arguments.of("v=1;c=gzip;h=none;l=-1", gzipConfiguration, null, "v=1;c=gzip;h=none;l=0"),
+                Arguments.of("v=1;c=gzip;h=none;l=abc", gzipConfiguration, null, "v=1;c=gzip;h=none;l=0"));
     }
 
     private static Stream<Arguments> metadataPermutationCases() {
@@ -147,13 +204,21 @@ class CodecMetadataAttributeHandlerTest {
                         null,
                         "v=1;c=snappy;h=none;l=9"),
                 Arguments.of(
-                        ";;  l=11 ; h=NONE ; c=NONE ; v=1 ;;  ",
+                        "v=1;h=md5;s=abc",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.NONE,
+                                ChecksumAlgorithm.MD5),
+                        "abc",
+                        "v=1;c=none;h=md5;s=abc"),
+                Arguments.of(
+                        "v=1;c=gzip;l=11",
+                        new CodecConfiguration(
+                                CodecAttributes.VERSION_VALUE,
+                                CompressionAlgorithm.GZIP,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=1;c=none;h=none;l=11"));
+                        "v=1;c=gzip;h=none;l=11"));
     }
 
     private static Stream<Arguments> unknownKeyToleranceCases() {
@@ -167,21 +232,45 @@ class CodecMetadataAttributeHandlerTest {
                         "abc",
                         "v=1;c=gzip;h=md5;s=abc;l=12"),
                 Arguments.of(
-                        "v=1;c=none;h=none;l=3;future-flag=true",
+                        "v=1;c=none;h=md5;s=abc;future-flag=true",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.NONE,
-                                ChecksumAlgorithm.NONE),
-                        null,
-                        "v=1;c=none;h=none;l=3"),
+                                ChecksumAlgorithm.MD5),
+                        "abc",
+                        "v=1;c=none;h=md5;s=abc"),
                 Arguments.of(
-                        "v=1;c=none;h=none;l=3;future-flag=",
+                        "v=1;c=gzip;h=none;l=3;future-flag=",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
-                                CompressionAlgorithm.NONE,
+                                CompressionAlgorithm.GZIP,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=1;c=none;h=none;l=3"));
+                        "v=1;c=gzip;h=none;l=3"));
+    }
+
+    private static Stream<Arguments> invalidMetadataCases() {
+        return Stream.of(
+                Arguments.of(
+                        "c=none;h=md5;s=abc",
+                        UnsupportedCodecMetadataException.class,
+                        "Missing required codec metadata key: v"),
+                Arguments.of(
+                        "v=1",
+                        UnsupportedCodecMetadataException.class,
+                        "Codec metadata must enable compression or checksum"),
+                Arguments.of(
+                        "v=1;c=none;h=none",
+                        UnsupportedCodecMetadataException.class,
+                        "Codec metadata must enable compression or checksum"),
+                Arguments.of(
+                        "v=1;c=none;h=none;s=abc",
+                        UnsupportedCodecMetadataException.class,
+                        "Codec metadata must enable compression or checksum"),
+                Arguments.of(
+                        "v=1;l=12",
+                        UnsupportedCodecMetadataException.class,
+                        "Codec metadata must enable compression or checksum"));
     }
 
     private static Map<String, MessageAttributeValue> metadataAttributes(String rawMetadata) {

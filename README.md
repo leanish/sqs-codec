@@ -90,6 +90,7 @@ Notes:
 - `s` is required when `h` is not `none`.
 - `s` must be absent when `h=none`.
 - `s` is emitted as unpadded URL-safe Base64 on send.
+- If checksum values are produced or compared outside this library, use the canonical unpadded form; padded values are not normalized on read.
 - `l` is ignored if missing/invalid on read.
 - On send, `l` is emitted only when compression is actually used (`c!=none` in final metadata) and `withIncludeRawPayloadLength(true)` is enabled.
 - Unknown keys are ignored for forward compatibility.

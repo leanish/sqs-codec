@@ -27,6 +27,12 @@ class Base64CodecTest {
     }
 
     @Test
+    void base64_encodeToString() {
+        assertThat(Base64Codec.instance().encodeToString("payload-42".getBytes(StandardCharsets.UTF_8)))
+                .isEqualTo("cGF5bG9hZC00Mg");
+    }
+
+    @Test
     void base64_invalidPayload() {
         assertThatThrownBy(() -> Base64Codec.instance().decode("!@#".getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(InvalidPayloadException.class)

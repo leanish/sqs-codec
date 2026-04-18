@@ -14,8 +14,8 @@ dependencies {
     // BOMs
     compileOnly(platform("software.amazon.awssdk:bom:2.42.5"))
     testImplementation(platform("software.amazon.awssdk:bom:2.42.5"))
-    testImplementation(platform("org.mockito:mockito-bom:5.22.0"))
-    testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.3"))
+    testImplementation(platform("org.mockito:mockito-bom:5.23.0"))
+    testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.4"))
 
     // Consumers provide AWS SDK versions; keep it compileOnly to avoid forcing a version.
     compileOnly("software.amazon.awssdk:sqs")

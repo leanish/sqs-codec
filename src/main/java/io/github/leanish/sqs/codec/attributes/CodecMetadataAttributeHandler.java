@@ -39,10 +39,6 @@ public class CodecMetadataAttributeHandler {
         return attributes.containsKey(CodecAttributes.META);
     }
 
-    public static CodecMetadataAttributeHandler forOutbound(CodecConfiguration configuration, byte[] payloadBytes) {
-        return forOutbound(configuration, payloadBytes, true);
-    }
-
     public static CodecMetadataAttributeHandler forOutbound(
             CodecConfiguration configuration,
             byte[] payloadBytes,
@@ -124,7 +120,6 @@ public class CodecMetadataAttributeHandler {
             }
         }
 
-        // Unknown keys are intentionally ignored for forward compatibility.
         int version = parseRequiredVersion(values);
 
         String compressionValue = values.get(CodecAttributes.META_COMPRESSION_KEY);

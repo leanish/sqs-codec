@@ -1107,7 +1107,7 @@ class SqsCodecInterceptorTest {
                 compressionAlgorithm,
                 checksumAlgorithm);
         Map<String, MessageAttributeValue> attributes = new HashMap<>();
-        CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes)
+        CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes, true)
                 .applyTo(attributes);
         return attributes;
     }

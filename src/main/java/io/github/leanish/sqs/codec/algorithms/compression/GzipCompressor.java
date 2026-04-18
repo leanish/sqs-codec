@@ -30,7 +30,7 @@ public class GzipCompressor implements Compressor {
                 compressedStream.write(payload);
             }
             return outputStream.toByteArray();
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             throw CompressionException.compress(ALGORITHM, e);
         }
     }
@@ -42,7 +42,7 @@ public class GzipCompressor implements Compressor {
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             inputStream.transferTo(outputStream);
             return outputStream.toByteArray();
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             throw CompressionException.decompress(ALGORITHM, e);
         }
     }

@@ -171,10 +171,10 @@ class CodecMetadataAttributeHandlerTest {
                 Arguments.of("v=1;c=none;h=md5;s=abc;l=", md5Configuration, "abc", "v=1;c=none;h=md5;s=abc"),
                 Arguments.of("v=1;c=none;h=md5;s=abc;l=-1", md5Configuration, "abc", "v=1;c=none;h=md5;s=abc"),
                 Arguments.of("v=1;c=none;h=md5;s=abc;l=abc", md5Configuration, "abc", "v=1;c=none;h=md5;s=abc"),
-                Arguments.of("v=1;c=gzip;h=none", gzipConfiguration, null, "v=1;c=gzip;h=none;l=0"),
-                Arguments.of("v=1;c=gzip;h=none;l=", gzipConfiguration, null, "v=1;c=gzip;h=none;l=0"),
-                Arguments.of("v=1;c=gzip;h=none;l=-1", gzipConfiguration, null, "v=1;c=gzip;h=none;l=0"),
-                Arguments.of("v=1;c=gzip;h=none;l=abc", gzipConfiguration, null, "v=1;c=gzip;h=none;l=0"));
+                Arguments.of("v=1;c=gzip;h=none", gzipConfiguration, null, "v=1;c=gzip;h=none"),
+                Arguments.of("v=1;c=gzip;h=none;l=", gzipConfiguration, null, "v=1;c=gzip;h=none"),
+                Arguments.of("v=1;c=gzip;h=none;l=-1", gzipConfiguration, null, "v=1;c=gzip;h=none"),
+                Arguments.of("v=1;c=gzip;h=none;l=abc", gzipConfiguration, null, "v=1;c=gzip;h=none"));
     }
 
     private static Stream<Arguments> metadataPermutationCases() {

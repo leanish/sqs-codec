@@ -20,6 +20,7 @@ All notable changes to this project are documented in this file.
 
 ### Notes
 - This is an intentional breaking change while the library is still pre-release.
+- Upgrading from `0.3.0` is not wire-compatible with messages still carrying the legacy `x-codec-conf` attributes; drain or rewrite queued messages before switching receivers to `0.4.x`.
 
 ## 0.3.0 - 2026-02-14
 

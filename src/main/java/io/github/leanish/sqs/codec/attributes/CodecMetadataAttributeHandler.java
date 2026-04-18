@@ -109,10 +109,7 @@ public class CodecMetadataAttributeHandler {
                     || CodecAttributes.META_CHECKSUM_ALGORITHM_KEY.equals(key)
                     || CodecAttributes.META_CHECKSUM_VALUE_KEY.equals(key)
                     || CodecAttributes.META_RAW_LENGTH_KEY.equals(key);
-            if (key.isEmpty() || (knownKey
-                    && value.isEmpty()
-                    && !CodecAttributes.META_CHECKSUM_VALUE_KEY.equals(key)
-                    && !CodecAttributes.META_RAW_LENGTH_KEY.equals(key))) {
+            if (key.isEmpty() || hasBlankRequiredValue(key, value, knownKey)) {
                 throw UnsupportedCodecMetadataException.malformed(metadataValue);
             }
             if (values.putIfAbsent(key, value) != null) {
@@ -163,16 +160,16 @@ public class CodecMetadataAttributeHandler {
     private static int parseRawLength(Map<String, String> values) {
         String rawLengthValue = values.get(CodecAttributes.META_RAW_LENGTH_KEY);
         if (rawLengthValue == null || rawLengthValue.isBlank()) {
-            return 0;
+            return -1;
         }
         try {
             int parsedRawLength = Integer.parseInt(rawLengthValue);
             if (parsedRawLength < 0) {
-                return 0;
+                return -1;
             }
             return parsedRawLength;
         } catch (NumberFormatException e) {
-            return 0;
+            return -1;
         }
     }
 
@@ -198,6 +195,13 @@ public class CodecMetadataAttributeHandler {
                 && checksumAlgorithm == ChecksumAlgorithm.NONE) {
             throw UnsupportedCodecMetadataException.noOp();
         }
+    }
+
+    private static boolean hasBlankRequiredValue(String key, String value, boolean knownKey) {
+        return knownKey
+                && value.isEmpty()
+                && !CodecAttributes.META_CHECKSUM_VALUE_KEY.equals(key)
+                && !CodecAttributes.META_RAW_LENGTH_KEY.equals(key);
     }
 
     private String formatMetadataValue() {

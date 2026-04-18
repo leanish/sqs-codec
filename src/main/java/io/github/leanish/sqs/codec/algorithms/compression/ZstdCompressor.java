@@ -25,6 +25,7 @@ public class ZstdCompressor implements Compressor {
 
     @Override
     public byte[] compress(byte[] payload) {
+        // zstd-jni may surface malformed/native failures as runtime exceptions.
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             try (OutputStream compressedStream = new ZstdOutputStreamNoFinalizer(outputStream)) {
                 compressedStream.write(payload);
@@ -37,6 +38,7 @@ public class ZstdCompressor implements Compressor {
 
     @Override
     public byte[] decompress(byte[] payload) {
+        // zstd-jni may surface malformed/native failures as runtime exceptions.
         try (ByteArrayInputStream compressedStream = new ByteArrayInputStream(payload);
                 InputStream inputStream = new ZstdInputStreamNoFinalizer(compressedStream);
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {

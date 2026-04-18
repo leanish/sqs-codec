@@ -22,22 +22,20 @@ public class SnappyCompressor implements Compressor {
 
     @Override
     public byte[] compress(byte[] payload) {
+        // Snappy may surface malformed/native failures as either checked or unchecked types.
         try {
             return Snappy.compress(payload);
-        } catch (IOException | RuntimeException e) {
-            throw CompressionException.compress(ALGORITHM, e);
-        } catch (SnappyError e) {
+        } catch (IOException | RuntimeException | SnappyError e) {
             throw CompressionException.compress(ALGORITHM, e);
         }
     }
 
     @Override
     public byte[] decompress(byte[] payload) {
+        // Snappy may surface malformed/native failures as either checked or unchecked types.
         try {
             return Snappy.uncompress(payload);
-        } catch (IOException | RuntimeException e) {
-            throw CompressionException.decompress(ALGORITHM, e);
-        } catch (SnappyError e) {
+        } catch (IOException | RuntimeException | SnappyError e) {
             throw CompressionException.decompress(ALGORITHM, e);
         }
     }

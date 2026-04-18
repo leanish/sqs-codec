@@ -25,7 +25,6 @@ public class GzipCompressor implements Compressor {
 
     @Override
     public byte[] compress(byte[] payload) {
-        // Wrap library-layer runtime failures consistently with checked compression errors.
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             try (OutputStream compressedStream = new GZIPOutputStream(outputStream)) {
                 compressedStream.write(payload);
@@ -38,7 +37,6 @@ public class GzipCompressor implements Compressor {
 
     @Override
     public byte[] decompress(byte[] payload) {
-        // Wrap library-layer runtime failures consistently with checked decompression errors.
         try (ByteArrayInputStream compressedStream = new ByteArrayInputStream(payload);
                 InputStream inputStream = new GZIPInputStream(compressedStream);
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {

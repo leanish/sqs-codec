@@ -261,6 +261,10 @@ class CodecMetadataAttributeHandlerTest {
                         UnsupportedCodecMetadataException.class,
                         "Codec metadata must enable compression or checksum"),
                 Arguments.of(
+                        "v=1;c=none;h=none;s=abc",
+                        UnsupportedCodecMetadataException.class,
+                        "Codec metadata must enable compression or checksum"),
+                Arguments.of(
                         "v=1;l=12",
                         UnsupportedCodecMetadataException.class,
                         "Codec metadata must enable compression or checksum"));

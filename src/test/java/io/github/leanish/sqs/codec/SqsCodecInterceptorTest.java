@@ -251,8 +251,8 @@ class SqsCodecInterceptorTest {
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
-                .isInstanceOf(ChecksumValidationException.class)
-                .hasMessage("Missing required checksum algorithm");
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Codec metadata must enable compression or checksum");
     }
 
     @Test
@@ -266,8 +266,8 @@ class SqsCodecInterceptorTest {
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
-                .isInstanceOf(ChecksumValidationException.class)
-                .hasMessage("Missing required checksum algorithm");
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Codec metadata must enable compression or checksum");
     }
 
     @Test
@@ -799,8 +799,8 @@ class SqsCodecInterceptorTest {
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
-                .isInstanceOf(ChecksumValidationException.class)
-                .hasMessage("Missing required checksum algorithm");
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Codec metadata must enable compression or checksum");
     }
 
     @Test

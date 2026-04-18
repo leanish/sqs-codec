@@ -136,9 +136,9 @@ public class CodecMetadataAttributeHandler {
             checksumAlgorithm = ChecksumAlgorithm.fromId(checksumAlgorithmValue);
         }
 
+        validateNonNoOpMetadata(compressionAlgorithm, checksumAlgorithm);
         int rawLength = parseRawLength(values);
         String checksumValue = parseChecksumValue(values, checksumAlgorithm);
-        validateNonNoOpMetadata(compressionAlgorithm, checksumAlgorithm);
         CodecConfiguration configuration = new CodecConfiguration(
                 version,
                 compressionAlgorithm,

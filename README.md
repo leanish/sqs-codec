@@ -82,7 +82,7 @@ Keys:
 - `l`: raw payload byte length (before compression); written only when `c` is not `none`
 
 Notes:
-- Order does not matter; keys and values are case-insensitive.
+- Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is an opaque Base64 string.
 - `v` is required and must be the current supported version (`1`).
 - Missing `c` or `h` defaults to `none` on read.
 - Metadata is invalid when both `c` and `h` resolve to `none`.

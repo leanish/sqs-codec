@@ -12,8 +12,8 @@ val defaultTestRuntimeJavaVersion = 25
 
 dependencies {
     // BOMs
-    compileOnly(platform("software.amazon.awssdk:bom:2.42.5"))
-    testImplementation(platform("software.amazon.awssdk:bom:2.42.5"))
+    compileOnly(platform("software.amazon.awssdk:bom:2.42.36"))
+    testImplementation(platform("software.amazon.awssdk:bom:2.42.36"))
     testImplementation(platform("org.mockito:mockito-bom:5.23.0"))
     testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.4"))
 

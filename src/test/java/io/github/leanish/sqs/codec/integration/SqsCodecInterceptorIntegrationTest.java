@@ -180,6 +180,29 @@ class SqsCodecInterceptorIntegrationTest {
     }
 
     @Test
+    void explicitAscii85EncodingWithCompression() {
+        String payload = "{\"value\":42}";
+
+        try (SqsClient client = sqsClient(
+                CompressionAlgorithm.GZIP,
+                EncodingAlgorithm.ASCII85,
+                ChecksumAlgorithm.NONE)) {
+            String queueUrl = createQueue(client);
+
+            client.sendMessage(SendMessageRequest.builder()
+                    .queueUrl(queueUrl)
+                    .messageBody(payload)
+                    .build());
+
+            Message message = receiveSingleMessage(client, queueUrl);
+
+            assertThat(message.body()).isEqualTo(payload);
+            assertThat(message.messageAttributes().get(CodecAttributes.META).stringValue())
+                    .isEqualTo("v=1;c=gzip;e=ascii85;h=none;l=12");
+        }
+    }
+
+    @Test
     void corruptedPayload() {
         try (SqsClient sender = rawSqsClient();
                 SqsClient receiver = sqsClient(

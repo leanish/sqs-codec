@@ -27,6 +27,7 @@ import org.reactivestreams.Publisher;
 
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.UnsupportedAlgorithmException;
 import io.github.leanish.sqs.codec.algorithms.compression.CompressionException;
 import io.github.leanish.sqs.codec.algorithms.encoding.Base64Codec;
@@ -36,6 +37,7 @@ import io.github.leanish.sqs.codec.attributes.CodecAttributes;
 import io.github.leanish.sqs.codec.attributes.CodecMetadataAttributeHandler;
 import io.github.leanish.sqs.codec.attributes.MessageAttributeUtils;
 import io.github.leanish.sqs.codec.attributes.UnsupportedCodecMetadataException;
+import io.github.leanish.sqs.codec.testsupport.TestPayloads;
 import software.amazon.awssdk.core.SdkRequest;
 import software.amazon.awssdk.core.SdkResponse;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
@@ -187,6 +189,108 @@ class SqsCodecInterceptorTest {
         Codec codec = new Codec(CompressionAlgorithm.ZSTD);
         assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
                 .isEqualTo(compressiblePayload);
+    }
+
+    @ParameterizedTest
+    @MethodSource("configurableCompressionAlgorithms")
+    void modifyRequest_usesConfiguredCompressionLevel(CompressionAlgorithm compressionAlgorithm) {
+        String payload = TestPayloads.levelSensitivePayload();
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        byte[] minimumEncodedPayload = new Codec(compressionAlgorithm, CompressionLevel.MINIMUM)
+                .encode(payloadBytes);
+        byte[] maximumEncodedPayload = new Codec(compressionAlgorithm, CompressionLevel.MAXIMUM)
+                .encode(payloadBytes);
+        SqsCodecInterceptor minimumInterceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(compressionAlgorithm)
+                .withCompressionLevel(CompressionLevel.MINIMUM)
+                .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
+                .withSkipCompressionWhenLarger(false);
+        SqsCodecInterceptor maximumInterceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(compressionAlgorithm)
+                .withCompressionLevel(CompressionLevel.MAXIMUM)
+                .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
+                .withSkipCompressionWhenLarger(false);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(payload)
+                .build();
+
+        SendMessageRequest minimumEncoded = (SendMessageRequest) minimumInterceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+        SendMessageRequest maximumEncoded = (SendMessageRequest) maximumInterceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+
+        assertThat(minimumEncoded.messageBody())
+                .isEqualTo(new String(minimumEncodedPayload, StandardCharsets.UTF_8));
+        assertThat(maximumEncoded.messageBody())
+                .isEqualTo(new String(maximumEncodedPayload, StandardCharsets.UTF_8));
+        assertThat(minimumEncoded.messageAttributes().get(CodecAttributes.META).stringValue())
+                .isEqualTo("v=1;c=" + compressionAlgorithm.id() + ";h=none;l=" + payloadBytes.length);
+        assertThat(maximumEncoded.messageAttributes().get(CodecAttributes.META).stringValue())
+                .isEqualTo("v=1;c=" + compressionAlgorithm.id() + ";h=none;l=" + payloadBytes.length);
+    }
+
+    @ParameterizedTest
+    @MethodSource("configurableCompressionAlgorithms")
+    void defaultInterceptor_leavesCompressionLevelUnset(CompressionAlgorithm compressionAlgorithm) {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(compressionAlgorithm)
+                .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
+                .withSkipCompressionWhenLarger(false);
+        String payload = TestPayloads.levelSensitivePayload();
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(payload)
+                .build();
+
+        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+
+        assertThat(encoded.messageBody())
+                .isEqualTo(new String(new Codec(compressionAlgorithm).encode(payloadBytes), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void withCompressionLevel_rejectsUnsupportedAlgorithm() {
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionLevel(CompressionLevel.HIGH))
+                .isInstanceOf(CodecException.class)
+                .hasMessage("Compression level HIGH is not supported for compression algorithm none");
+    }
+
+    @Test
+    void withCompressionAlgorithm_rejectsUnsupportedAlgorithmWhenCompressionLevelIsAlreadyConfigured() {
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
+                .withCompressionLevel(CompressionLevel.HIGH)
+                .withCompressionAlgorithm(CompressionAlgorithm.SNAPPY))
+                .isInstanceOf(CodecException.class)
+                .hasMessage("Compression level HIGH is not supported for compression algorithm snappy");
+    }
+
+    @ParameterizedTest
+    @MethodSource("configurableCompressionAlgorithms")
+    void withoutCompressionLevel_clearsConfiguredCompressionLevel(CompressionAlgorithm compressionAlgorithm) {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(compressionAlgorithm)
+                .withCompressionLevel(CompressionLevel.MAXIMUM)
+                .withoutCompressionLevel()
+                .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
+                .withSkipCompressionWhenLarger(false);
+        String payload = TestPayloads.levelSensitivePayload();
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(payload)
+                .build();
+
+        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+
+        assertThat(encoded.messageBody())
+                .isEqualTo(new String(new Codec(compressionAlgorithm).encode(payloadBytes), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -1144,6 +1248,12 @@ class SqsCodecInterceptorTest {
                         "Duplicate codec metadata key: c"));
     }
 
+    private static Stream<CompressionAlgorithm> configurableCompressionAlgorithms() {
+        return Stream.of(
+                CompressionAlgorithm.GZIP,
+                CompressionAlgorithm.ZSTD);
+    }
+
     private static String payloadWithEqualEncodedLengthForGzip() {
         Codec codec = new Codec(CompressionAlgorithm.GZIP);
         for (int length = 1; length <= 4096; length++) {
@@ -1155,7 +1265,6 @@ class SqsCodecInterceptorTest {
         }
         throw new AssertionError("Expected to find a GZIP payload with equal encoded length within 4096 bytes");
     }
-
     private static Map<String, MessageAttributeValue> codecAttributes(
             byte[] payloadBytes,
             CompressionAlgorithm compressionAlgorithm,

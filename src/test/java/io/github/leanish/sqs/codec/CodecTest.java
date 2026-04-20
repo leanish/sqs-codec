@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 
 class CodecTest {
@@ -42,6 +43,35 @@ class CodecTest {
 
         assertThat(decoded)
                 .isEqualTo(payload);
+    }
+
+    @Test
+    void encode_respectsConfiguredCompressionLevel() {
+        String payload = "compression-level-".repeat(512);
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        Codec minimumCodec = new Codec(CompressionAlgorithm.GZIP, CompressionLevel.MINIMUM);
+        Codec maximumCodec = new Codec(CompressionAlgorithm.GZIP, CompressionLevel.MAXIMUM);
+
+        assertThat(minimumCodec.encode(payloadBytes))
+                .isNotEqualTo(maximumCodec.encode(payloadBytes));
+    }
+
+    @Test
+    void encode_usesAlgorithmDefaultWhenCompressionLevelIsUnset() {
+        String payload = "compression-level-".repeat(512);
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        Codec defaultCodec = new Codec(CompressionAlgorithm.GZIP);
+        Codec unsetLevelCodec = new Codec(CompressionAlgorithm.GZIP, null);
+
+        assertThat(unsetLevelCodec.encode(payloadBytes))
+                .isEqualTo(defaultCodec.encode(payloadBytes));
+    }
+
+    @Test
+    void encode_rejectsConfiguredCompressionLevelForSnappy() {
+        assertThatThrownBy(() -> new Codec(CompressionAlgorithm.SNAPPY, CompressionLevel.HIGH))
+                .isInstanceOf(CodecException.class)
+                .hasMessage("Compression level HIGH is not supported for compression algorithm snappy");
     }
 
     @Test

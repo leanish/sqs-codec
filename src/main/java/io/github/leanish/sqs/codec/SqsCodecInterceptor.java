@@ -13,13 +13,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import org.jspecify.annotations.Nullable;
+
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
 import io.github.leanish.sqs.codec.attributes.CodecMetadataAttributeHandler;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.With;
 import software.amazon.awssdk.core.SdkRequest;
 import software.amazon.awssdk.core.SdkResponse;
@@ -41,23 +42,42 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
  * <p>When compression is enabled, compressed binary bytes are encoded with URL-safe Base64.
  */
 @With
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private static final int MAX_SQS_MESSAGE_ATTRIBUTES = 10;
     private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
             CompressionAlgorithm.NONE,
+            null,
             ChecksumAlgorithm.MD5,
             /* skipCompressionWhenLarger= */ true,
             /* includeRawPayloadLength= */ true);
 
     private final CompressionAlgorithm compressionAlgorithm;
+    private final @Nullable CompressionLevel compressionLevel;
     private final ChecksumAlgorithm checksumAlgorithm;
     private final boolean skipCompressionWhenLarger;
     private final boolean includeRawPayloadLength;
 
+    private SqsCodecInterceptor(
+            CompressionAlgorithm compressionAlgorithm,
+            @Nullable CompressionLevel compressionLevel,
+            ChecksumAlgorithm checksumAlgorithm,
+            boolean skipCompressionWhenLarger,
+            boolean includeRawPayloadLength) {
+        this.compressionAlgorithm = Objects.requireNonNull(compressionAlgorithm, "compressionAlgorithm");
+        this.compressionLevel = compressionLevel;
+        this.checksumAlgorithm = Objects.requireNonNull(checksumAlgorithm, "checksumAlgorithm");
+        this.skipCompressionWhenLarger = skipCompressionWhenLarger;
+        this.includeRawPayloadLength = includeRawPayloadLength;
+        this.compressionAlgorithm.validateCompressionLevel(compressionLevel);
+    }
+
     public static SqsCodecInterceptor defaultInterceptor() {
         return DEFAULT;
+    }
+
+    public SqsCodecInterceptor withoutCompressionLevel() {
+        return withCompressionLevel(null);
     }
 
     @Override
@@ -259,7 +279,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     }
 
     private EncodedPayload encodeOutboundPayload(byte[] payloadBytes, CodecConfiguration configuredConfiguration) {
-        Codec codec = new Codec(configuredConfiguration.compressionAlgorithm());
+        Codec codec = new Codec(configuredConfiguration.compressionAlgorithm(), compressionLevel);
         byte[] encodedBytes = codec.encode(payloadBytes);
         if (!shouldSkipCompression(payloadBytes, encodedBytes, configuredConfiguration)) {
             return new EncodedPayload(

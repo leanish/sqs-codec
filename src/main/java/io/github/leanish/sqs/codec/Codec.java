@@ -5,7 +5,10 @@
  */
 package io.github.leanish.sqs.codec;
 
+import org.jspecify.annotations.Nullable;
+
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.compression.Compressor;
 import io.github.leanish.sqs.codec.algorithms.encoding.Base64Codec;
 
@@ -17,7 +20,14 @@ class Codec {
     private final boolean compressionEnabled;
 
     Codec(CompressionAlgorithm compressionAlgorithm) {
-        this.compressor = compressionAlgorithm.implementation();
+        this(compressionAlgorithm, null);
+    }
+
+    Codec(CompressionAlgorithm compressionAlgorithm, @Nullable CompressionLevel compressionLevel) {
+        compressionAlgorithm.validateCompressionLevel(compressionLevel);
+        this.compressor = compressionLevel == null
+                ? compressionAlgorithm.implementation()
+                : compressionAlgorithm.implementation(compressionLevel);
         this.compressionEnabled = compressionAlgorithm != CompressionAlgorithm.NONE;
     }
 

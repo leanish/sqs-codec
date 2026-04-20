@@ -10,7 +10,7 @@ import java.security.NoSuchAlgorithmException;
 
 import com.google.errorprone.annotations.Immutable;
 
-import io.github.leanish.sqs.codec.algorithms.encoding.Base64Codec;
+import io.github.leanish.sqs.codec.algorithms.encoding.Base64PayloadCodec;
 
 /**
  * SHA-256 digest implementation.
@@ -22,7 +22,7 @@ public class Sha256Digestor implements Digestor {
     public String checksum(byte[] payload) {
         MessageDigest digest = digest();
         byte[] hash = digest.digest(payload);
-        return Base64Codec.instance().encodeToString(hash);
+        return Base64PayloadCodec.instance().encodeToString(hash);
     }
 
     private MessageDigest digest() {

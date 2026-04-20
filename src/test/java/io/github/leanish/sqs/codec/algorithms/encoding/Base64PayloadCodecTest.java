@@ -12,11 +12,11 @@ import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Test;
 
-class Base64CodecTest {
+class Base64PayloadCodecTest {
 
     @Test
     void base64_roundTrip() {
-        Base64Codec base64Codec = Base64Codec.instance();
+        Base64PayloadCodec base64Codec = Base64PayloadCodec.instance();
 
         String payload = "{\"value\":42}";
         byte[] encoded = base64Codec.encode(payload.getBytes(StandardCharsets.UTF_8));
@@ -28,13 +28,13 @@ class Base64CodecTest {
 
     @Test
     void base64_encodeToString() {
-        assertThat(Base64Codec.instance().encodeToString("payload-42".getBytes(StandardCharsets.UTF_8)))
+        assertThat(Base64PayloadCodec.instance().encodeToString("payload-42".getBytes(StandardCharsets.UTF_8)))
                 .isEqualTo("cGF5bG9hZC00Mg");
     }
 
     @Test
     void base64_invalidPayload() {
-        assertThatThrownBy(() -> Base64Codec.instance().decode("!@#".getBytes(StandardCharsets.UTF_8)))
+        assertThatThrownBy(() -> Base64PayloadCodec.instance().decode("!@#".getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(InvalidPayloadException.class)
                 .hasMessage("Invalid base64 payload")
                 .hasCauseInstanceOf(IllegalArgumentException.class);

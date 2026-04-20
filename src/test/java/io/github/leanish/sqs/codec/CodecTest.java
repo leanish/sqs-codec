@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 
 class CodecTest {
@@ -41,6 +42,18 @@ class CodecTest {
         String decoded = new String(codec.decode(encoded), StandardCharsets.UTF_8);
 
         assertThat(decoded)
+                .isEqualTo(payload);
+    }
+
+    @Test
+    void encode_encodingOnly() {
+        Codec codec = new Codec(CompressionAlgorithm.NONE, EncodingAlgorithm.BASE64);
+        String payload = "{\"value\":42}";
+        byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
+
+        assertThat(new String(encoded, StandardCharsets.UTF_8))
+                .isNotEqualTo(payload);
+        assertThat(new String(codec.decode(encoded), StandardCharsets.UTF_8))
                 .isEqualTo(payload);
     }
 

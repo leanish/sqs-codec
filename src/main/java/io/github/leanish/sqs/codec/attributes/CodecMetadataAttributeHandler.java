@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
 import io.github.leanish.sqs.codec.CodecConfiguration;
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 
 /**
@@ -43,16 +44,20 @@ public class CodecMetadataAttributeHandler {
             CodecConfiguration configuration,
             byte[] payloadBytes,
             boolean includeRawPayloadLength) {
-        validateNonNoOpMetadata(configuration.compressionAlgorithm(), configuration.checksumAlgorithm());
+        CodecConfiguration effectiveConfiguration = effectiveConfiguration(configuration);
+        validateNonNoOpMetadata(
+                effectiveConfiguration.compressionAlgorithm(),
+                effectiveConfiguration.encodingAlgorithm(),
+                effectiveConfiguration.checksumAlgorithm());
         String checksumValue = null;
-        if (configuration.checksumAlgorithm() != ChecksumAlgorithm.NONE) {
-            checksumValue = configuration.checksumAlgorithm()
+        if (effectiveConfiguration.checksumAlgorithm() != ChecksumAlgorithm.NONE) {
+            checksumValue = effectiveConfiguration.checksumAlgorithm()
                     .implementation()
                     .checksum(payloadBytes);
         }
         int rawLength = includeRawPayloadLength ? payloadBytes.length : -1;
         return new CodecMetadataAttributeHandler(
-                configuration,
+                effectiveConfiguration,
                 checksumValue,
                 rawLength);
     }
@@ -106,6 +111,7 @@ public class CodecMetadataAttributeHandler {
             String value = entry.substring(idx + 1).trim();
             boolean knownKey = CodecAttributes.META_VERSION_KEY.equals(key)
                     || CodecAttributes.META_COMPRESSION_KEY.equals(key)
+                    || CodecAttributes.META_ENCODING_KEY.equals(key)
                     || CodecAttributes.META_CHECKSUM_ALGORITHM_KEY.equals(key)
                     || CodecAttributes.META_CHECKSUM_VALUE_KEY.equals(key)
                     || CodecAttributes.META_RAW_LENGTH_KEY.equals(key);
@@ -123,17 +129,24 @@ public class CodecMetadataAttributeHandler {
         if (compressionValue != null) {
             compressionAlgorithm = CompressionAlgorithm.fromId(compressionValue);
         }
+        String encodingValue = values.get(CodecAttributes.META_ENCODING_KEY);
+        if (encodingValue == null) {
+            throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_ENCODING_KEY);
+        }
+        EncodingAlgorithm encodingAlgorithm = EncodingAlgorithm.fromId(encodingValue);
         String checksumAlgorithmValue = values.get(CodecAttributes.META_CHECKSUM_ALGORITHM_KEY);
         if (checksumAlgorithmValue != null) {
             checksumAlgorithm = ChecksumAlgorithm.fromId(checksumAlgorithmValue);
         }
 
-        validateNonNoOpMetadata(compressionAlgorithm, checksumAlgorithm);
+        validateCompressionEncoding(metadataValue, compressionAlgorithm, encodingAlgorithm);
+        validateNonNoOpMetadata(compressionAlgorithm, encodingAlgorithm, checksumAlgorithm);
         int rawLength = parseRawLength(values);
         String checksumValue = parseChecksumValue(values, checksumAlgorithm);
         CodecConfiguration configuration = new CodecConfiguration(
                 version,
                 compressionAlgorithm,
+                encodingAlgorithm,
                 checksumAlgorithm);
         return new CodecMetadataAttributeHandler(
                 configuration,
@@ -190,11 +203,37 @@ public class CodecMetadataAttributeHandler {
 
     private static void validateNonNoOpMetadata(
             CompressionAlgorithm compressionAlgorithm,
+            EncodingAlgorithm encodingAlgorithm,
             ChecksumAlgorithm checksumAlgorithm) {
         if (compressionAlgorithm == CompressionAlgorithm.NONE
+                && encodingAlgorithm == EncodingAlgorithm.NONE
                 && checksumAlgorithm == ChecksumAlgorithm.NONE) {
             throw UnsupportedCodecMetadataException.noOp();
         }
+    }
+
+    private static void validateCompressionEncoding(
+            String metadataValue,
+            CompressionAlgorithm compressionAlgorithm,
+            EncodingAlgorithm encodingAlgorithm) {
+        if (compressionAlgorithm != CompressionAlgorithm.NONE
+                && encodingAlgorithm == EncodingAlgorithm.NONE) {
+            throw UnsupportedCodecMetadataException.malformed(metadataValue);
+        }
+    }
+
+    private static CodecConfiguration effectiveConfiguration(CodecConfiguration configuration) {
+        EncodingAlgorithm effectiveEncoding = EncodingAlgorithm.effectiveFor(
+                configuration.compressionAlgorithm(),
+                configuration.encodingAlgorithm());
+        if (effectiveEncoding == configuration.encodingAlgorithm()) {
+            return configuration;
+        }
+        return new CodecConfiguration(
+                configuration.version(),
+                configuration.compressionAlgorithm(),
+                effectiveEncoding,
+                configuration.checksumAlgorithm());
     }
 
     private static boolean hasBlankRequiredValue(String key, String value, boolean knownKey) {
@@ -207,6 +246,7 @@ public class CodecMetadataAttributeHandler {
     private String formatMetadataValue() {
         String metadataValue = "v=" + configuration.version()
                 + ";c=" + configuration.compressionAlgorithm().id()
+                + ";e=" + configuration.encodingAlgorithm().id()
                 + ";h=" + configuration.checksumAlgorithm().id();
         if (checksumValue != null) {
             metadataValue += ";s=" + checksumValue;

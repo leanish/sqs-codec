@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+- Added configurable `CompressionLevel` support for `GZIP` and `ZSTD`, including
+  `withCompressionLevel(...)` and `withoutCompressionLevel()` on `SqsCodecInterceptor`.
+
 ## 0.4.0 - 2026-04-18
 
 ### Changed

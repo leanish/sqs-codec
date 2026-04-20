@@ -24,7 +24,6 @@ class Codec {
     }
 
     Codec(CompressionAlgorithm compressionAlgorithm, @Nullable CompressionLevel compressionLevel) {
-        compressionAlgorithm.validateCompressionLevel(compressionLevel);
         this.compressor = compressionLevel == null
                 ? compressionAlgorithm.implementation()
                 : compressionAlgorithm.implementation(compressionLevel);

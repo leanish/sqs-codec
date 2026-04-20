@@ -76,6 +76,10 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         return DEFAULT;
     }
 
+    /**
+     * Clears any configured compression level so the selected compression algorithm uses its
+     * built-in default again.
+     */
     public SqsCodecInterceptor withoutCompressionLevel() {
         return withCompressionLevel(null);
     }

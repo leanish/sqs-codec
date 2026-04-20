@@ -15,6 +15,7 @@ import java.util.Set;
 
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
 import io.github.leanish.sqs.codec.attributes.CodecMetadataAttributeHandler;
@@ -35,10 +36,11 @@ import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequestEntry;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 /**
- * AWS SDK v2 execution interceptor that compresses/decompresses SQS message bodies and manages
- * codec metadata.
+ * AWS SDK v2 execution interceptor that compresses, encodes, decodes and validates SQS message
+ * bodies while managing codec metadata.
  *
- * <p>When compression is enabled, compressed binary bytes are encoded with URL-safe Base64.
+ * <p>When compression is enabled and encoding is left at {@link EncodingAlgorithm#NONE}, the
+ * interceptor uses URL-safe Base64 as the effective payload encoding.
  */
 @With
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -47,11 +49,13 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private static final int MAX_SQS_MESSAGE_ATTRIBUTES = 10;
     private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
             CompressionAlgorithm.NONE,
+            EncodingAlgorithm.NONE,
             ChecksumAlgorithm.MD5,
             /* skipCompressionWhenLarger= */ true,
             /* includeRawPayloadLength= */ true);
 
     private final CompressionAlgorithm compressionAlgorithm;
+    private final EncodingAlgorithm encodingAlgorithm;
     private final ChecksumAlgorithm checksumAlgorithm;
     private final boolean skipCompressionWhenLarger;
     private final boolean includeRawPayloadLength;
@@ -216,12 +220,15 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         if (!shouldDecode(configuration)) {
             return messageBody.getBytes(StandardCharsets.UTF_8);
         }
-        Codec codec = new Codec(configuration.compressionAlgorithm());
+        Codec codec = new Codec(
+                configuration.compressionAlgorithm(),
+                configuration.encodingAlgorithm());
         return codec.decode(messageBody.getBytes(StandardCharsets.UTF_8));
     }
 
     private boolean shouldDecode(CodecConfiguration configuration) {
-        return configuration.compressionAlgorithm() != CompressionAlgorithm.NONE;
+        return configuration.compressionAlgorithm() != CompressionAlgorithm.NONE
+                || configuration.encodingAlgorithm() != EncodingAlgorithm.NONE;
     }
 
     private boolean shouldValidateChecksum(CodecConfiguration configuration) {
@@ -255,11 +262,14 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         return new CodecConfiguration(
                 CodecAttributes.VERSION_VALUE,
                 compressionAlgorithm,
+                encodingAlgorithm,
                 checksumAlgorithm);
     }
 
     private EncodedPayload encodeOutboundPayload(byte[] payloadBytes, CodecConfiguration configuredConfiguration) {
-        Codec codec = new Codec(configuredConfiguration.compressionAlgorithm());
+        Codec codec = new Codec(
+                configuredConfiguration.compressionAlgorithm(),
+                configuredConfiguration.encodingAlgorithm());
         byte[] encodedBytes = codec.encode(payloadBytes);
         if (!shouldSkipCompression(payloadBytes, encodedBytes, configuredConfiguration)) {
             return new EncodedPayload(
@@ -270,6 +280,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         CodecConfiguration uncompressedConfiguration = new CodecConfiguration(
                 configuredConfiguration.version(),
                 CompressionAlgorithm.NONE,
+                EncodingAlgorithm.NONE,
                 configuredConfiguration.checksumAlgorithm());
         return new EncodedPayload(
                 uncompressedConfiguration,

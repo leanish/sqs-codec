@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "io.github.leanish"
-version = "0.4.0"
+version = "0.5.0-SNAPSHOT"
 description = "AWS SQS payload interceptor for automatic compression and encoding."
 
 val targetJavaVersion = 17

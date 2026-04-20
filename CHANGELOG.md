@@ -7,12 +7,12 @@ All notable changes to this project are documented in this file.
 ### Added
 - Added experimental `ASCII85` payload encoding with an in-repo strict canonical implementation.
 - Documented the ASCII85 dialect decisions and transport-focused scope in `docs/ascii85.md`.
-
 ### Changed
 - Reintroduced `e` in `x-codec-meta` so payload encoding stays explicit in the wire format.
 - Reintroduced `EncodingAlgorithm` and interceptor encoding configuration.
 - Metadata readers now require explicit `e`; compressed metadata without it is rejected.
 
+## 0.5.0
 ## 0.4.0 - 2026-04-18
 
 ### Changed

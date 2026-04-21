@@ -49,12 +49,7 @@ public class CodecMetadataAttributeHandler {
                 effectiveConfiguration.compressionAlgorithm(),
                 effectiveConfiguration.encodingAlgorithm(),
                 effectiveConfiguration.checksumAlgorithm());
-        String checksumValue = null;
-        if (effectiveConfiguration.checksumAlgorithm() != ChecksumAlgorithm.NONE) {
-            checksumValue = effectiveConfiguration.checksumAlgorithm()
-                    .implementation()
-                    .checksum(payloadBytes);
-        }
+        String checksumValue = checksumValue(effectiveConfiguration.checksumAlgorithm(), payloadBytes);
         int rawLength = includeRawPayloadLength ? payloadBytes.length : -1;
         return new CodecMetadataAttributeHandler(
                 effectiveConfiguration,
@@ -63,7 +58,7 @@ public class CodecMetadataAttributeHandler {
     }
 
     public static CodecMetadataAttributeHandler fromAttributes(Map<String, MessageAttributeValue> attributes) {
-        if (!attributes.containsKey(CodecAttributes.META)) {
+        if (!hasCodecAttributes(attributes)) {
             throw new IllegalArgumentException("Missing x-codec-meta attribute; check hasCodecAttributes first");
         }
 
@@ -93,9 +88,6 @@ public class CodecMetadataAttributeHandler {
             throw UnsupportedCodecMetadataException.malformed(metadataValue);
         }
 
-        CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm.NONE;
-        ChecksumAlgorithm checksumAlgorithm = ChecksumAlgorithm.NONE;
-
         String[] parts = trimmed.split(";", -1);
         Map<String, String> values = new HashMap<>();
         for (String part : parts) {
@@ -103,41 +95,22 @@ public class CodecMetadataAttributeHandler {
             if (entry.isEmpty()) {
                 continue;
             }
-            int idx = entry.indexOf('=');
-            if (idx <= 0) {
+            int separatorIndex = entry.indexOf('=');
+            if (separatorIndex <= 0) {
                 throw UnsupportedCodecMetadataException.malformed(metadataValue);
             }
-            String key = entry.substring(0, idx).trim().toLowerCase(Locale.ROOT);
-            String value = entry.substring(idx + 1).trim();
-            boolean knownKey = CodecAttributes.META_VERSION_KEY.equals(key)
-                    || CodecAttributes.META_COMPRESSION_KEY.equals(key)
-                    || CodecAttributes.META_ENCODING_KEY.equals(key)
-                    || CodecAttributes.META_CHECKSUM_ALGORITHM_KEY.equals(key)
-                    || CodecAttributes.META_CHECKSUM_VALUE_KEY.equals(key)
-                    || CodecAttributes.META_RAW_LENGTH_KEY.equals(key);
-            if (key.isEmpty() || hasBlankRequiredValue(key, value, knownKey)) {
-                throw UnsupportedCodecMetadataException.malformed(metadataValue);
-            }
+            String key = entry.substring(0, separatorIndex).trim().toLowerCase(Locale.ROOT);
+            String value = entry.substring(separatorIndex + 1).trim();
+            validateMetadataEntry(metadataValue, key, value);
             if (values.putIfAbsent(key, value) != null) {
                 throw UnsupportedCodecMetadataException.duplicateKey(key);
             }
         }
 
         int version = parseRequiredVersion(values);
-
-        String compressionValue = values.get(CodecAttributes.META_COMPRESSION_KEY);
-        if (compressionValue != null) {
-            compressionAlgorithm = CompressionAlgorithm.fromId(compressionValue);
-        }
-        String encodingValue = values.get(CodecAttributes.META_ENCODING_KEY);
-        if (encodingValue == null) {
-            throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_ENCODING_KEY);
-        }
-        EncodingAlgorithm encodingAlgorithm = EncodingAlgorithm.fromId(encodingValue);
-        String checksumAlgorithmValue = values.get(CodecAttributes.META_CHECKSUM_ALGORITHM_KEY);
-        if (checksumAlgorithmValue != null) {
-            checksumAlgorithm = ChecksumAlgorithm.fromId(checksumAlgorithmValue);
-        }
+        CompressionAlgorithm compressionAlgorithm = parseCompressionAlgorithm(values);
+        EncodingAlgorithm encodingAlgorithm = parseEncodingAlgorithm(values);
+        ChecksumAlgorithm checksumAlgorithm = parseChecksumAlgorithm(values);
 
         validateCompressionEncoding(metadataValue, compressionAlgorithm, encodingAlgorithm);
         validateNonNoOpMetadata(compressionAlgorithm, encodingAlgorithm, checksumAlgorithm);
@@ -177,10 +150,7 @@ public class CodecMetadataAttributeHandler {
         }
         try {
             int parsedRawLength = Integer.parseInt(rawLengthValue);
-            if (parsedRawLength < 0) {
-                return -1;
-            }
-            return parsedRawLength;
+            return parsedRawLength < 0 ? -1 : parsedRawLength;
         } catch (NumberFormatException e) {
             return -1;
         }
@@ -201,6 +171,14 @@ public class CodecMetadataAttributeHandler {
         return checksumValue;
     }
 
+    @Nullable
+    private static String checksumValue(ChecksumAlgorithm checksumAlgorithm, byte[] payloadBytes) {
+        if (checksumAlgorithm == ChecksumAlgorithm.NONE) {
+            return null;
+        }
+        return checksumAlgorithm.implementation().checksum(payloadBytes);
+    }
+
     private static void validateNonNoOpMetadata(
             CompressionAlgorithm compressionAlgorithm,
             EncodingAlgorithm encodingAlgorithm,
@@ -209,6 +187,36 @@ public class CodecMetadataAttributeHandler {
                 && encodingAlgorithm == EncodingAlgorithm.NONE
                 && checksumAlgorithm == ChecksumAlgorithm.NONE) {
             throw UnsupportedCodecMetadataException.noOp();
+        }
+    }
+
+    private static CompressionAlgorithm parseCompressionAlgorithm(Map<String, String> values) {
+        String compressionValue = values.get(CodecAttributes.META_COMPRESSION_KEY);
+        if (compressionValue == null) {
+            return CompressionAlgorithm.NONE;
+        }
+        return CompressionAlgorithm.fromId(compressionValue);
+    }
+
+    private static ChecksumAlgorithm parseChecksumAlgorithm(Map<String, String> values) {
+        String checksumAlgorithmValue = values.get(CodecAttributes.META_CHECKSUM_ALGORITHM_KEY);
+        if (checksumAlgorithmValue == null) {
+            return ChecksumAlgorithm.NONE;
+        }
+        return ChecksumAlgorithm.fromId(checksumAlgorithmValue);
+    }
+
+    private static EncodingAlgorithm parseEncodingAlgorithm(Map<String, String> values) {
+        String encodingValue = values.get(CodecAttributes.META_ENCODING_KEY);
+        if (encodingValue == null) {
+            throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_ENCODING_KEY);
+        }
+        return EncodingAlgorithm.fromId(encodingValue);
+    }
+
+    private static void validateMetadataEntry(String metadataValue, String key, String value) {
+        if (key.isEmpty() || hasBlankRequiredValue(key, value)) {
+            throw UnsupportedCodecMetadataException.malformed(metadataValue);
         }
     }
 
@@ -236,25 +244,38 @@ public class CodecMetadataAttributeHandler {
                 configuration.checksumAlgorithm());
     }
 
-    private static boolean hasBlankRequiredValue(String key, String value, boolean knownKey) {
-        return knownKey
+    private static boolean hasBlankRequiredValue(String key, String value) {
+        return isKnownKey(key)
                 && value.isEmpty()
                 && !CodecAttributes.META_CHECKSUM_VALUE_KEY.equals(key)
                 && !CodecAttributes.META_RAW_LENGTH_KEY.equals(key);
     }
 
+    private static boolean isKnownKey(String key) {
+        return switch (key) {
+            case CodecAttributes.META_VERSION_KEY,
+                    CodecAttributes.META_COMPRESSION_KEY,
+                    CodecAttributes.META_ENCODING_KEY,
+                    CodecAttributes.META_CHECKSUM_ALGORITHM_KEY,
+                    CodecAttributes.META_CHECKSUM_VALUE_KEY,
+                    CodecAttributes.META_RAW_LENGTH_KEY -> true;
+            default -> false;
+        };
+    }
+
     private String formatMetadataValue() {
-        String metadataValue = "v=" + configuration.version()
-                + ";c=" + configuration.compressionAlgorithm().id()
-                + ";e=" + configuration.encodingAlgorithm().id()
-                + ";h=" + configuration.checksumAlgorithm().id();
+        StringBuilder metadataValue = new StringBuilder()
+                .append("v=").append(configuration.version())
+                .append(";c=").append(configuration.compressionAlgorithm().id())
+                .append(";e=").append(configuration.encodingAlgorithm().id())
+                .append(";h=").append(configuration.checksumAlgorithm().id());
         if (checksumValue != null) {
-            metadataValue += ";s=" + checksumValue;
+            metadataValue.append(";s=").append(checksumValue);
         }
         if (configuration.compressionAlgorithm() != CompressionAlgorithm.NONE
                 && rawLength >= 0) {
-            metadataValue += ";l=" + rawLength;
+            metadataValue.append(";l=").append(rawLength);
         }
-        return metadataValue;
+        return metadataValue.toString();
     }
 }

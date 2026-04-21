@@ -5,31 +5,12 @@
  */
 package io.github.leanish.sqs.codec.algorithms.checksum;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-
-import com.google.errorprone.annotations.Immutable;
-
-import io.github.leanish.sqs.codec.algorithms.encoding.Base64PayloadCodec;
-
 /**
  * SHA-256 digest implementation.
  */
-@Immutable
-public class Sha256Digestor implements Digestor {
+public class Sha256Digestor extends MessageDigestDigestor {
 
-    @Override
-    public String checksum(byte[] payload) {
-        MessageDigest digest = digest();
-        byte[] hash = digest.digest(payload);
-        return Base64PayloadCodec.instance().encodeToString(hash);
-    }
-
-    private MessageDigest digest() {
-        try {
-            return MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new UnavailableAlgorithmException("SHA-256 digest is not available", e);
-        }
+    public Sha256Digestor() {
+        super("SHA-256", "SHA-256 digest is not available");
     }
 }

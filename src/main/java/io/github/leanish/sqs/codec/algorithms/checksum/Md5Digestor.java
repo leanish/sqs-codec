@@ -5,31 +5,12 @@
  */
 package io.github.leanish.sqs.codec.algorithms.checksum;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-
-import com.google.errorprone.annotations.Immutable;
-
-import io.github.leanish.sqs.codec.algorithms.encoding.Base64PayloadCodec;
-
 /**
  * MD5 digest implementation.
  */
-@Immutable
-public class Md5Digestor implements Digestor {
+public class Md5Digestor extends MessageDigestDigestor {
 
-    @Override
-    public String checksum(byte[] payload) {
-        MessageDigest digest = digest();
-        byte[] hash = digest.digest(payload);
-        return Base64PayloadCodec.instance().encodeToString(hash);
-    }
-
-    private MessageDigest digest() {
-        try {
-            return MessageDigest.getInstance("MD5");
-        } catch (NoSuchAlgorithmException e) {
-            throw new UnavailableAlgorithmException("MD5 digest is not available", e);
-        }
+    public Md5Digestor() {
+        super("MD5", "MD5 digest is not available");
     }
 }

@@ -37,9 +37,7 @@ class Codec {
             @Nullable CompressionLevel compressionLevel,
             EncodingAlgorithm encodingAlgorithm) {
         EncodingAlgorithm effectiveEncoding = EncodingAlgorithm.effectiveFor(compressionAlgorithm, encodingAlgorithm);
-        this.compressor = compressionLevel == null
-                ? compressionAlgorithm.implementation()
-                : compressionAlgorithm.implementation(compressionLevel);
+        this.compressor = compressor(compressionAlgorithm, compressionLevel);
         this.payloadCodec = effectiveEncoding.implementation();
     }
 
@@ -49,5 +47,14 @@ class Codec {
 
     public byte[] decode(byte[] payload) {
         return compressor.decompress(payloadCodec.decode(payload));
+    }
+
+    private static Compressor compressor(
+            CompressionAlgorithm compressionAlgorithm,
+            @Nullable CompressionLevel compressionLevel) {
+        if (compressionLevel == null) {
+            return compressionAlgorithm.implementation();
+        }
+        return compressionAlgorithm.implementation(compressionLevel);
     }
 }

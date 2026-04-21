@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
+import io.github.leanish.sqs.codec.algorithms.UnsupportedAlgorithmException;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 
 class CodecTest {
@@ -70,7 +71,7 @@ class CodecTest {
     @Test
     void encode_rejectsConfiguredCompressionLevelForSnappy() {
         assertThatThrownBy(() -> new Codec(CompressionAlgorithm.SNAPPY, CompressionLevel.HIGH))
-                .isInstanceOf(CodecException.class)
+                .isInstanceOf(UnsupportedAlgorithmException.class)
                 .hasMessage("Compression level HIGH is not supported for compression algorithm snappy");
     }
 

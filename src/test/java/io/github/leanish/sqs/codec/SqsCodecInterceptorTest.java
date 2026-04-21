@@ -256,7 +256,7 @@ class SqsCodecInterceptorTest {
     void withCompressionLevel_rejectsUnsupportedAlgorithm() {
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .withCompressionLevel(CompressionLevel.HIGH))
-                .isInstanceOf(CodecException.class)
+                .isInstanceOf(UnsupportedAlgorithmException.class)
                 .hasMessage("Compression level HIGH is not supported for compression algorithm none");
     }
 
@@ -266,7 +266,7 @@ class SqsCodecInterceptorTest {
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withCompressionLevel(CompressionLevel.HIGH)
                 .withCompressionAlgorithm(CompressionAlgorithm.SNAPPY))
-                .isInstanceOf(CodecException.class)
+                .isInstanceOf(UnsupportedAlgorithmException.class)
                 .hasMessage("Compression level HIGH is not supported for compression algorithm snappy");
     }
 

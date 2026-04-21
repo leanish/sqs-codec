@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 - Reintroduced `e` in `x-codec-meta` so payload encoding stays explicit in the wire format.
 - Reintroduced `EncodingAlgorithm` and interceptor encoding configuration.
 - Metadata readers now require explicit `e`; messages without it are rejected.
+
 ## 0.4.0 - 2026-04-18
 
 ### Changed

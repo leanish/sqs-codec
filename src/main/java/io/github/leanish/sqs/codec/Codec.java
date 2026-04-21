@@ -15,10 +15,6 @@ class Codec {
     private final Compressor compressor;
     private final PayloadCodec payloadCodec;
 
-    Codec() {
-        this(CompressionAlgorithm.NONE, EncodingAlgorithm.NONE);
-    }
-
     Codec(CompressionAlgorithm compressionAlgorithm) {
         this(compressionAlgorithm, EncodingAlgorithm.NONE);
     }

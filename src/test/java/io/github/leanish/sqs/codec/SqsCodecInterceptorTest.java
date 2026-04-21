@@ -1265,6 +1265,7 @@ class SqsCodecInterceptorTest {
         }
         throw new AssertionError("Expected to find a GZIP payload with equal encoded length within 4096 bytes");
     }
+
     private static Map<String, MessageAttributeValue> codecAttributes(
             byte[] payloadBytes,
             CompressionAlgorithm compressionAlgorithm,

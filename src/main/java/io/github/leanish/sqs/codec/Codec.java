@@ -9,42 +9,45 @@ import org.jspecify.annotations.Nullable;
 
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
+import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.compression.Compressor;
-import io.github.leanish.sqs.codec.algorithms.encoding.Base64Codec;
+import io.github.leanish.sqs.codec.algorithms.encoding.PayloadCodec;
 
 class Codec {
 
-    private static final Base64Codec BASE64_CODEC = Base64Codec.instance();
-
     private final Compressor compressor;
-    private final boolean compressionEnabled;
+    private final PayloadCodec payloadCodec;
 
     Codec(CompressionAlgorithm compressionAlgorithm) {
-        this(compressionAlgorithm, null);
+        this(compressionAlgorithm, null, EncodingAlgorithm.NONE);
     }
 
     Codec(CompressionAlgorithm compressionAlgorithm, @Nullable CompressionLevel compressionLevel) {
+        this(compressionAlgorithm, compressionLevel, EncodingAlgorithm.NONE);
+    }
+
+    Codec(
+            CompressionAlgorithm compressionAlgorithm,
+            EncodingAlgorithm encodingAlgorithm) {
+        this(compressionAlgorithm, null, encodingAlgorithm);
+    }
+
+    Codec(
+            CompressionAlgorithm compressionAlgorithm,
+            @Nullable CompressionLevel compressionLevel,
+            EncodingAlgorithm encodingAlgorithm) {
+        EncodingAlgorithm effectiveEncoding = EncodingAlgorithm.effectiveFor(compressionAlgorithm, encodingAlgorithm);
         this.compressor = compressionLevel == null
                 ? compressionAlgorithm.implementation()
                 : compressionAlgorithm.implementation(compressionLevel);
-        this.compressionEnabled = compressionAlgorithm != CompressionAlgorithm.NONE;
+        this.payloadCodec = effectiveEncoding.implementation();
     }
 
     public byte[] encode(byte[] payload) {
-        if (!compressionEnabled) {
-            return payload;
-        }
-
-        byte[] compressed = compressor.compress(payload);
-        return BASE64_CODEC.encode(compressed);
+        return payloadCodec.encode(compressor.compress(payload));
     }
 
     public byte[] decode(byte[] payload) {
-        if (!compressionEnabled) {
-            return payload;
-        }
-
-        byte[] decoded = BASE64_CODEC.decode(payload);
-        return compressor.decompress(decoded);
+        return compressor.decompress(payloadCodec.decode(payload));
     }
 }

@@ -24,6 +24,7 @@ import org.testcontainers.utility.DockerImageName;
 import io.github.leanish.sqs.codec.SqsCodecInterceptor;
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
@@ -78,7 +79,7 @@ class SqsCodecInterceptorIntegrationTest {
             Map<String, MessageAttributeValue> attributes = message.messageAttributes();
             String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(payloadBytes);
             assertThat(attributes.get(CodecAttributes.META).stringValue())
-                    .isEqualTo("v=1;c=zstd;h=md5;s=" + expectedChecksum + ";l=12");
+                    .isEqualTo("v=1;c=zstd;e=base64;h=md5;s=" + expectedChecksum + ";l=12");
         }
     }
 
@@ -147,11 +148,57 @@ class SqsCodecInterceptorIntegrationTest {
                                 "shopId");
                 assertThat(attributes.get(CodecAttributes.META).stringValue())
                         .isEqualTo(
-                                "v=1;c=gzip;h=sha256;s="
+                                "v=1;c=gzip;e=base64;h=sha256;s="
                                         + ChecksumAlgorithm.SHA256.implementation().checksum(payloadBytes)
                                         + ";l="
                                         + payloadBytes.length);
             }
+        }
+    }
+
+    @Test
+    void explicitEncodingWithoutCompression() {
+        String payload = "{\"value\":42}";
+
+        try (SqsClient client = sqsClient(
+                CompressionAlgorithm.NONE,
+                EncodingAlgorithm.BASE64,
+                ChecksumAlgorithm.NONE)) {
+            String queueUrl = createQueue(client);
+
+            client.sendMessage(SendMessageRequest.builder()
+                    .queueUrl(queueUrl)
+                    .messageBody(payload)
+                    .build());
+
+            Message message = receiveSingleMessage(client, queueUrl);
+
+            assertThat(message.body()).isEqualTo(payload);
+            assertThat(message.messageAttributes().get(CodecAttributes.META).stringValue())
+                    .isEqualTo("v=1;c=none;e=base64;h=none");
+        }
+    }
+
+    @Test
+    void explicitAscii85EncodingWithCompression() {
+        String payload = "{\"value\":42}";
+
+        try (SqsClient client = sqsClient(
+                CompressionAlgorithm.GZIP,
+                EncodingAlgorithm.ASCII85,
+                ChecksumAlgorithm.NONE)) {
+            String queueUrl = createQueue(client);
+
+            client.sendMessage(SendMessageRequest.builder()
+                    .queueUrl(queueUrl)
+                    .messageBody(payload)
+                    .build());
+
+            Message message = receiveSingleMessage(client, queueUrl);
+
+            assertThat(message.body()).isEqualTo(payload);
+            assertThat(message.messageAttributes().get(CodecAttributes.META).stringValue())
+                    .isEqualTo("v=1;c=gzip;e=ascii85;h=none;l=12");
         }
     }
 
@@ -168,7 +215,7 @@ class SqsCodecInterceptorIntegrationTest {
                     .messageBody("!!")
                     .messageAttributes(Map.of(
                             CodecAttributes.META,
-                            MessageAttributeUtils.stringAttribute("v=1;c=zstd;h=none;l=2")))
+                            MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none;l=2")))
                     .build());
 
             assertReceiveThrows(
@@ -194,7 +241,7 @@ class SqsCodecInterceptorIntegrationTest {
                     .messageBody(payload)
                     .messageAttributes(Map.of(
                             CodecAttributes.META,
-                            MessageAttributeUtils.stringAttribute("v=1;c=none;h=md5;s=bad;l=16")))
+                            MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=md5;s=bad;l=16")))
                     .build());
 
             assertReceiveThrows(
@@ -311,6 +358,13 @@ class SqsCodecInterceptorIntegrationTest {
     private static SqsClient sqsClient(
             CompressionAlgorithm compressionAlgorithm,
             ChecksumAlgorithm checksumAlgorithm) {
+        return sqsClient(compressionAlgorithm, EncodingAlgorithm.NONE, checksumAlgorithm);
+    }
+
+    private static SqsClient sqsClient(
+            CompressionAlgorithm compressionAlgorithm,
+            EncodingAlgorithm encodingAlgorithm,
+            ChecksumAlgorithm checksumAlgorithm) {
         return SqsClient.builder()
                 .endpointOverride(LOCALSTACK.getEndpoint())
                 .region(Region.of(LOCALSTACK.getRegion()))
@@ -319,6 +373,7 @@ class SqsCodecInterceptorIntegrationTest {
                 .overrideConfiguration(config -> config.addExecutionInterceptor(
                         SqsCodecInterceptor.defaultInterceptor()
                                 .withCompressionAlgorithm(compressionAlgorithm)
+                                .withEncodingAlgorithm(encodingAlgorithm)
                                 .withChecksumAlgorithm(checksumAlgorithm)
                                 // Keep integration expectations deterministic for tiny test payloads.
                                 .withSkipCompressionWhenLarger(false)))

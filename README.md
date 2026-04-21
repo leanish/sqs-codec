@@ -9,6 +9,7 @@ binary bytes are encoded as unpadded URL-safe Base64.
 
 ## Features
 - Compression: `ZSTD`, `SNAPPY`, `GZIP`, `NONE`
+- Compression levels: `MINIMUM`, `LOW`, `MEDIUM`, `HIGH`, `MAXIMUM`
 - Encoding: `BASE64`, `ASCII85` (experimental), `NONE`
 - Checksums: `MD5`, `SHA256`, `NONE`
 - Config-driven compression/encoding/checksum on send
@@ -47,6 +48,7 @@ Send with explicit compression and checksum; decode/validate based on metadata:
 SqsClient client = SqsClient.builder()
         .overrideConfiguration(config -> config.addExecutionInterceptor(SqsCodecInterceptor.defaultInterceptor()
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
+                .withCompressionLevel(CompressionLevel.HIGH)
                 .withChecksumAlgorithm(ChecksumAlgorithm.SHA256)))
         .checksumValidationEnabled(false) // handled by SqsCodecInterceptor
         .build();
@@ -70,6 +72,8 @@ ASCII85 design notes: see [`docs/ascii85.md`](docs/ascii85.md).
 
 Defaults:
 - Compression: `NONE`
+- Compression level: unset
+- Encoding: `NONE`
 - Encoding: `NONE`
 - Checksum: `MD5`
 - When compression is enabled and encoding remains `NONE`, the effective payload encoding is `BASE64`.
@@ -81,6 +85,9 @@ Defaults:
 - `includeRawPayloadLength`: `true`
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if compressed payload would be larger than the original body, the interceptor sends the original body and writes `c=none`.
 - When outbound processing resolves to `c=none` and `h=none`, the interceptor does not add `x-codec-meta`.
+- Compression level is local send-side configuration only; it does not change codec metadata.
+- When unset, each compression algorithm uses its own built-in default.
+- `GZIP` and `ZSTD` honor configured compression levels. `SNAPPY` and `NONE` reject them.
 
 Disable `skipCompressionWhenLarger` and always use configured compression:
 ```java
@@ -92,6 +99,21 @@ Disable raw payload length metadata (`l`) on send:
 ```java
 SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
         .withIncludeRawPayloadLength(false);
+```
+
+Tune compression effort with a named level:
+```java
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+        .withCompressionLevel(CompressionLevel.HIGH);
+```
+
+Clear a configured compression level and go back to the algorithm default:
+```java
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+        .withCompressionLevel(CompressionLevel.HIGH)
+        .withoutCompressionLevel();
 ```
 
 ## Attributes

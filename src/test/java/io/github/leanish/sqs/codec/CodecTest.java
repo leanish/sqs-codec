@@ -15,7 +15,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.UnsupportedAlgorithmException;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 
 class CodecTest {
@@ -48,8 +50,49 @@ class CodecTest {
     }
 
     @Test
+    void encode_respectsConfiguredCompressionLevel() {
+        String payload = "compression-level-".repeat(512);
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        Codec minimumCodec = new Codec(CompressionAlgorithm.GZIP, CompressionLevel.MINIMUM);
+        Codec maximumCodec = new Codec(CompressionAlgorithm.GZIP, CompressionLevel.MAXIMUM);
+
+        assertThat(minimumCodec.encode(payloadBytes))
+                .isNotEqualTo(maximumCodec.encode(payloadBytes));
+    }
+
+    @Test
+    void encode_usesAlgorithmDefaultWhenCompressionLevelIsUnset() {
+        String payload = "compression-level-".repeat(512);
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        Codec defaultCodec = new Codec(CompressionAlgorithm.GZIP);
+        Codec unsetLevelCodec = new Codec(CompressionAlgorithm.GZIP, (CompressionLevel) null);
+
+        assertThat(unsetLevelCodec.encode(payloadBytes))
+                .isEqualTo(defaultCodec.encode(payloadBytes));
+    }
+
+    @Test
+    void encode_rejectsConfiguredCompressionLevelForSnappy() {
+        assertThatThrownBy(() -> new Codec(CompressionAlgorithm.SNAPPY, CompressionLevel.HIGH))
+                .isInstanceOf(UnsupportedAlgorithmException.class)
+                .hasMessage("Compression level HIGH is not supported for compression algorithm snappy");
+    }
+
+    @Test
     void encode_happyCase_withExplicitAscii85() {
         Codec codec = new Codec(CompressionAlgorithm.ZSTD, EncodingAlgorithm.ASCII85);
+        String payload = "{\"value\":42}";
+        byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
+
+        String decoded = new String(codec.decode(encoded), StandardCharsets.UTF_8);
+
+        assertThat(decoded)
+                .isEqualTo(payload);
+    }
+
+    @Test
+    void encode_happyCase_withCompressionLevelAndExplicitAscii85() {
+        Codec codec = new Codec(CompressionAlgorithm.GZIP, CompressionLevel.HIGH, EncodingAlgorithm.ASCII85);
         String payload = "{\"value\":42}";
         byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
 

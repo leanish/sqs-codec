@@ -10,10 +10,16 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Objects;
 
+import org.jspecify.annotations.Nullable;
+
+import com.github.luben.zstd.Zstd;
 import com.github.luben.zstd.ZstdInputStreamNoFinalizer;
 import com.github.luben.zstd.ZstdOutputStreamNoFinalizer;
 import com.google.errorprone.annotations.Immutable;
+
+import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 
 /**
  * Zstandard implementation of the compressor strategy.
@@ -22,11 +28,22 @@ import com.google.errorprone.annotations.Immutable;
 public class ZstdCompressor implements Compressor {
 
     private static final String ALGORITHM = "zstd";
+    private final @Nullable CompressionLevel compressionLevel;
+
+    public ZstdCompressor() {
+        this.compressionLevel = null;
+    }
+
+    public ZstdCompressor(CompressionLevel compressionLevel) {
+        this.compressionLevel = Objects.requireNonNull(compressionLevel, "compressionLevel");
+    }
 
     @Override
     public byte[] compress(byte[] payload) {
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            try (OutputStream compressedStream = new ZstdOutputStreamNoFinalizer(outputStream)) {
+            try (OutputStream compressedStream = compressionLevel == null
+                    ? new ZstdOutputStreamNoFinalizer(outputStream)
+                    : new ZstdOutputStreamNoFinalizer(outputStream, zstdLevel(compressionLevel))) {
                 compressedStream.write(payload);
             }
             return outputStream.toByteArray();
@@ -45,5 +62,18 @@ public class ZstdCompressor implements Compressor {
         } catch (IOException | RuntimeException e) {
             throw CompressionException.decompress(ALGORITHM, e);
         }
+    }
+
+    /**
+     * Maps relative levels onto zstd's scale: 1, 2, default, 16, max.
+     */
+    static int zstdLevel(CompressionLevel compressionLevel) {
+        return switch (compressionLevel) {
+            case MINIMUM -> 1;
+            case LOW -> 2;
+            case MEDIUM -> Zstd.defaultCompressionLevel();
+            case HIGH -> 16;
+            case MAXIMUM -> Zstd.maxCompressionLevel();
+        };
     }
 }

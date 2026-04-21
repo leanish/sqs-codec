@@ -21,7 +21,12 @@ import io.github.leanish.sqs.codec.algorithms.encoding.PayloadCodec;
 public enum EncodingAlgorithm {
     /** URL-safe unpadded Base64 for binary payload transport. */
     BASE64("base64", Base64PayloadCodec.instance()),
-    /** Experimental strict canonical ASCII85 without framing or shorthand forms. */
+    /**
+     * Strict canonical ASCII85 without framing or shorthand forms.
+     *
+     * <p><b>Experimental:</b> This encoding is still experimental and may change before a stable
+     * release.
+     */
     ASCII85("ascii85", Ascii85PayloadCodec.instance()),
     /** No payload encoding; message bodies are treated as UTF-8 text. */
     NONE("none", NoOpPayloadCodec.instance());

@@ -57,6 +57,28 @@ class Ascii85PayloadCodecTest {
         assertThatThrownBy(() -> Ascii85PayloadCodec.instance().decode("uuuuu".getBytes(StandardCharsets.US_ASCII)))
                 .isInstanceOf(InvalidPayloadException.class)
                 .hasMessage("Invalid ascii85 payload")
-                .hasCauseInstanceOf(IllegalArgumentException.class);
+                .cause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("ASCII85 chunk exceeds 32-bit range");
+    }
+
+    @Test
+    void ascii85_rejectsOverflowingTrailingChunk() {
+        assertThatThrownBy(() -> Ascii85PayloadCodec.instance().decode("uuuu".getBytes(StandardCharsets.US_ASCII)))
+                .isInstanceOf(InvalidPayloadException.class)
+                .hasMessage("Invalid ascii85 payload")
+                .cause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("ASCII85 chunk exceeds 32-bit range");
+    }
+
+    @Test
+    void ascii85_rejectsSingleCharacterTail() {
+        assertThatThrownBy(() -> Ascii85PayloadCodec.instance().decode("u".getBytes(StandardCharsets.US_ASCII)))
+                .isInstanceOf(InvalidPayloadException.class)
+                .hasMessage("Invalid ascii85 payload")
+                .cause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("ASCII85 payload cannot end with a single character");
     }
 }

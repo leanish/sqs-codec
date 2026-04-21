@@ -75,6 +75,7 @@ Defaults:
 - When compression is enabled and encoding remains `NONE`, the effective payload encoding is `BASE64`.
 - `ASCII85` is experimental; it uses a strict canonical dialect without `<~ ~>` framing, whitespace, or `z`/`y` shorthands.
 - `ASCII85` is intentionally transport-focused between `sqs-codec` endpoints rather than interoperability-focused with third-party ASCII85 tools.
+- `ASCII85` reduces encoded-body overhead versus Base64 in theory, but the practical size win is small enough that it should be treated as a niche transport option rather than a new default.
 - `MD5` is intended for non-adversarial integrity checks; prefer `SHA256` when producers may be attacker-controlled.
 - `skipCompressionWhenLarger`: `true`
 - `includeRawPayloadLength`: `true`

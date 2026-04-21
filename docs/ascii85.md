@@ -65,6 +65,12 @@ Reasoning:
 design. The goal is not to be liberal in what we accept; the goal is to keep
 the transport format stable between `sqs-codec` endpoints.
 
+### Size trade-off
+
+`ASCII85` is smaller than Base64 in theory, but the practical size win is
+modest. The feature exists as an optional transport trade-off, not as a new
+default encoding for every payload.
+
 ## Non-decisions
 
 The library does not currently try to optimize for:

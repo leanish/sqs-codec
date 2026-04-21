@@ -11,6 +11,9 @@ import com.google.errorprone.annotations.Immutable;
 
 /**
  * Strict canonical ASCII85 codec without framing, whitespace or shorthand forms.
+ *
+ * <p><b>Experimental:</b> This codec is still experimental and may change before a stable
+ * release.
  */
 @Immutable
 public final class Ascii85PayloadCodec implements PayloadCodec {
@@ -144,6 +147,7 @@ public final class Ascii85PayloadCodec implements PayloadCodec {
     private static int decodedLength(int encodedLength) {
         int fullChunks = encodedLength / OUTPUT_CHUNK_SIZE;
         int trailingChars = encodedLength % OUTPUT_CHUNK_SIZE;
+        // Single-character tails are rejected in decodeInternal before this subtraction runs.
         return fullChunks * INPUT_CHUNK_SIZE + (trailingChars == 0 ? 0 : trailingChars - 1);
     }
 }

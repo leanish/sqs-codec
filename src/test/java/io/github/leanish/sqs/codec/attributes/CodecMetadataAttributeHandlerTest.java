@@ -265,6 +265,24 @@ class CodecMetadataAttributeHandlerTest {
                         null,
                         "v=1;c=none;e=base64;h=none"),
                 Arguments.of(
+                        "v=1;h=md5;s=abc",
+                        new CodecConfiguration(
+                                CodecAttributes.VERSION_VALUE,
+                                CompressionAlgorithm.NONE,
+                                EncodingAlgorithm.NONE,
+                                ChecksumAlgorithm.MD5),
+                        "abc",
+                        "v=1;c=none;e=none;h=md5;s=abc"),
+                Arguments.of(
+                        "v=1;c=zstd;h=none;l=5",
+                        new CodecConfiguration(
+                                CodecAttributes.VERSION_VALUE,
+                                CompressionAlgorithm.ZSTD,
+                                EncodingAlgorithm.BASE64,
+                                ChecksumAlgorithm.NONE),
+                        null,
+                        "v=1;c=zstd;e=base64;h=none;l=5"),
+                Arguments.of(
                         "v=1;c=zstd;e=base64;h=none;l=5",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
@@ -315,19 +333,19 @@ class CodecMetadataAttributeHandlerTest {
                 Arguments.of(
                         "v=1",
                         UnsupportedCodecMetadataException.class,
-                        "Missing required codec metadata key: e"),
+                        "Codec metadata must enable compression, encoding or checksum"),
                 Arguments.of(
                         "v=1;c=none;h=none",
                         UnsupportedCodecMetadataException.class,
-                        "Missing required codec metadata key: e"),
+                        "Codec metadata must enable compression, encoding or checksum"),
                 Arguments.of(
                         "v=1;c=none;h=none;s=abc",
                         UnsupportedCodecMetadataException.class,
-                        "Missing required codec metadata key: e"),
+                        "Codec metadata must enable compression, encoding or checksum"),
                 Arguments.of(
                         "v=1;l=12",
                         UnsupportedCodecMetadataException.class,
-                        "Missing required codec metadata key: e"),
+                        "Codec metadata must enable compression, encoding or checksum"),
                 Arguments.of(
                         "v=1;c=zstd;e=none;h=none;l=5",
                         UnsupportedCodecMetadataException.class,

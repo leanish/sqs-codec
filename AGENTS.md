@@ -18,7 +18,7 @@ Always run `./gradlew check` after each code change.
 - Keep responsibilities well-separated; avoid mixing concerns in the same class.
 - Keep attribute keys in `CodecAttributes`.
 - Use `MessageAttributeUtils` for reading/writing `MessageAttributeValue`s.
-- Codec metadata is written to `x-codec-meta` using `v/c/e/h/s/l` keys; keep the format stable and update docs/tests when changing it.
+- Codec metadata is written to `x-codec-meta` using `v/c/e/h/s/l` keys; writers always emit `e`, while `v=1` readers still tolerate missing `e` for backward compatibility.
 - `SqsCodecInterceptor` defaults: compression `NONE`, checksum `MD5`.
 - When compression is not `NONE` and encoding is `NONE`, the compressed binary bytes are encoded as unpadded URL-safe Base64.
 - When adding algorithms, update the enum, the codec tests, and the interceptor tests.

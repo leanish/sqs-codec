@@ -792,6 +792,31 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
+    void modifyResponse_legacyCompressedPayloadWithoutEncodingMetadata() {
+        byte[] payloadBytes = PAYLOAD.getBytes(StandardCharsets.UTF_8);
+        Codec codec = new Codec(CompressionAlgorithm.ZSTD);
+        String encodedBody = new String(codec.encode(payloadBytes), StandardCharsets.UTF_8);
+        Message message = Message.builder()
+                .body(encodedBody)
+                .messageAttributes(Map.of(
+                        CodecAttributes.META,
+                        MessageAttributeUtils.stringAttribute(
+                                "v=1;c=zstd;h=md5;s="
+                                        + ChecksumAlgorithm.MD5.implementation().checksum(payloadBytes)
+                                        + ";l="
+                                        + payloadBytes.length)))
+                .build();
+        ReceiveMessageResponse response = ReceiveMessageResponse.builder()
+                .messages(message)
+                .build();
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
+    }
+
+    @Test
     void modifyResponse_noMessages() {
         ReceiveMessageResponse response = ReceiveMessageResponse.builder()
                 .messages(List.of())

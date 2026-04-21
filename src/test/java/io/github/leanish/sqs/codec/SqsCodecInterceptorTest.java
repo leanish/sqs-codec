@@ -21,6 +21,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.reactivestreams.Publisher;
@@ -210,11 +211,12 @@ class SqsCodecInterceptorTest {
                 .isSameAs(request);
     }
 
-    @Test
-    void modifyRequest_explicitEncodingWithoutCompression() {
+    @ParameterizedTest
+    @EnumSource(value = EncodingAlgorithm.class, names = {"BASE64", "ASCII85"})
+    void modifyRequest_explicitEncodingWithoutCompression(EncodingAlgorithm encodingAlgorithm) {
         SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
                 .withCompressionAlgorithm(CompressionAlgorithm.NONE)
-                .withEncodingAlgorithm(EncodingAlgorithm.BASE64)
+                .withEncodingAlgorithm(encodingAlgorithm)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE);
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(PAYLOAD)
@@ -224,9 +226,32 @@ class SqsCodecInterceptorTest {
                 new ModifyRequestContext(request),
                 new ExecutionAttributes());
 
-        assertThat(encoded.messageBody()).isEqualTo(encodedPlainPayload(PAYLOAD));
+        assertThat(encoded.messageBody()).isEqualTo(encodedPlainPayload(PAYLOAD, encodingAlgorithm));
         assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
-                .isEqualTo("v=1;c=none;e=base64;h=none");
+                .isEqualTo("v=1;c=none;e=" + encodingAlgorithm.id() + ";h=none");
+    }
+
+    @Test
+    void modifyRequest_preservesExplicitAscii85WhenCompressionIsEnabled() {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
+                .withEncodingAlgorithm(EncodingAlgorithm.ASCII85)
+                .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
+                .withSkipCompressionWhenLarger(false);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .build();
+
+        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+
+        assertThat(encoded.messageBody()).isNotEqualTo(PAYLOAD);
+        assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
+                .isEqualTo("v=1;c=gzip;e=ascii85;h=none;l=12");
+        Codec codec = new Codec(CompressionAlgorithm.GZIP, EncodingAlgorithm.ASCII85);
+        assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
+                .isEqualTo(PAYLOAD);
     }
 
     @Test
@@ -771,6 +796,27 @@ class SqsCodecInterceptorTest {
         assertThat(decoded.messages().get(0).body()).isEqualTo(encodedBody);
     }
 
+    @ParameterizedTest
+    @EnumSource(value = EncodingAlgorithm.class, names = {"BASE64", "ASCII85"})
+    void modifyResponse_encodingOnlyPayload(EncodingAlgorithm encodingAlgorithm) {
+        Codec codec = new Codec(CompressionAlgorithm.NONE, encodingAlgorithm);
+        String encodedBody = new String(codec.encode(PAYLOAD.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
+        Message message = Message.builder()
+                .body(encodedBody)
+                .messageAttributes(Map.of(
+                        CodecAttributes.META,
+                        MessageAttributeUtils.stringAttribute("v=1;c=none;e=" + encodingAlgorithm.id() + ";h=none")))
+                .build();
+        ReceiveMessageResponse response = ReceiveMessageResponse.builder()
+                .messages(message)
+                .build();
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
+    }
+
     @Test
     void modifyResponse_encodingOnlyPayload() {
         Codec codec = new Codec(CompressionAlgorithm.NONE, EncodingAlgorithm.BASE64);
@@ -1143,7 +1189,7 @@ class SqsCodecInterceptorTest {
         Map<String, MessageAttributeValue> unsupportedChecksum = Map.of(
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=crc32"));
         Map<String, MessageAttributeValue> unsupportedEncoding = Map.of(
-                CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=none;e=ascii85;h=md5"));
+                CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=none;e=base85;h=md5"));
         Map<String, MessageAttributeValue> unsupportedVersion = Map.of(
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=2;c=none;e=none;h=md5"));
         Map<String, MessageAttributeValue> missingVersion = Map.of(
@@ -1167,7 +1213,7 @@ class SqsCodecInterceptorTest {
                 Arguments.of(
                         unsupportedEncoding,
                         UnsupportedAlgorithmException.class,
-                        "Unsupported payload encoding: ascii85"),
+                        "Unsupported payload encoding: base85"),
                 Arguments.of(
                         unsupportedVersion,
                         UnsupportedCodecMetadataException.class,
@@ -1223,8 +1269,10 @@ class SqsCodecInterceptorTest {
         return attributes;
     }
 
-    private static String encodedPlainPayload(String payload) {
-        return Base64PayloadCodec.instance().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+    private static String encodedPlainPayload(String payload, EncodingAlgorithm encodingAlgorithm) {
+        return new String(
+                encodingAlgorithm.implementation().encode(payload.getBytes(StandardCharsets.UTF_8)),
+                StandardCharsets.UTF_8);
     }
 
     private static Map<String, MessageAttributeValue> customAttributes(int count) {

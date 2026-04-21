@@ -18,6 +18,8 @@ class EncodingAlgorithmTest {
                 .isEqualTo(EncodingAlgorithm.BASE64);
         assertThat(EncodingAlgorithm.effectiveFor(CompressionAlgorithm.SNAPPY, EncodingAlgorithm.NONE))
                 .isEqualTo(EncodingAlgorithm.BASE64);
+        assertThat(EncodingAlgorithm.effectiveFor(CompressionAlgorithm.GZIP, EncodingAlgorithm.ASCII85))
+                .isEqualTo(EncodingAlgorithm.ASCII85);
         assertThat(EncodingAlgorithm.effectiveFor(CompressionAlgorithm.GZIP, EncodingAlgorithm.BASE64))
                 .isEqualTo(EncodingAlgorithm.BASE64);
         assertThat(EncodingAlgorithm.effectiveFor(CompressionAlgorithm.NONE, EncodingAlgorithm.NONE))
@@ -28,12 +30,14 @@ class EncodingAlgorithmTest {
     void fromId_caseInsensitive() {
         assertThat(EncodingAlgorithm.fromId("BASE64"))
                 .isEqualTo(EncodingAlgorithm.BASE64);
+        assertThat(EncodingAlgorithm.fromId("ASCII85"))
+                .isEqualTo(EncodingAlgorithm.ASCII85);
     }
 
     @Test
     void fromId_unsupported() {
-        assertThatThrownBy(() -> EncodingAlgorithm.fromId("ascii85"))
+        assertThatThrownBy(() -> EncodingAlgorithm.fromId("base85"))
                 .isInstanceOf(UnsupportedAlgorithmException.class)
-                .hasMessage("Unsupported payload encoding: ascii85");
+                .hasMessage("Unsupported payload encoding: base85");
     }
 }

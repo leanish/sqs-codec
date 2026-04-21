@@ -9,7 +9,7 @@ binary bytes are encoded as unpadded URL-safe Base64.
 
 ## Features
 - Compression: `ZSTD`, `SNAPPY`, `GZIP`, `NONE`
-- Encoding: `BASE64`, `NONE`
+- Encoding: `BASE64`, `ASCII85` (experimental), `NONE`
 - Checksums: `MD5`, `SHA256`, `NONE`
 - Config-driven compression/encoding/checksum on send
 - Metadata-driven decompression/validation on receive (using message attribute `x-codec-meta`)
@@ -60,11 +60,22 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
         .withChecksumAlgorithm(ChecksumAlgorithm.NONE);
 ```
 
+Send with explicit experimental ASCII85 payload encoding:
+```java
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        .withEncodingAlgorithm(EncodingAlgorithm.ASCII85);
+```
+
+ASCII85 design notes: see [`docs/ascii85.md`](docs/ascii85.md).
+
 Defaults:
 - Compression: `NONE`
 - Encoding: `NONE`
 - Checksum: `MD5`
 - When compression is enabled and encoding remains `NONE`, the effective payload encoding is `BASE64`.
+- `ASCII85` is experimental; it uses a strict canonical dialect without `<~ ~>` framing, whitespace, or `z`/`y` shorthands.
+- `ASCII85` is intentionally transport-focused between `sqs-codec` endpoints rather than interoperability-focused with third-party ASCII85 tools.
+- `ASCII85` reduces encoded-body overhead versus Base64 in theory, but the practical size win is small enough that it should be treated as a niche transport option rather than a new default.
 - `MD5` is intended for non-adversarial integrity checks; prefer `SHA256` when producers may be attacker-controlled.
 - `skipCompressionWhenLarger`: `true`
 - `includeRawPayloadLength`: `true`
@@ -91,13 +102,14 @@ Codec metadata is stored in a single attribute:
 Keys:
 - `v`: codec version
 - `c`: compression (`zstd`, `gzip`, `snappy`, `none`)
-- `e`: payload encoding (`base64`, `none`)
+- `e`: payload encoding (`base64`, `ascii85`, `none`)
 - `h`: checksum (`md5`, `sha256`, `none`)
 - `s`: checksum value (present only when `h` is not `none`; always unpadded URL-safe Base64)
 - `l`: raw payload byte length (before compression); written only when `c` is not `none`
 
 Notes:
 - Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
+- `ascii85` is emitted and accepted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks.
 - `v` is required and must be the current supported version (`1`).
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.

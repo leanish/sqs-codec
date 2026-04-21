@@ -11,6 +11,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
@@ -46,8 +48,21 @@ class CodecTest {
     }
 
     @Test
-    void encode_encodingOnly() {
-        Codec codec = new Codec(CompressionAlgorithm.NONE, EncodingAlgorithm.BASE64);
+    void encode_happyCase_withExplicitAscii85() {
+        Codec codec = new Codec(CompressionAlgorithm.ZSTD, EncodingAlgorithm.ASCII85);
+        String payload = "{\"value\":42}";
+        byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
+
+        String decoded = new String(codec.decode(encoded), StandardCharsets.UTF_8);
+
+        assertThat(decoded)
+                .isEqualTo(payload);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = EncodingAlgorithm.class, names = {"BASE64", "ASCII85"})
+    void encode_encodingOnly(EncodingAlgorithm encodingAlgorithm) {
+        Codec codec = new Codec(CompressionAlgorithm.NONE, encodingAlgorithm);
         String payload = "{\"value\":42}";
         byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
 

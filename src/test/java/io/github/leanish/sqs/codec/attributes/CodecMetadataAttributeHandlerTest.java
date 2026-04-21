@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import io.github.leanish.sqs.codec.CodecConfiguration;
@@ -118,12 +119,13 @@ class CodecMetadataAttributeHandlerTest {
                 .hasMessage("Codec metadata must enable compression, encoding or checksum");
     }
 
-    @Test
-    void forOutbound_allowsEncodingOnlyMetadata() {
+    @ParameterizedTest
+    @EnumSource(value = EncodingAlgorithm.class, names = {"BASE64", "ASCII85"})
+    void forOutbound_allowsEncodingOnlyMetadata(EncodingAlgorithm encodingAlgorithm) {
         CodecConfiguration configuration = new CodecConfiguration(
                 CodecAttributes.VERSION_VALUE,
                 CompressionAlgorithm.NONE,
-                EncodingAlgorithm.BASE64,
+                encodingAlgorithm,
                 ChecksumAlgorithm.NONE);
 
         CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.forOutbound(
@@ -132,7 +134,24 @@ class CodecMetadataAttributeHandlerTest {
                 true);
 
         assertThat(formattedMetadata(metadata))
-                .isEqualTo("v=1;c=none;e=base64;h=none");
+                .isEqualTo("v=1;c=none;e=" + encodingAlgorithm.id() + ";h=none");
+    }
+
+    @Test
+    void forOutbound_preservesExplicitAscii85WhenCompressed() {
+        CodecConfiguration configuration = new CodecConfiguration(
+                CodecAttributes.VERSION_VALUE,
+                CompressionAlgorithm.GZIP,
+                EncodingAlgorithm.ASCII85,
+                ChecksumAlgorithm.NONE);
+
+        CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.forOutbound(
+                configuration,
+                "payload".getBytes(StandardCharsets.UTF_8),
+                true);
+
+        assertThat(formattedMetadata(metadata))
+                .isEqualTo("v=1;c=gzip;e=ascii85;h=none;l=7");
     }
 
     @Test
@@ -265,6 +284,15 @@ class CodecMetadataAttributeHandlerTest {
                         null,
                         "v=1;c=none;e=base64;h=none"),
                 Arguments.of(
+                        "v=1;c=none;e=ascii85;h=md5;s=abc",
+                        new CodecConfiguration(
+                                CodecAttributes.VERSION_VALUE,
+                                CompressionAlgorithm.NONE,
+                                EncodingAlgorithm.ASCII85,
+                                ChecksumAlgorithm.MD5),
+                        "abc",
+                        "v=1;c=none;e=ascii85;h=md5;s=abc"),
+                Arguments.of(
                         "v=1;c=zstd;e=base64;h=none;l=5",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
@@ -272,7 +300,16 @@ class CodecMetadataAttributeHandlerTest {
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=1;c=zstd;e=base64;h=none;l=5"));
+                        "v=1;c=zstd;e=base64;h=none;l=5"),
+                Arguments.of(
+                        "v=1;c=gzip;e=ascii85;h=none;l=7",
+                        new CodecConfiguration(
+                                CodecAttributes.VERSION_VALUE,
+                                CompressionAlgorithm.GZIP,
+                                EncodingAlgorithm.ASCII85,
+                                ChecksumAlgorithm.NONE),
+                        null,
+                        "v=1;c=gzip;e=ascii85;h=none;l=7"));
     }
 
     private static Stream<Arguments> unknownKeyToleranceCases() {
@@ -341,9 +378,9 @@ class CodecMetadataAttributeHandlerTest {
                         UnsupportedCodecMetadataException.class,
                         "Unsupported codec metadata: v=1;c=zstd;e=none;h=none;l=5"),
                 Arguments.of(
-                        "v=1;c=none;e=ascii85;h=md5;s=abc",
+                        "v=1;c=none;e=base85;h=md5;s=abc",
                         UnsupportedAlgorithmException.class,
-                        "Unsupported payload encoding: ascii85"));
+                        "Unsupported payload encoding: base85"));
     }
 
     private static Map<String, MessageAttributeValue> metadataAttributes(String rawMetadata) {

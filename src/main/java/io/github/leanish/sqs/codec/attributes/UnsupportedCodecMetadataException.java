@@ -32,7 +32,7 @@ public class UnsupportedCodecMetadataException extends CodecException {
 
     public static UnsupportedCodecMetadataException noOp() {
         return new UnsupportedCodecMetadataException(
-                "Codec metadata must enable compression or checksum");
+                "Codec metadata must enable compression, encoding or checksum");
     }
 
     public static UnsupportedCodecMetadataException unsupportedVersion(String version) {

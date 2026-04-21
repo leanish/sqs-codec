@@ -130,25 +130,24 @@ public class CodecMetadataAttributeHandler {
             compressionAlgorithm = CompressionAlgorithm.fromId(compressionValue);
         }
         String encodingValue = values.get(CodecAttributes.META_ENCODING_KEY);
-        boolean hasExplicitEncoding = encodingValue != null;
-        EncodingAlgorithm encodingAlgorithm = EncodingAlgorithm.NONE;
-        if (encodingValue != null) {
-            encodingAlgorithm = EncodingAlgorithm.fromId(encodingValue);
+        if (encodingValue == null) {
+            throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_ENCODING_KEY);
         }
+        EncodingAlgorithm encodingAlgorithm = EncodingAlgorithm.fromId(encodingValue);
         String checksumAlgorithmValue = values.get(CodecAttributes.META_CHECKSUM_ALGORITHM_KEY);
         if (checksumAlgorithmValue != null) {
             checksumAlgorithm = ChecksumAlgorithm.fromId(checksumAlgorithmValue);
         }
 
-        validateCompressionEncoding(metadataValue, compressionAlgorithm, encodingAlgorithm, hasExplicitEncoding);
+        validateCompressionEncoding(metadataValue, compressionAlgorithm, encodingAlgorithm);
         validateNonNoOpMetadata(compressionAlgorithm, encodingAlgorithm, checksumAlgorithm);
         int rawLength = parseRawLength(values);
         String checksumValue = parseChecksumValue(values, checksumAlgorithm);
-        CodecConfiguration configuration = effectiveConfiguration(new CodecConfiguration(
+        CodecConfiguration configuration = new CodecConfiguration(
                 version,
                 compressionAlgorithm,
                 encodingAlgorithm,
-                checksumAlgorithm));
+                checksumAlgorithm);
         return new CodecMetadataAttributeHandler(
                 configuration,
                 checksumValue,
@@ -216,11 +215,9 @@ public class CodecMetadataAttributeHandler {
     private static void validateCompressionEncoding(
             String metadataValue,
             CompressionAlgorithm compressionAlgorithm,
-            EncodingAlgorithm encodingAlgorithm,
-            boolean hasExplicitEncoding) {
+            EncodingAlgorithm encodingAlgorithm) {
         if (compressionAlgorithm != CompressionAlgorithm.NONE
-                && encodingAlgorithm == EncodingAlgorithm.NONE
-                && hasExplicitEncoding) {
+                && encodingAlgorithm == EncodingAlgorithm.NONE) {
             throw UnsupportedCodecMetadataException.malformed(metadataValue);
         }
     }

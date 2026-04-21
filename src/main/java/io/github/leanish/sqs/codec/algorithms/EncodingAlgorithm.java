@@ -37,11 +37,11 @@ public enum EncodingAlgorithm {
                     algorithm -> algorithm));
 
     private final String id;
-    private final PayloadCodec implementation;
+    private final PayloadCodec payloadCodec;
 
-    EncodingAlgorithm(String id, PayloadCodec implementation) {
+    EncodingAlgorithm(String id, PayloadCodec payloadCodec) {
         this.id = id;
-        this.implementation = implementation;
+        this.payloadCodec = payloadCodec;
     }
 
     public String id() {
@@ -49,7 +49,7 @@ public enum EncodingAlgorithm {
     }
 
     public PayloadCodec implementation() {
-        return implementation;
+        return payloadCodec;
     }
 
     public static EncodingAlgorithm fromId(String value) {

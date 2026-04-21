@@ -32,11 +32,11 @@ public enum ChecksumAlgorithm {
                     algorithm -> algorithm));
 
     private final String id;
-    private final Digestor implementation;
+    private final Digestor digestor;
 
-    ChecksumAlgorithm(String id, Digestor implementation) {
+    ChecksumAlgorithm(String id, Digestor digestor) {
         this.id = id;
-        this.implementation = implementation;
+        this.digestor = digestor;
     }
 
     public String id() {
@@ -44,7 +44,7 @@ public enum ChecksumAlgorithm {
     }
 
     public Digestor implementation() {
-        return implementation;
+        return digestor;
     }
 
     public static ChecksumAlgorithm fromId(String value) {

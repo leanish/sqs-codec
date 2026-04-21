@@ -366,6 +366,14 @@ class CodecMetadataAttributeHandlerTest {
                         UnsupportedCodecMetadataException.class,
                         "Missing required codec metadata key: e"),
                 Arguments.of(
+                        "v=1;h=md5;s=abc",
+                        UnsupportedCodecMetadataException.class,
+                        "Missing required codec metadata key: e"),
+                Arguments.of(
+                        "v=1;c=zstd;h=none;l=5",
+                        UnsupportedCodecMetadataException.class,
+                        "Missing required codec metadata key: e"),
+                Arguments.of(
                         "v=1;c=zstd;e=none;h=none;l=5",
                         UnsupportedCodecMetadataException.class,
                         "Unsupported codec metadata: v=1;c=zstd;e=none;h=none;l=5"),

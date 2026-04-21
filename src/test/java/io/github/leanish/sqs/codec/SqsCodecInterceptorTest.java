@@ -818,6 +818,26 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
+    void modifyResponse_encodingOnlyPayload() {
+        Codec codec = new Codec(CompressionAlgorithm.NONE, EncodingAlgorithm.BASE64);
+        String encodedBody = new String(codec.encode(PAYLOAD.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
+        Message message = Message.builder()
+                .body(encodedBody)
+                .messageAttributes(Map.of(
+                        CodecAttributes.META,
+                        MessageAttributeUtils.stringAttribute("v=1;c=none;e=base64;h=none")))
+                .build();
+        ReceiveMessageResponse response = ReceiveMessageResponse.builder()
+                .messages(message)
+                .build();
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
+    }
+
+    @Test
     void modifyResponse_noMessages() {
         ReceiveMessageResponse response = ReceiveMessageResponse.builder()
                 .messages(List.of())

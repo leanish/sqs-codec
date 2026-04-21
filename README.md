@@ -113,7 +113,7 @@ Notes:
 - `v` is required and must be the current supported version (`1`).
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
-- `e=none` is valid only when `c=none`.
+- Explicit `e=none` is valid only when `c=none`.
 - Metadata is invalid when `c`, `e`, and `h` all resolve to `none`.
 - On send, the default interceptor configuration uses checksum `md5`.
 - On send, the default interceptor configuration uses encoding `none`, which resolves to `base64` when compression is enabled.

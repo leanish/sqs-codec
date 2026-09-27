@@ -208,3 +208,8 @@ Run full checks (tests, checkstyle, spotless, jacoco):
 ```bash
 ./gradlew check
 ```
+
+Run mutation testing (PIT, excludes `integration`-tagged tests; report in `build/reports/pitest`):
+```bash
+./gradlew pitest
+```

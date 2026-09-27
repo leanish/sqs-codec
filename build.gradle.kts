@@ -1,6 +1,7 @@
 plugins {
     `java-library`
     id("io.github.leanish.java-conventions")
+    id("info.solidsoft.pitest")
 }
 
 group = "io.github.leanish"
@@ -68,4 +69,16 @@ tasks.jacocoTestCoverageVerification {
             }
         }
     }
+}
+
+pitest {
+    junit5PluginVersion = "1.2.3"
+    pitestVersion = "1.30.0"
+    targetClasses = listOf("io.github.leanish.sqs.codec.*")
+    targetTests = listOf("io.github.leanish.sqs.codec.*")
+    excludedGroups = listOf("integration")
+    jvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
+    threads = 4
+    outputFormats = listOf("HTML", "XML")
+    timestampedReports = false
 }

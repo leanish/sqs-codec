@@ -4,6 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+- Added PIT mutation testing (`./gradlew pitest`), excluding `integration`-tagged tests.
+
 ## 0.5.0 - 2026-04-21
 
 ### Added

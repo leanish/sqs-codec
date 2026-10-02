@@ -52,12 +52,6 @@ public enum CompressionAlgorithm {
         this.leveledFactory = leveledFactory;
     }
 
-    @Immutable
-    @FunctionalInterface
-    private interface LeveledCompressorFactory {
-        Compressor create(CompressionLevel compressionLevel);
-    }
-
     public String id() {
         return id;
     }
@@ -110,5 +104,11 @@ public enum CompressionAlgorithm {
             throw UnsupportedAlgorithmException.compression(value);
         }
         return compression;
+    }
+
+    @Immutable
+    @FunctionalInterface
+    private interface LeveledCompressorFactory {
+        Compressor create(CompressionLevel compressionLevel);
     }
 }

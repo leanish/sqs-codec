@@ -7,6 +7,16 @@ All notable changes to this project are documented in this file.
 ### Added
 - Added PIT mutation testing (`./gradlew pitest`), excluding `integration`-tagged tests.
 
+### Changed
+- Upgraded `io.github.leanish.java-conventions` from `0.5.5` to `0.6.0`, which now configures PIT.
+- Upgraded the Gradle wrapper from `9.5.1` to `9.8.0`.
+- Upgraded dependencies:
+  - `com.github.luben:zstd-jni` from `1.5.7-10` to `1.5.7-20`
+  - `software.amazon.awssdk:bom` (compile-only and tests) from `2.46.8` to `2.55.10`
+  - `org.mockito:mockito-bom` (tests) from `5.23.0` to `5.24.0`
+- Upgraded GitHub Actions to `actions/checkout@v7` and `actions/setup-java@v6`.
+- The LocalStack test image stays on `4.14.0`, the last one that runs without an auth token.
+
 ## 0.5.0 - 2026-04-21
 
 ### Added

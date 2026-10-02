@@ -1,7 +1,6 @@
 plugins {
     `java-library`
     id("io.github.leanish.java-conventions")
-    id("info.solidsoft.pitest")
 }
 
 group = "io.github.leanish"
@@ -13,15 +12,15 @@ val defaultTestRuntimeJavaVersion = 25
 
 dependencies {
     // BOMs
-    compileOnly(platform("software.amazon.awssdk:bom:2.46.8"))
-    testImplementation(platform("software.amazon.awssdk:bom:2.46.8"))
-    testImplementation(platform("org.mockito:mockito-bom:5.23.0"))
+    compileOnly(platform("software.amazon.awssdk:bom:2.55.10"))
+    testImplementation(platform("software.amazon.awssdk:bom:2.55.10"))
+    testImplementation(platform("org.mockito:mockito-bom:5.24.0"))
     testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
 
     // Consumers provide AWS SDK versions; keep it compileOnly to avoid forcing a version.
     compileOnly("software.amazon.awssdk:sqs")
 
-    implementation("com.github.luben:zstd-jni:1.5.7-10")
+    implementation("com.github.luben:zstd-jni:1.5.7-20")
     implementation("org.xerial.snappy:snappy-java:1.1.10.8")
 
     testImplementation("software.amazon.awssdk:sqs")
@@ -71,14 +70,8 @@ tasks.jacocoTestCoverageVerification {
     }
 }
 
+// The conventions configure PIT; integration tests need Docker, and zstd-jni needs native access in PIT's test JVMs.
 pitest {
-    junit5PluginVersion = "1.2.3"
-    pitestVersion = "1.30.0"
-    targetClasses = listOf("io.github.leanish.sqs.codec.*")
-    targetTests = listOf("io.github.leanish.sqs.codec.*")
     excludedGroups = listOf("integration")
     jvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
-    threads = 4
-    outputFormats = listOf("HTML", "XML")
-    timestampedReports = false
 }

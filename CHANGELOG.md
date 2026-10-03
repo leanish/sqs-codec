@@ -9,14 +9,17 @@ All notable changes to this project are documented in this file.
   A separate, non-required "Mutation testing" workflow runs it on pull requests and `main`.
 
 ### Changed
-- Upgraded `io.github.leanish.java-conventions` from `0.5.5` to `0.6.1`, which now configures PIT (including the 95 % threshold).
-- Upgraded the Gradle wrapper from `9.5.1` to `9.8.0`.
+- Upgraded `io.github.leanish.java-conventions` from `0.5.4` to `0.6.2`, which now configures PIT (including the 95 % threshold).
+- Upgraded the Gradle wrapper from `9.4.1` to `9.8.0`.
 - Upgraded dependencies:
-  - `com.github.luben:zstd-jni` from `1.5.7-10` to `1.5.7-20`
-  - `software.amazon.awssdk:bom` (compile-only and tests) from `2.46.8` to `2.55.10`
+  - `com.github.luben:zstd-jni` from `1.5.7-7` to `1.5.7-20`
+  - `software.amazon.awssdk:bom` (compile-only and tests) from `2.42.36` to `2.55.10`
   - `org.mockito:mockito-bom` (tests) from `5.23.0` to `5.24.0`
+- Upgraded the LocalStack test image from `3.0.2` to `4.14.0`, the last one that runs without an auth token.
 - Upgraded GitHub Actions to `actions/checkout@v7` and `actions/setup-java@v6`.
-- The LocalStack test image stays on `4.14.0`, the last one that runs without an auth token.
+
+### Documentation
+- Fixed two README errors and removed a duplicated bullet from the README's defaults list.
 
 ## 0.5.0 - 2026-04-21
 

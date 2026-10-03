@@ -209,7 +209,7 @@ Run full checks (tests, checkstyle, spotless, jacoco):
 ./gradlew check
 ```
 
-Run mutation testing (PIT, excludes `integration`-tagged tests and fails below a 95 % mutation score; report in `build/reports/pitest`):
+Run mutation testing (PIT, excludes `integration`-tagged tests and fails below the conventions' 95 % mutation threshold; report in `build/reports/pitest`):
 ```bash
 ./gradlew pitest
 ```

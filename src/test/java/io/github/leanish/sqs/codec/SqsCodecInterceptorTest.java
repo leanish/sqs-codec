@@ -669,6 +669,55 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
+    void modifyRequest_alreadyPresentAttributes_attributeLimitExceeded() {
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .messageAttributes(preEncodedAttributesWithCustomAttributes(10))
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(CodecException.class)
+                .hasMessageContaining("SQS supports at most 10 message attributes")
+                .hasMessageContaining("request has 11");
+    }
+
+    @Test
+    void modifyRequest_batch_alreadyPresentAttributes_attributeLimitExceeded() {
+        SendMessageBatchRequest request = SendMessageBatchRequest.builder()
+                .entries(SendMessageBatchRequestEntry.builder()
+                        .id("pre-encoded")
+                        .messageBody(PAYLOAD)
+                        .messageAttributes(preEncodedAttributesWithCustomAttributes(10))
+                        .build())
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(CodecException.class)
+                .hasMessageContaining("SQS supports at most 10 message attributes")
+                .hasMessageContaining("request has 11");
+    }
+
+    @Test
+    void modifyRequest_batch_alreadyPresentAttributes_checksumMismatch() {
+        SendMessageBatchRequest request = SendMessageBatchRequest.builder()
+                .entries(SendMessageBatchRequestEntry.builder()
+                        .id("pre-encoded")
+                        .messageBody(PAYLOAD)
+                        .messageAttributes(Map.of(
+                                CodecAttributes.META,
+                                MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=md5;s=bad;l=12")))
+                        .build())
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(ChecksumValidationException.class)
+                .hasMessage("Payload checksum mismatch");
+    }
+
+    @Test
     void modifyRequest_batch() {
         String skippedPayload = "skip";
         byte[] skippedPayloadBytes = skippedPayload.getBytes(StandardCharsets.UTF_8);
@@ -1407,6 +1456,15 @@ class SqsCodecInterceptorTest {
         return new String(
                 encodingAlgorithm.implementation().encode(payload.getBytes(StandardCharsets.UTF_8)),
                 StandardCharsets.UTF_8);
+    }
+
+    private static Map<String, MessageAttributeValue> preEncodedAttributesWithCustomAttributes(int customAttributeCount) {
+        Map<String, MessageAttributeValue> attributes = customAttributes(customAttributeCount);
+        attributes.putAll(codecAttributes(
+                PAYLOAD.getBytes(StandardCharsets.UTF_8),
+                CompressionAlgorithm.NONE,
+                ChecksumAlgorithm.MD5));
+        return attributes;
     }
 
     private static Map<String, MessageAttributeValue> customAttributes(int count) {

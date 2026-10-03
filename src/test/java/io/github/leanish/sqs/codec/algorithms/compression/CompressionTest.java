@@ -93,6 +93,15 @@ class CompressionTest {
                 .hasCauseInstanceOf(expectedCause);
     }
 
+    @Test
+    void compressionException_compressKeepsAlgorithmAndCause() {
+        IOException cause = new IOException("stream closed");
+
+        assertThat(CompressionException.compress("gzip", cause))
+                .hasMessage("Failed to compress payload with gzip")
+                .hasCause(cause);
+    }
+
     private static Stream<Compressor> compressorCases() {
         return Stream.concat(
                 Arrays.stream(CompressionLevel.values())

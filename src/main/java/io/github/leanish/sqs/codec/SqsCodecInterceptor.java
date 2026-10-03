@@ -216,9 +216,6 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         CodecConfiguration configuration = metadata.configuration();
         boolean shouldDecode = shouldDecode(configuration);
         boolean shouldValidateChecksum = shouldValidateChecksum(configuration);
-        if (!shouldDecode && !shouldValidateChecksum) {
-            return message;
-        }
 
         byte[] payloadBytes = decodePayloadIfNeeded(message.body(), configuration);
         if (shouldValidateChecksum) {

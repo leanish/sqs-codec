@@ -1,0 +1,46 @@
+name: Mutation testing
+
+# Advisory: this workflow isn't a required check, so a failure flags the PR or commit without blocking merges.
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pitest:
+    name: PIT
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run mutation testing
+        run: ./gradlew pitest
+
+      - name: Upload PIT report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pitest-report
+          path: build/reports/pitest
+          retention-days: 14

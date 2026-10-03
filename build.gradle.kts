@@ -74,4 +74,5 @@ tasks.jacocoTestCoverageVerification {
 pitest {
     excludedGroups = listOf("integration")
     jvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
+    mutationThreshold = 95
 }

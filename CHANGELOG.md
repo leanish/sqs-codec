@@ -5,7 +5,8 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Added
-- Added PIT mutation testing (`./gradlew pitest`), excluding `integration`-tagged tests.
+- Added PIT mutation testing (`./gradlew pitest`), excluding `integration`-tagged tests, with a 95 % mutation threshold.
+  A separate, non-required "Mutation testing" workflow runs it on pull requests and `main`.
 
 ### Changed
 - Upgraded `io.github.leanish.java-conventions` from `0.5.5` to `0.6.0`, which now configures PIT.

@@ -45,6 +45,27 @@ class Ascii85PayloadCodecTest {
     }
 
     @Test
+    void ascii85_maximumChunkRoundTrip() {
+        Ascii85PayloadCodec ascii85Codec = Ascii85PayloadCodec.instance();
+        byte[] maximumChunk = {(byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff};
+
+        assertThat(ascii85Codec.encodeToString(maximumChunk))
+                .isEqualTo("s8W-!");
+        assertThat(ascii85Codec.decode("s8W-!".getBytes(StandardCharsets.US_ASCII)))
+                .containsExactly(maximumChunk);
+    }
+
+    @Test
+    void ascii85_emptyPayload() {
+        Ascii85PayloadCodec ascii85Codec = Ascii85PayloadCodec.instance();
+
+        assertThat(ascii85Codec.encode(new byte[0]))
+                .isEmpty();
+        assertThat(ascii85Codec.decode(new byte[0]))
+                .isEmpty();
+    }
+
+    @Test
     void ascii85_rejectsNonCanonicalPayload() {
         assertThatThrownBy(() -> Ascii85PayloadCodec.instance().decode("z".getBytes(StandardCharsets.US_ASCII)))
                 .isInstanceOf(InvalidPayloadException.class)

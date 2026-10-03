@@ -209,7 +209,9 @@ Run full checks (tests, checkstyle, spotless, jacoco):
 ./gradlew check
 ```
 
-Run mutation testing (PIT, excludes `integration`-tagged tests; report in `build/reports/pitest`):
+Run mutation testing (PIT, excludes `integration`-tagged tests and fails below a 95 % mutation score; report in `build/reports/pitest`):
 ```bash
 ./gradlew pitest
 ```
+
+CI runs it on pull requests and `main` in its own "Mutation testing" workflow. It isn't a required check, so a failure shows up as a red check without blocking the merge.

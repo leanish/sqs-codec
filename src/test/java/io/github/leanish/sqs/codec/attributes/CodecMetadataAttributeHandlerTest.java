@@ -224,7 +224,8 @@ class CodecMetadataAttributeHandlerTest {
                 Arguments.of("v=1;c=gzip;e=base64;h=none", gzipConfiguration, null, "v=1;c=gzip;e=base64;h=none"),
                 Arguments.of("v=1;c=gzip;e=base64;h=none;l=", gzipConfiguration, null, "v=1;c=gzip;e=base64;h=none"),
                 Arguments.of("v=1;c=gzip;e=base64;h=none;l=-1", gzipConfiguration, null, "v=1;c=gzip;e=base64;h=none"),
-                Arguments.of("v=1;c=gzip;e=base64;h=none;l=abc", gzipConfiguration, null, "v=1;c=gzip;e=base64;h=none"));
+                Arguments.of("v=1;c=gzip;e=base64;h=none;l=abc", gzipConfiguration, null, "v=1;c=gzip;e=base64;h=none"),
+                Arguments.of("v=1;c=gzip;e=base64;h=none;l=0", gzipConfiguration, null, "v=1;c=gzip;e=base64;h=none;l=0"));
     }
 
     private static Stream<Arguments> metadataPermutationCases() {
@@ -380,7 +381,15 @@ class CodecMetadataAttributeHandlerTest {
                 Arguments.of(
                         "v=1;c=none;e=base85;h=md5;s=abc",
                         UnsupportedAlgorithmException.class,
-                        "Unsupported payload encoding: base85"));
+                        "Unsupported payload encoding: base85"),
+                Arguments.of(
+                        "v=1;c=;e=base64;h=none",
+                        UnsupportedCodecMetadataException.class,
+                        "Unsupported codec metadata: v=1;c=;e=base64;h=none"),
+                Arguments.of(
+                        "v=1;c=none;e=base64;h=none;s=abc",
+                        ChecksumValidationException.class,
+                        "Missing required checksum algorithm"));
     }
 
     private static Map<String, MessageAttributeValue> metadataAttributes(String rawMetadata) {

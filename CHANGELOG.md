@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.5.1 - 2026-10-03
+
 ### Added
 - Added PIT mutation testing (`./gradlew pitest`), excluding `integration`-tagged tests, with the conventions' 95 % mutation threshold.
   A separate, non-required "Mutation testing" workflow runs it on pull requests and `main`.

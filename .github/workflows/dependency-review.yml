@@ -1,0 +1,61 @@
+name: Dependency review
+
+# Reviews every dependency a PR adds or changes against the GitHub Advisory Database (vulnerabilities and
+# malware), from the resolved Gradle graph. Building the graph runs the build, so it gets a read-only token;
+# a separate job without any build code submits it.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-graph:
+    name: Dependency graph
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Generate the resolved dependency graph
+        uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          dependency-graph: generate-and-upload
+
+  submit:
+    name: Submit dependency graph
+    needs: dependency-graph
+    runs-on: ubuntu-latest
+    permissions:
+      # The dependency submission API needs write access; this job runs no build code.
+      contents: write
+
+    steps:
+      - name: Submit the dependency graph
+        uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          dependency-graph: download-and-submit
+
+  review:
+    name: Dependency review
+    needs: submit
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Review added and changed dependencies
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          fail-on-scopes: runtime, development, unknown
+          retry-on-snapshot-warnings: true

@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "io.github.leanish"
-version = "0.5.1"
+version = "0.5.2-SNAPSHOT"
 description = "AWS SQS payload interceptor for automatic compression and encoding."
 
 val targetJavaVersion = 17
@@ -21,7 +21,7 @@ dependencies {
     compileOnly("software.amazon.awssdk:sqs")
 
     implementation("com.github.luben:zstd-jni:1.5.7-20")
-    implementation("org.xerial.snappy:snappy-java:1.1.10.8")
+    implementation("org.xerial.snappy:snappy-java:1.1.10.10")
 
     testImplementation("software.amazon.awssdk:sqs")
 

@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Security
+- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10`, which fixes CVE-2026-90559 and the six other
+  advisories snappy-java published on 2026-10-03 (out-of-bounds reads and writes, unbounded allocations and stream-buffer
+  issues when decompressing untrusted input). It skips the usual 7-day wait for new releases because it is a security fix.
+
 ## 0.5.1 - 2026-10-03
 
 ### Added

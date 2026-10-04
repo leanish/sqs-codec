@@ -6,7 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 - Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-21`.
-- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10`.
+- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10` to resolve CVE-2026-90559.
 - Upgraded `software.amazon.awssdk:bom` (compile-only and tests) from `2.55.10` to `2.55.11`.
 
 ## 0.5.1 - 2026-10-03

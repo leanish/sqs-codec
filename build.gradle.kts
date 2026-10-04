@@ -26,7 +26,6 @@ dependencies {
     testImplementation("software.amazon.awssdk:sqs")
 
     testImplementation("org.mockito:mockito-core")
-    testRuntimeOnly("org.apache.logging.log4j:log4j-core:2.14.1") // demo, to be reverted: Log4Shell
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-localstack")
 }

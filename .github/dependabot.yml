@@ -4,6 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      # Supply-chain precaution: wait 7 days before proposing a new release (matches the npm `min-release-age` used
+      # locally). Version updates only: security updates are not delayed.
+      default-days: 7
     ignore:
       # Review-load policy: AWS publishes SDK patch releases almost daily, and weekly minor bumps keep the BOM current.
       # `ignore` only affects version updates; Dependabot security updates still raise patch fixes.
@@ -21,6 +25,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      # Supply-chain precaution: wait 7 days before proposing a new release (matches the npm `min-release-age` used
+      # locally). Version updates only: security updates are not delayed.
+      default-days: 7
     groups:
       minor-and-patch:
         update-types:

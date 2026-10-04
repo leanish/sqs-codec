@@ -3,16 +3,26 @@ updates:
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     ignore:
+      # Review-load policy: AWS publishes SDK patch releases almost daily, and weekly minor bumps keep the BOM current.
+      # `ignore` only affects version updates; Dependabot security updates still raise patch fixes.
+      # Revisit if the BOM ever lags a needed fix between minors.
       - dependency-name: "software.amazon.awssdk:bom"
         update-types:
           - "version-update:semver-patch"
     groups:
-      patch-updates:
+      # Routine updates land together; majors come one PR each.
+      minor-and-patch:
         update-types:
+          - "minor"
           - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

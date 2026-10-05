@@ -214,4 +214,4 @@ Run mutation testing (PIT, excludes `integration`-tagged tests and fails below t
 ./gradlew pitest
 ```
 
-CI runs it on pull requests and `main` in its own "Mutation testing" workflow. It isn't a required check, so a failure shows up as a red check without blocking the merge.
+CI runs it on pull requests and `main` in its own "Mutation testing" workflow. Its `PIT` job is a required check, like `Build`: a pull request merges only once both pass.

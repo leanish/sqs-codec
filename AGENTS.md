@@ -24,3 +24,8 @@ Always run `./gradlew check` after each code change.
 - When adding algorithms, update the enum, the codec tests, and the interceptor tests.
 - JSpecify + NullAway handle nullability, so prefer explicit nullability annotations over defensive null-checks in internal code.
 - Keep null-checks at boundaries (external inputs, SDK responses, IO).
+
+## Versions and releases
+- `main` always carries the next version with `-SNAPSHOT`; other PRs never change `version`.
+- A release PR only drops `-SNAPSHOT` (plus the dated `CHANGELOG.md` heading); the tag and publish follow from its merge commit.
+- Right after publishing, a PR that only starts the next development version (`X.Y.(Z+1)-SNAPSHOT`); the release can still pick a higher number if a feature or breaking change lands first.

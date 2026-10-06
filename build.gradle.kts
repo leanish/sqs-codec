@@ -21,7 +21,7 @@ dependencies {
     compileOnly("software.amazon.awssdk:sqs")
 
     implementation("com.github.luben:zstd-jni:1.5.7-20")
-    implementation("org.xerial.snappy:snappy-java:1.1.10.8")
+    implementation("org.xerial.snappy:snappy-java:1.1.10.9")
 
     testImplementation("software.amazon.awssdk:sqs")
 

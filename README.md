@@ -202,6 +202,7 @@ try {
 Build target is Java 17 bytecode.
 Toolchain comes from `java-conventions` (default compile/runtime JDK 25).
 CI (`ci.yml`) runs full `build` on JDK 25.
+The [leanish/supply-chain](https://github.com/leanish/supply-chain) gate (`supply-chain.yml`) checks every PR for what it makes worse (new advisories, young versions, unpinned new actions), scans `main` on every push and daily, and rescans open PRs daily.
 Legacy runtime checks (`testing-legacy-jdk.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
 
 Run full checks (tests, checkstyle, spotless, jacoco):

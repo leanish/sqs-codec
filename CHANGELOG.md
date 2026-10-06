@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+- Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every
+  pull request against one advisory snapshot of base and head, scans `main` on pushes and daily, and rescans open pull requests daily.
+
 ## 0.5.1 - 2026-10-03
 
 ### Added

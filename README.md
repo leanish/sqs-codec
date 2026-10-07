@@ -204,6 +204,7 @@ Toolchain comes from `java-conventions` (default compile/runtime JDK 25).
 CI (`ci.yml`) runs full `build` on JDK 25.
 The [leanish/supply-chain](https://github.com/leanish/supply-chain) gate (`supply-chain.yml`) checks every PR for what it makes worse (new advisories, young versions, unpinned new actions), scans `main` on every push and daily, and rescans open PRs daily.
 Legacy runtime checks (`testing-legacy-jdk.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
+The build, mutation testing, GitHub publishing, and legacy-JDK workflows use GitHub-hosted `ubuntu-26.04` runners.
 
 Run full checks (tests, checkstyle, spotless, jacoco):
 ```bash
@@ -215,4 +216,4 @@ Run mutation testing (PIT, excludes `integration`-tagged tests and fails below t
 ./gradlew pitest
 ```
 
-CI runs it on pull requests and `main` in its own "Mutation testing" workflow. It isn't a required check, so a failure shows up as a red check without blocking the merge.
+CI runs it on pull requests and `main` in its own "Mutation testing" workflow. Its `PIT` job is a required check, like `Build`: a pull request merges only once both pass.

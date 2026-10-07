@@ -1,6 +1,6 @@
 name: Mutation testing
 
-# Advisory: this workflow isn't a required check, so a failure flags the PR or commit without blocking merges.
+# Its `PIT` job is a required check on `main`, like `Build`: a failing mutation threshold blocks the merge.
 on:
   workflow_dispatch:
   pull_request:
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   pitest:
     name: PIT
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
 
     steps:

@@ -7,6 +7,10 @@ All notable changes to this project are documented in this file.
 ### Added
 - Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every
   pull request against one advisory snapshot of base and head, scans `main` on pushes and daily, and rescans open pull requests daily.
+### Security
+- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10`, the lowest stable version fixing all seven
+  advisories published on 2026-10-03, including CVE-2026-90559 (out-of-bounds accesses, unbounded allocations,
+  stream recursion and pooled-buffer reuse). This security fix skips the usual seven-day release cooldown.
 
 ## 0.5.1 - 2026-10-03
 

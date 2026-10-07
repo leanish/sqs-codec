@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   supply-chain:
-    uses: leanish/supply-chain/.github/workflows/supply-chain.yml@19713b69af444e3fea7211abb3e35ecc0120a150 # v0.1.0-rc.4
+    uses: leanish/supply-chain/.github/workflows/supply-chain.yml@cb630386ce9976cef5ba37665f4abc615f34d7fe # Ubuntu 26.04 gate
     permissions:
       contents: read
       pull-requests: read # the daily rescan lists open PRs

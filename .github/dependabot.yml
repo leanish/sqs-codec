@@ -3,34 +3,16 @@ updates:
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
-      interval: "weekly"
-    cooldown:
-      # Supply-chain precaution: wait 7 days before proposing a new release (matches the npm `min-release-age` used
-      # locally). Version updates only: security updates are not delayed.
-      default-days: 7
+      interval: "daily"
     ignore:
-      # Review-load policy: AWS publishes SDK patch releases almost daily, and weekly minor bumps keep the BOM current.
-      # `ignore` only affects version updates; Dependabot security updates still raise patch fixes.
-      # Revisit if the BOM ever lags a needed fix between minors.
       - dependency-name: "software.amazon.awssdk:bom"
         update-types:
           - "version-update:semver-patch"
     groups:
-      # Routine updates land together; majors come one PR each.
-      minor-and-patch:
+      patch-updates:
         update-types:
-          - "minor"
           - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-    cooldown:
-      # Supply-chain precaution: wait 7 days before proposing a new release (matches the npm `min-release-age` used
-      # locally). Version updates only: security updates are not delayed.
-      default-days: 7
-    groups:
-      minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
+      interval: "daily"

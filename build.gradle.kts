@@ -1,3 +1,5 @@
+import org.gradle.api.plugins.quality.CheckstyleExtension
+
 plugins {
     `java-library`
     id("io.github.leanish.java-conventions")
@@ -7,10 +9,25 @@ group = "io.github.leanish"
 version = "0.5.2-SNAPSHOT"
 description = "AWS SQS payload interceptor for automatic compression and encoding."
 
+val checkstyleExtension = extensions.getByType<CheckstyleExtension>()
+
 val targetJavaVersion = 17
 val defaultTestRuntimeJavaVersion = 25
 
 dependencies {
+    // Checkstyle and Error Prone resolve affected Guava versions in their tool graphs.
+    annotationProcessor("com.google.guava:guava:33.7.2-jre") {
+        because("GHSA-xxph-c9ww-hj94: prevents excessive allocation during Guava deserialization")
+    }
+    testAnnotationProcessor("com.google.guava:guava:33.7.2-jre") {
+        because("GHSA-xxph-c9ww-hj94: prevents excessive allocation during Guava deserialization")
+    }
+    checkstyle("com.google.guava:guava:33.7.2-jre") {
+        because("GHSA-xxph-c9ww-hj94: prevents excessive allocation during Guava deserialization")
+    }
+    // An explicit Checkstyle dependency replaces the conventions' default tool artifact.
+    checkstyle(providers.provider { "com.puppycrawl.tools:checkstyle:${checkstyleExtension.toolVersion}" })
+
     // BOMs
     compileOnly(platform("software.amazon.awssdk:bom:2.55.10"))
     testImplementation(platform("software.amazon.awssdk:bom:2.55.10"))

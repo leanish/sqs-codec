@@ -1,0 +1,33 @@
+name: supply-chain
+
+# The supply-chain gate (leanish/supply-chain): on a PR, compares base and head against one advisory snapshot; on
+# pushes to main and daily, scans everything; daily, rescans every open PR and posts its verdict as a status named
+# like the required check. See https://github.com/leanish/supply-chain/blob/main/packages/ci/README.md.
+
+on:
+  pull_request:
+    # `edited` covers a retargeted base, which changes what the gate compares against.
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * *" # an odd minute: GitHub delays or drops scheduled runs on the hour
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Rescan only this open PR now
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  supply-chain:
+    uses: leanish/supply-chain/.github/workflows/supply-chain.yml@c65259a14e83de0d812384241978ae41301b30fa # v0.1.0
+    permissions:
+      contents: read
+      pull-requests: read # the daily rescan lists open PRs
+      statuses: write # the daily rescan posts its verdicts
+    with:
+      java-version: "25"

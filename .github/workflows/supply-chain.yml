@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   supply-chain:
-    uses: leanish/supply-chain/.github/workflows/supply-chain.yml@c61bfb90a2d48a86f0d9dee306936cd0cfdb00b4 # v0.2.1
+    uses: leanish/supply-chain/.github/workflows/supply-chain.yml@f74afe03e6a2e66f00a9b03af5fe1d33f8c25e90 # v0.2.2-rc.3
     permissions:
       contents: read
       pull-requests: read # the daily rescan lists open PRs

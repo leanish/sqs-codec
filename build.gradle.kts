@@ -15,16 +15,6 @@ val targetJavaVersion = 17
 val defaultTestRuntimeJavaVersion = 25
 
 dependencies {
-    // Checkstyle and Error Prone resolve affected Guava versions in their tool graphs.
-    annotationProcessor("com.google.guava:guava:33.7.2-jre") {
-        because("GHSA-xxph-c9ww-hj94: prevents excessive allocation during Guava deserialization")
-    }
-    testAnnotationProcessor("com.google.guava:guava:33.7.2-jre") {
-        because("GHSA-xxph-c9ww-hj94: prevents excessive allocation during Guava deserialization")
-    }
-    checkstyle("com.google.guava:guava:33.7.2-jre") {
-        because("GHSA-xxph-c9ww-hj94: prevents excessive allocation during Guava deserialization")
-    }
     // An explicit Checkstyle dependency replaces the conventions' default tool artifact.
     checkstyle(providers.provider { "com.puppycrawl.tools:checkstyle:${checkstyleExtension.toolVersion}" })
 

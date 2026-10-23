@@ -82,6 +82,10 @@ Defaults:
 - `MD5` is intended for non-adversarial integrity checks; prefer `SHA256` when producers may be attacker-controlled.
 - `skipCompressionWhenLarger`: `true`
 - `includeRawPayloadLength`: `true`
+- `maxDecodedPayloadBytes`: `16 MiB` (`SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES`)
+- Decoding never produces more than `maxDecodedPayloadBytes` bytes, wherever the interceptor decodes a payload: on receive, and when it validates an already encoded message before sending. A payload that would decode to more fails with `DecompressedPayloadTooLargeException` as soon as it passes the limit, so a small message can't expand without bound. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive.
+- A compressed payload that declares its raw length (`l`) must decode to exactly that many bytes: an `l` over the limit fails before decompressing, and a payload that decodes to fewer bytes fails with `CompressionException`. A missing or unparseable `l` falls back to the limit, and `l` is still ignored when `c=none`.
+- The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten. Zstd's decoder also allocates the window a frame declares; zstd refuses windows over 128 MiB by default, which frames written at `MAXIMUM` already reach, so that bound stays at zstd's default.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if compressed payload would be larger than the original body, the interceptor sends the original body and writes `c=none`.
 - When outbound processing resolves to `c=none` and `h=none`, the interceptor does not add `x-codec-meta`.
 - Compression level is local send-side configuration only; it does not change codec metadata.
@@ -174,6 +178,8 @@ try {
     // use decoded payloads
 } catch (InvalidPayloadException e) {
     // bad payload data, consider DLQ or logging
+} catch (DecompressedPayloadTooLargeException e) {
+    // the payload would decode past maxDecodedPayloadBytes (or its declared raw length)
 } catch (CompressionException e) {
     // payload decompression failed
 } catch (CodecException e) {

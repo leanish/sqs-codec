@@ -33,7 +33,7 @@ class CompressionTest {
         byte[] payload = "payload-42".getBytes(StandardCharsets.UTF_8);
 
         byte[] compressed = compressor.compress(payload);
-        byte[] decoded = compressor.decompress(compressed);
+        byte[] decoded = compressor.decompress(compressed, Integer.MAX_VALUE);
 
         assertThat(decoded)
                 .isEqualTo(payload);
@@ -46,7 +46,7 @@ class CompressionTest {
 
         assertThat(compressor.compress(payload))
                 .isSameAs(payload);
-        assertThat(compressor.decompress(payload))
+        assertThat(compressor.decompress(payload, Integer.MAX_VALUE))
                 .isSameAs(payload);
     }
 
@@ -87,7 +87,7 @@ class CompressionTest {
             String payload,
             Class<? extends IOException> expectedCause,
             String expectedMessage) {
-        assertThatThrownBy(() -> compressor.decompress(payload.getBytes(StandardCharsets.UTF_8)))
+        assertThatThrownBy(() -> compressor.decompress(payload.getBytes(StandardCharsets.UTF_8), Integer.MAX_VALUE))
                 .isInstanceOf(CompressionException.class)
                 .hasMessage(expectedMessage)
                 .hasCauseInstanceOf(expectedCause);
@@ -147,5 +147,120 @@ class CompressionTest {
                 Arguments.of(CompressionLevel.MEDIUM, Zstd.defaultCompressionLevel()),
                 Arguments.of(CompressionLevel.HIGH, 16),
                 Arguments.of(CompressionLevel.MAXIMUM, Zstd.maxCompressionLevel()));
+    }
+
+    private static final int MIB = 1024 * 1024;
+
+    @ParameterizedTest
+    @MethodSource("boundedCompressors")
+    void decompress_acceptsAPayloadExactlyAtTheLimit_andRefusesOneByteMore(Compressor compressor) {
+        byte[] payload = TestPayloadBytes.mixed(100_000);
+        byte[] compressed = compressor.compress(payload);
+
+        assertThat(compressor.decompress(compressed, payload.length)).isEqualTo(payload);
+        assertThatThrownBy(() -> compressor.decompress(compressed, payload.length - 1))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessageEndingWith("exceeds " + (payload.length - 1) + " bytes");
+    }
+
+    @ParameterizedTest
+    @MethodSource("boundedCompressors")
+    void decompress_emptyPayloadAtZeroLimit(Compressor compressor) {
+        assertThat(compressor.decompress(compressor.compress(new byte[0]), 0)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @MethodSource("boundedCompressors")
+    void decompress_negativeLimitRejected(Compressor compressor) {
+        byte[] compressed = compressor.compress(new byte[] {1});
+
+        assertThatThrownBy(() -> compressor.decompress(compressed, -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("maxLength must not be negative: -1");
+    }
+
+    @ParameterizedTest
+    @MethodSource("streamingCompressors")
+    void decompress_bombStopsAtTheLimit(Compressor compressor) {
+        byte[] bomb = compressor.compress(new byte[64 * MIB]);
+
+        assertThat(bomb.length).isLessThan(MIB / 4);
+        assertThatThrownBy(() -> compressor.decompress(bomb, MIB))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class);
+    }
+
+    @Test
+    void decompress_gzipCountsEveryConcatenatedMember() {
+        GzipCompressor compressor = new GzipCompressor();
+        byte[] member = compressor.compress(new byte[600 * 1024]);
+        byte[] concatenated = concat(member, member);
+
+        assertThat(compressor.decompress(concatenated, 1200 * 1024)).hasSize(1200 * 1024);
+        assertThatThrownBy(() -> compressor.decompress(concatenated, MIB))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class);
+    }
+
+    @Test
+    void decompress_zstdCountsEveryConcatenatedFrame() {
+        ZstdCompressor compressor = new ZstdCompressor();
+        byte[] frame = compressor.compress(new byte[600 * 1024]);
+        byte[] concatenated = concat(frame, frame);
+
+        assertThat(compressor.decompress(concatenated, 1200 * 1024)).hasSize(1200 * 1024);
+        assertThatThrownBy(() -> compressor.decompress(concatenated, MIB))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class);
+    }
+
+    @Test
+    void decompress_gzipStillVerifiesItsTrailerAtTheExactLimit() {
+        GzipCompressor compressor = new GzipCompressor();
+        byte[] payload = TestPayloadBytes.mixed(10_000);
+        byte[] corrupted = compressor.compress(payload);
+        // The trailer's last four bytes are the uncompressed size modulo 2^32; its CRC-32 is the four before them.
+        corrupted[corrupted.length - 8] ^= 0x01;
+
+        assertThatThrownBy(() -> compressor.decompress(corrupted, payload.length))
+                .isInstanceOf(CompressionException.class)
+                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Failed to decompress payload with gzip");
+    }
+
+    @Test
+    void decompress_snappyChecksTheLengthAValidPayloadDeclares() {
+        SnappyCompressor compressor = new SnappyCompressor();
+        byte[] compressed = compressor.compress(new byte[2 * MIB]);
+
+        assertThatThrownBy(() -> compressor.decompress(compressed, MIB))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with snappy exceeds " + MIB + " bytes");
+    }
+
+    private static Stream<Compressor> boundedCompressors() {
+        return Stream.of(new GzipCompressor(), new ZstdCompressor(), new SnappyCompressor(), new NoOpCompressor());
+    }
+
+    private static Stream<Compressor> streamingCompressors() {
+        return Stream.of(new GzipCompressor(), new ZstdCompressor());
+    }
+
+    private static byte[] concat(byte[] first, byte[] second) {
+        byte[] result = Arrays.copyOf(first, first.length + second.length);
+        System.arraycopy(second, 0, result, first.length, second.length);
+        return result;
+    }
+
+    /** Payloads that compress only partly, so a decompressed length isn't a multiple of anything convenient. */
+    private static final class TestPayloadBytes {
+
+        private TestPayloadBytes() {
+        }
+
+        static byte[] mixed(int length) {
+            byte[] bytes = new byte[length];
+            for (int i = 0; i < length; i++) {
+                bytes[i] = (byte) ((i * 31 + i / 7) % 251);
+            }
+            return bytes;
+        }
     }
 }

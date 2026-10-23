@@ -53,12 +53,13 @@ public class GzipCompressor implements Compressor {
     }
 
     @Override
-    public byte[] decompress(byte[] payload) {
+    public byte[] decompress(byte[] payload, int maxLength) {
+        BoundedReads.requireNonNegative(maxLength);
         try (ByteArrayInputStream compressedStream = new ByteArrayInputStream(payload);
-                InputStream inputStream = new GZIPInputStream(compressedStream);
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            inputStream.transferTo(outputStream);
-            return outputStream.toByteArray();
+                InputStream inputStream = new GZIPInputStream(compressedStream)) {
+            return BoundedReads.readAtMost(inputStream, maxLength, ALGORITHM);
+        } catch (DecompressedPayloadTooLargeException e) {
+            throw e;
         } catch (IOException | RuntimeException e) {
             throw CompressionException.decompress(ALGORITHM, e);
         }

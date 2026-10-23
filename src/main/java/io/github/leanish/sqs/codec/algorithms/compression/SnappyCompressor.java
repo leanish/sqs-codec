@@ -30,9 +30,16 @@ public class SnappyCompressor implements Compressor {
     }
 
     @Override
-    public byte[] decompress(byte[] payload) {
+    public byte[] decompress(byte[] payload, int maxLength) {
+        BoundedReads.requireNonNegative(maxLength);
         try {
+            // Snappy allocates the length a payload declares, so that length is checked before anything is allocated.
+            if (Snappy.uncompressedLength(payload) > maxLength) {
+                throw DecompressedPayloadTooLargeException.exceeds(ALGORITHM, maxLength);
+            }
             return Snappy.uncompress(payload);
+        } catch (DecompressedPayloadTooLargeException e) {
+            throw e;
         } catch (IOException | RuntimeException | SnappyError e) {
             throw CompressionException.decompress(ALGORITHM, e);
         }

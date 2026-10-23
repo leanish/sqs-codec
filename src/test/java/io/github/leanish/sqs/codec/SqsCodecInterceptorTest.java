@@ -32,6 +32,7 @@ import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.UnsupportedAlgorithmException;
 import io.github.leanish.sqs.codec.algorithms.compression.CompressionException;
+import io.github.leanish.sqs.codec.algorithms.compression.DecompressedPayloadTooLargeException;
 import io.github.leanish.sqs.codec.algorithms.encoding.Base64PayloadCodec;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
@@ -86,7 +87,7 @@ class SqsCodecInterceptorTest {
         assertThat(encoded.messageBody())
                 .isNotEqualTo(PAYLOAD);
         Codec codec = new Codec(CompressionAlgorithm.ZSTD);
-        assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
+        assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8), Integer.MAX_VALUE), StandardCharsets.UTF_8))
                 .isEqualTo(PAYLOAD);
     }
 
@@ -189,7 +190,7 @@ class SqsCodecInterceptorTest {
                 .isEqualTo("v=1;c=zstd;e=base64;h=md5;s=" + expectedChecksum + ";l=" + payloadLength);
         assertThat(encoded.messageBody()).isNotEqualTo(compressiblePayload);
         Codec codec = new Codec(CompressionAlgorithm.ZSTD);
-        assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
+        assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8), Integer.MAX_VALUE), StandardCharsets.UTF_8))
                 .isEqualTo(compressiblePayload);
     }
 
@@ -354,7 +355,7 @@ class SqsCodecInterceptorTest {
         assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
                 .isEqualTo("v=1;c=gzip;e=ascii85;h=none;l=12");
         Codec codec = new Codec(CompressionAlgorithm.GZIP, EncodingAlgorithm.ASCII85);
-        assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
+        assertThat(new String(codec.decode(encoded.messageBody().getBytes(StandardCharsets.UTF_8), Integer.MAX_VALUE), StandardCharsets.UTF_8))
                 .isEqualTo(PAYLOAD);
     }
 
@@ -764,7 +765,7 @@ class SqsCodecInterceptorTest {
                 .containsKeys(CodecAttributes.META);
         assertThat(encodedEntry.messageBody()).isNotEqualTo(PAYLOAD);
         Codec codec = new Codec(CompressionAlgorithm.ZSTD);
-        assertThat(new String(codec.decode(encodedEntry.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
+        assertThat(new String(codec.decode(encodedEntry.messageBody().getBytes(StandardCharsets.UTF_8), Integer.MAX_VALUE), StandardCharsets.UTF_8))
                 .isEqualTo(PAYLOAD);
         assertThat(skippedEntry)
                 .isSameAs(request.entries().get(1));
@@ -811,7 +812,7 @@ class SqsCodecInterceptorTest {
         assertThat(compressibleEntry.messageAttributes().get(CodecAttributes.META).stringValue())
                 .isEqualTo("v=1;c=zstd;e=base64;h=md5;s=" + compressibleChecksum + ";l=" + compressiblePayloadBytes.length);
         Codec codec = new Codec(CompressionAlgorithm.ZSTD);
-        assertThat(new String(codec.decode(compressibleEntry.messageBody().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8))
+        assertThat(new String(codec.decode(compressibleEntry.messageBody().getBytes(StandardCharsets.UTF_8), Integer.MAX_VALUE), StandardCharsets.UTF_8))
                 .isEqualTo(compressiblePayload);
     }
 
@@ -1273,6 +1274,139 @@ class SqsCodecInterceptorTest {
                 new ExecutionAttributes()))
                 .isInstanceOf(CompressionException.class)
                 .hasMessage(expectedMessage);
+    }
+
+    @Test
+    void defaultInterceptor_limitsDecodedPayloadsTo16MiB() {
+        assertThat(SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES).isEqualTo(16 * 1024 * 1024);
+    }
+
+    @Test
+    void withMaxDecodedPayloadBytes_rejectsZeroAndNegative() {
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().withMaxDecodedPayloadBytes(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("maxDecodedPayloadBytes must be positive: 0");
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().withMaxDecodedPayloadBytes(-1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = CompressionAlgorithm.class, names = {"GZIP", "ZSTD"})
+    void modifyResponse_bombWithoutRawLengthStopsAtTheLimit(CompressionAlgorithm compressionAlgorithm) {
+        String body = Base64PayloadCodec.instance().encodeToString(
+                compressionAlgorithm.implementation().compress(new byte[8 * 1024 * 1024]));
+        ReceiveMessageResponse response = receivedWith(body, "v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none");
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .withMaxDecodedPayloadBytes(1024 * 1024)
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with " + compressionAlgorithm.id() + " exceeds 1048576 bytes");
+    }
+
+    @Test
+    void modifyResponse_rawLengthOverTheLimitFailsBeforeDecompressing() {
+        ReceiveMessageResponse response = receivedWith(
+                compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD),
+                "v=1;c=zstd;e=base64;h=none;l=" + (1024 * 1024 + 1));
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .withMaxDecodedPayloadBytes(1024 * 1024)
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with zstd exceeds 1048576 bytes");
+    }
+
+    @Test
+    void modifyResponse_rawLengthSmallerThanThePayloadStopsAtThatLength() {
+        int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
+        ReceiveMessageResponse response = receivedWith(
+                compressedBody(CompressionAlgorithm.GZIP, PAYLOAD),
+                "v=1;c=gzip;e=base64;h=none;l=" + (length - 1));
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with gzip exceeds " + (length - 1) + " bytes");
+    }
+
+    @Test
+    void modifyResponse_rawLengthLargerThanThePayloadIsAMismatch() {
+        int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
+        ReceiveMessageResponse response = receivedWith(
+                compressedBody(CompressionAlgorithm.SNAPPY, PAYLOAD),
+                "v=1;c=snappy;e=base64;h=none;l=" + (length + 1));
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(CompressionException.class)
+                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with snappy has " + length + " bytes, but its metadata declares " + (length + 1));
+    }
+
+    @ParameterizedTest
+    @MethodSource("unusableRawLengths")
+    void modifyResponse_unusableRawLengthFallsBackToTheConfiguredLimit(String rawLength) {
+        ReceiveMessageResponse response = receivedWith(
+                compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD),
+                "v=1;c=zstd;e=base64;h=none;l=" + rawLength);
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
+    }
+
+    @Test
+    void modifyResponse_multibyteUtf8MatchesItsRawLength() {
+        String payload = "{\"name\":\"Jyväskylä 🦊\"}";
+        int length = payload.getBytes(StandardCharsets.UTF_8).length;
+        ReceiveMessageResponse response = receivedWith(
+                compressedBody(CompressionAlgorithm.ZSTD, payload),
+                "v=1;c=zstd;e=base64;h=none;l=" + length);
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .withMaxDecodedPayloadBytes(length)
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(payload);
+    }
+
+    @Test
+    void modifyRequest_preEncodedPayloadsAreBoundedToo() {
+        String bomb = Base64PayloadCodec.instance().encodeToString(
+                CompressionAlgorithm.ZSTD.implementation().compress(new byte[8 * 1024 * 1024]));
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META,
+                MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none"));
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor().withMaxDecodedPayloadBytes(1024 * 1024);
+        SendMessageRequest single = SendMessageRequest.builder().messageBody(bomb).messageAttributes(attributes).build();
+        SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
+                .entries(SendMessageBatchRequestEntry.builder().id("1").messageBody(bomb).messageAttributes(attributes).build())
+                .build();
+
+        assertThatThrownBy(() -> interceptor.modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class);
+        assertThatThrownBy(() -> interceptor.modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class);
+    }
+
+    private static Stream<String> unusableRawLengths() {
+        return Stream.of("", "abc", "-5", "99999999999");
+    }
+
+    private static String compressedBody(CompressionAlgorithm compressionAlgorithm, String payload) {
+        return Base64PayloadCodec.instance().encodeToString(
+                compressionAlgorithm.implementation().compress(payload.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static ReceiveMessageResponse receivedWith(String body, String metadata) {
+        return ReceiveMessageResponse.builder()
+                .messages(Message.builder()
+                        .body(body)
+                        .messageAttributes(Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute(metadata)))
+                        .build())
+                .build();
     }
 
     private static Stream<Arguments> defaultedAttributeCases() {

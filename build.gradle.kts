@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "io.github.leanish"
-version = "0.5.2-SNAPSHOT"
+version = "0.6.0-SNAPSHOT"
 description = "AWS SQS payload interceptor for automatic compression and encoding."
 
 val checkstyleExtension = extensions.getByType<CheckstyleExtension>()

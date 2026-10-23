@@ -18,4 +18,10 @@ public class DecompressedPayloadTooLargeException extends CompressionException {
         return new DecompressedPayloadTooLargeException(
                 "Decompressed payload with " + algorithm + " exceeds " + maxLength + " bytes");
     }
+
+    public static DecompressedPayloadTooLargeException declaredOverLimit(String algorithm, int declaredLength, int maxLength) {
+        return new DecompressedPayloadTooLargeException(
+                "Payload with " + algorithm + " declares " + declaredLength + " decoded bytes, over the "
+                        + maxLength + "-byte limit");
+    }
 }

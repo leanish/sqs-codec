@@ -50,7 +50,7 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private static final int MAX_SQS_MESSAGE_ATTRIBUTES = 10;
-    /** The default limit on a decoded payload: 16 MiB, sixteen times SQS's largest message body. */
+    /** The default limit on a decoded payload: 16 MiB. */
     public static final int DEFAULT_MAX_DECODED_PAYLOAD_BYTES = 16 * 1024 * 1024;
     private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
             CompressionAlgorithm.NONE,
@@ -264,9 +264,16 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         }
         int expectedLength = declaredLength.getAsInt();
         if (expectedLength > maxDecodedPayloadBytes) {
-            throw DecompressedPayloadTooLargeException.exceeds(compression.id(), maxDecodedPayloadBytes);
+            throw DecompressedPayloadTooLargeException.declaredOverLimit(
+                    compression.id(), expectedLength, maxDecodedPayloadBytes);
         }
-        byte[] decoded = codec.decode(messageBodyBytes, expectedLength);
+        byte[] decoded;
+        try {
+            decoded = codec.decode(messageBodyBytes, expectedLength);
+        } catch (DecompressedPayloadTooLargeException e) {
+            // Within the configured limit, decoding past the declared length is a metadata mismatch, not a size problem.
+            throw CompressionException.longerThanDeclared(compression.id(), expectedLength);
+        }
         if (decoded.length != expectedLength) {
             throw CompressionException.lengthMismatch(compression.id(), expectedLength, decoded.length);
         }

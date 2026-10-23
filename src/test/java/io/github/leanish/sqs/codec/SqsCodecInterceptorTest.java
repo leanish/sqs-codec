@@ -1314,11 +1314,11 @@ class SqsCodecInterceptorTest {
                 .withMaxDecodedPayloadBytes(1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with zstd exceeds 1048576 bytes");
+                .hasMessage("Payload with zstd declares 1048577 decoded bytes, over the 1048576-byte limit");
     }
 
     @Test
-    void modifyResponse_rawLengthSmallerThanThePayloadStopsAtThatLength() {
+    void modifyResponse_payloadLongerThanItsRawLengthIsAMismatch() {
         int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
         ReceiveMessageResponse response = receivedWith(
                 compressedBody(CompressionAlgorithm.GZIP, PAYLOAD),
@@ -1326,8 +1326,9 @@ class SqsCodecInterceptorTest {
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
-                .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with gzip exceeds " + (length - 1) + " bytes");
+                .isInstanceOf(CompressionException.class)
+                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with gzip has more than the " + (length - 1) + " bytes its metadata declares");
     }
 
     @Test

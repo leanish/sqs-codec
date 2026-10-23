@@ -9,14 +9,19 @@ All notable changes to this project are documented in this file.
   zstd and 1 MB with gzip) and exhaust a consumer's memory on receive. Decoding now stops with
   `DecompressedPayloadTooLargeException` as soon as it passes `maxDecodedPayloadBytes` (default 16 MiB, set with
   `withMaxDecodedPayloadBytes(...)`), on receive and when validating already encoded outbound messages. Snappy's
-  declared length is checked before it allocates.
+  declared length is checked before it allocates, and zstd's decoder refuses a frame whose declared window is larger
+  than the limit before allocating it.
 
 ### Changed
 - `Compressor.decompress(byte[])` is now `decompress(byte[] payload, int maxLength)`, so no decompression path is
   unbounded.
-- A compressed payload whose metadata declares its raw length (`l`) must decode to exactly that length; an `l` over the
-  limit fails before decompressing. A missing or unparseable `l` falls back to the limit, and `l` is still ignored when
-  `c=none`.
+- Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
+  than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few bytes).
+  Frames written by earlier versions are refused when their declared window is larger than the limit.
+- A compressed payload whose metadata declares its raw length (`l`) must decode to exactly that length, on receive and
+  when an already encoded message is validated before sending; an `l` over the limit fails before decompressing. A
+  missing or unparseable `l` falls back to the limit, and `l` is still ignored when `c=none`. A message over the limit,
+  or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
 
 ### Added
 - Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every

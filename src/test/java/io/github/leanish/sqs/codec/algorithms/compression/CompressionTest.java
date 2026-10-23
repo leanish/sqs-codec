@@ -235,6 +235,49 @@ class CompressionTest {
                 .hasMessage("Decompressed payload with snappy exceeds " + MIB + " bytes");
     }
 
+    @ParameterizedTest
+    @MethodSource("zstdCompressors")
+    void compress_zstdRecordsTheContentSize(ZstdCompressor compressor) {
+        byte[] payload = TestPayloadBytes.mixed(100_000);
+
+        assertThat(Zstd.getFrameContentSize(compressor.compress(payload))).isEqualTo(payload.length);
+    }
+
+    @Test
+    void decompress_zstdRefusesAFrameWhoseWindowExceedsTheLimit() {
+        // A frame header declaring a 128 MiB window (log 27) and no content size, then an empty last raw block.
+        byte[] forged = {0x28, (byte) 0xb5, 0x2f, (byte) 0xfd, 0x00, (byte) 0x88, 0x01, 0x00, 0x00};
+
+        assertThat(new ZstdCompressor().decompress(forged, 128 * MIB)).isEmpty();
+        assertThatThrownBy(() -> new ZstdCompressor().decompress(forged, MIB))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with zstd exceeds " + MIB + " bytes");
+    }
+
+    @ParameterizedTest
+    @MethodSource("windowLogCases")
+    void windowLogFor_holdsTheLimit(int maxLength, int expectedWindowLog) {
+        assertThat(ZstdCompressor.windowLogFor(maxLength)).isEqualTo(expectedWindowLog);
+    }
+
+    private static Stream<ZstdCompressor> zstdCompressors() {
+        return Stream.concat(
+                Stream.of(new ZstdCompressor()),
+                Arrays.stream(CompressionLevel.values()).map(ZstdCompressor::new));
+    }
+
+    private static Stream<Arguments> windowLogCases() {
+        return Stream.of(
+                Arguments.of(0, 10),
+                Arguments.of(12, 10),
+                Arguments.of(1024, 10),
+                Arguments.of(1025, 11),
+                Arguments.of(MIB, 20),
+                Arguments.of(16 * MIB, 24),
+                Arguments.of(16 * MIB + 1, 25),
+                Arguments.of(Integer.MAX_VALUE, 31));
+    }
+
     private static Stream<Compressor> boundedCompressors() {
         return Stream.of(new GzipCompressor(), new ZstdCompressor(), new SnappyCompressor(), new NoOpCompressor());
     }

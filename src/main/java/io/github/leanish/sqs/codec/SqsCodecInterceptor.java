@@ -278,7 +278,10 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
                 throw CompressionException.longerThanDeclared(compression.id(), expectedLength);
             }
             OptionalInt payloadDeclared = e.declaredLength();
-            if (payloadDeclared.isPresent() && payloadDeclared.getAsInt() <= maxDecodedPayloadBytes) {
+            // A negative declared length means one past Integer.MAX_VALUE: a size problem, never a mismatch.
+            if (payloadDeclared.isPresent()
+                    && payloadDeclared.getAsInt() >= 0
+                    && payloadDeclared.getAsInt() <= maxDecodedPayloadBytes) {
                 throw CompressionException.lengthMismatch(compression.id(), expectedLength, payloadDeclared.getAsInt());
             }
             throw e;

@@ -271,12 +271,17 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         try {
             decoded = codec.decode(messageBodyBytes, expectedLength);
         } catch (DecompressedPayloadTooLargeException e) {
-            // Within the configured limit, decoding past the declared length is a metadata mismatch, not a size problem.
-            // A size or window refused up front stays a size problem: nothing was decoded to compare.
-            if (!e.outputExceeded()) {
-                throw e;
+            // Within the configured limit, a payload longer than its raw length is a metadata mismatch, not a size
+            // problem: whether its output passed l, or its own header (snappy) declares more than l but no more than
+            // the limit. A zstd window refused up front stays a size problem: nothing was decoded to compare.
+            if (e.outputExceeded()) {
+                throw CompressionException.longerThanDeclared(compression.id(), expectedLength);
             }
-            throw CompressionException.longerThanDeclared(compression.id(), expectedLength);
+            OptionalInt payloadDeclared = e.declaredLength();
+            if (payloadDeclared.isPresent() && payloadDeclared.getAsInt() <= maxDecodedPayloadBytes) {
+                throw CompressionException.lengthMismatch(compression.id(), expectedLength, payloadDeclared.getAsInt());
+            }
+            throw e;
         }
         if (decoded.length != expectedLength) {
             throw CompressionException.lengthMismatch(compression.id(), expectedLength, decoded.length);

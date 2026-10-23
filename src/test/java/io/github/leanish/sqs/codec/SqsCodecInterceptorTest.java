@@ -1279,6 +1279,28 @@ class SqsCodecInterceptorTest {
     @Test
     void defaultInterceptor_limitsDecodedPayloadsTo16MiB() {
         assertThat(SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES).isEqualTo(16 * 1024 * 1024);
+        String body = Base64PayloadCodec.instance().encodeToString(
+                CompressionAlgorithm.GZIP.implementation().compress(new byte[16 * 1024 * 1024 + 1]));
+        ReceiveMessageResponse response = receivedWith(body, "v=1;c=gzip;e=base64;h=none");
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with gzip exceeds 16777216 bytes");
+    }
+
+    @Test
+    void modifyResponse_snappyDeclaringMoreThanItsRawLengthIsAMismatch() {
+        int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
+        ReceiveMessageResponse response = receivedWith(
+                compressedBody(CompressionAlgorithm.SNAPPY, PAYLOAD),
+                "v=1;c=snappy;e=base64;h=none;l=" + (length - 1));
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(CompressionException.class)
+                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with snappy has " + length + " bytes, but its metadata declares " + (length - 1));
     }
 
     @Test
@@ -1357,6 +1379,21 @@ class SqsCodecInterceptorTest {
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
+    }
+
+    @ParameterizedTest
+    @MethodSource("unusableRawLengths")
+    void modifyResponse_unusableRawLengthStillEnforcesTheConfiguredLimit(String rawLength) {
+        ReceiveMessageResponse response = receivedWith(
+                Base64PayloadCodec.instance().encodeToString(
+                        CompressionAlgorithm.GZIP.implementation().compress(new byte[2048])),
+                "v=1;c=gzip;e=base64;h=none;l=" + rawLength);
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .withMaxDecodedPayloadBytes(1024)
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with gzip exceeds 1024 bytes");
     }
 
     @Test

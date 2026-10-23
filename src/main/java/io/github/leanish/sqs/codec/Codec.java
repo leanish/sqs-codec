@@ -45,8 +45,8 @@ class Codec {
         return payloadCodec.encode(compressor.compress(payload));
     }
 
-    public byte[] decode(byte[] payload) {
-        return compressor.decompress(payloadCodec.decode(payload));
+    public byte[] decode(byte[] payload, int maxLength) {
+        return compressor.decompress(payloadCodec.decode(payload), maxLength);
     }
 
     private static Compressor compressor(

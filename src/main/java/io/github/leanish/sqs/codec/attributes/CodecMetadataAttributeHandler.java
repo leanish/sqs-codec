@@ -8,6 +8,7 @@ package io.github.leanish.sqs.codec.attributes;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
@@ -76,6 +77,13 @@ public class CodecMetadataAttributeHandler {
     @Nullable
     public String checksumValue() {
         return checksumValue;
+    }
+
+    /**
+     * The raw payload length the sender declared ({@code l}), when present and valid.
+     */
+    public OptionalInt rawLength() {
+        return rawLength < 0 ? OptionalInt.empty() : OptionalInt.of(rawLength);
     }
 
     public void applyTo(Map<String, MessageAttributeValue> attributes) {

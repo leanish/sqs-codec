@@ -158,9 +158,10 @@ class CompressionTest {
         byte[] compressed = compressor.compress(payload);
 
         assertThat(compressor.decompress(compressed, payload.length)).isEqualTo(payload);
+        // Gzip and NoOp find out while producing output; zstd and snappy from what the payload declares, up front.
         assertThatThrownBy(() -> compressor.decompress(compressed, payload.length - 1))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessageEndingWith("exceeds " + (payload.length - 1) + " bytes");
+                .hasMessageContaining(String.valueOf(payload.length - 1));
     }
 
     @ParameterizedTest
@@ -232,7 +233,7 @@ class CompressionTest {
 
         assertThatThrownBy(() -> compressor.decompress(compressed, MIB))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with snappy exceeds " + MIB + " bytes");
+                .hasMessage("Payload with snappy declares " + 2 * MIB + " decoded bytes, over the " + MIB + "-byte limit");
     }
 
     @ParameterizedTest
@@ -251,7 +252,9 @@ class CompressionTest {
         assertThat(new ZstdCompressor().decompress(forged, 128 * MIB)).isEmpty();
         assertThatThrownBy(() -> new ZstdCompressor().decompress(forged, MIB))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with zstd exceeds " + MIB + " bytes");
+                .hasMessage("Payload with zstd declares a decoding window larger than its " + MIB + "-byte limit allows")
+                .extracting(e -> ((DecompressedPayloadTooLargeException) e).outputExceeded())
+                .isEqualTo(false);
     }
 
     @ParameterizedTest

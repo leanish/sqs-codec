@@ -61,7 +61,7 @@ public class ZstdCompressor implements Compressor {
             throw e;
         } catch (ZstdIOException e) {
             if (e.getErrorCode() == Zstd.errFrameParameterWindowTooLarge()) {
-                throw DecompressedPayloadTooLargeException.exceeds(ALGORITHM, maxLength);
+                throw DecompressedPayloadTooLargeException.windowOverLimit(ALGORITHM, maxLength);
             }
             throw CompressionException.decompress(ALGORITHM, e);
         } catch (IOException | RuntimeException e) {

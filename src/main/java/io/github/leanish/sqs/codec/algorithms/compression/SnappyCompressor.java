@@ -37,7 +37,7 @@ public class SnappyCompressor implements Compressor {
             // A negative one is a declared length past Integer.MAX_VALUE.
             int declaredLength = Snappy.uncompressedLength(payload);
             if (declaredLength < 0 || declaredLength > maxLength) {
-                throw DecompressedPayloadTooLargeException.exceeds(ALGORITHM, maxLength);
+                throw DecompressedPayloadTooLargeException.declaredOverLimit(ALGORITHM, declaredLength, maxLength);
             }
             return Snappy.uncompress(payload);
         } catch (DecompressedPayloadTooLargeException e) {

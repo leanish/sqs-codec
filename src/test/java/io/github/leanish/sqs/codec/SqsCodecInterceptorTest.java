@@ -1301,7 +1301,8 @@ class SqsCodecInterceptorTest {
                 .withMaxDecodedPayloadBytes(1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with " + compressionAlgorithm.id() + " exceeds 1048576 bytes");
+                .hasMessageContaining(compressionAlgorithm.id())
+                .hasMessageContaining("1048576");
     }
 
     @Test
@@ -1390,6 +1391,20 @@ class SqsCodecInterceptorTest {
                 .isInstanceOf(DecompressedPayloadTooLargeException.class);
         assertThatThrownBy(() -> interceptor.modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class);
+    }
+
+    @Test
+    void modifyResponse_zstdWindowOverItsRawLengthStaysASizeError() {
+        // An empty zstd frame declaring a 128 MiB window: it decodes to nothing, so l=0 is its true length.
+        byte[] forged = {0x28, (byte) 0xb5, 0x2f, (byte) 0xfd, 0x00, (byte) 0x88, 0x01, 0x00, 0x00};
+        ReceiveMessageResponse response = receivedWith(
+                Base64PayloadCodec.instance().encodeToString(forged),
+                "v=1;c=zstd;e=base64;h=none;l=0");
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Payload with zstd declares a decoding window larger than its 0-byte limit allows");
     }
 
     private static Stream<String> unusableRawLengths() {

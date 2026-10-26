@@ -87,7 +87,7 @@ Defaults:
 - A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until a dead-letter queue takes it, if one is configured.
 - The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten.
 - Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. For `v=2`, the decoder refuses, with `DecompressedPayloadTooLargeException` and before allocating it, a frame whose declared window is larger than `l` needs (rounded up to a power of two, at least 1 KiB). Snappy's declared length is checked against `l` (`maxDecodedPayloadBytes` for `v=1`) before it allocates.
-- `DecompressedPayloadTooLargeException` means the payload would pass the limit in force: `maxDecodedPayloadBytes` for an uncompressed payload or an `l` over it, and `l` itself for a compressed `v=2` one (`maxDecodedPayloadBytes` for a compressed `v=1` one).
+- `DecompressedPayloadTooLargeException` means the payload was refused against the limit in force (`maxDecodedPayloadBytes` for an uncompressed payload or an `l` over it, `l` itself for a compressed `v=2` one, `maxDecodedPayloadBytes` for a compressed `v=1` one): decoding produced more than it, a declared length is over it, or a zstd frame's window is larger than it needs. It doesn't establish the payload's actual decoded size.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if compressed payload would be larger than the original body, the interceptor sends the original body and writes `c=none`.
 - When outbound processing resolves to `c=none` and `h=none`, the interceptor does not add `x-codec-meta`.
 - Compression level is local send-side configuration only; it does not change codec metadata.
@@ -135,8 +135,9 @@ Notes:
   until 0.7.0, `1` (what 0.5.x writes):
   a `v=1` payload may lack `l` or carry one that isn't a number (it's then ignored), and its decompression is bounded by
   `maxDecodedPayloadBytes` rather than by `l`, since 0.5.x streamed zstd frames with the level's window; a valid `l` it
-  declares must still match. A 0.5.x zstd frame whose window is larger than `maxDecodedPayloadBytes` (the `MAXIMUM`
-  level's 128 MiB, say) is refused. An already encoded `v=1` message sent through the interceptor is validated the same
+  declares must still match. A 0.5.x zstd frame whose window is larger than `maxDecodedPayloadBytes` needs, rounded up
+  to a power of two (at least 1 KiB), is refused: the `MAXIMUM` level's 128 MiB under the 16 MiB default, say. A 3 MiB
+  limit admits a 4 MiB window; the output stays bounded by the limit either way. An already encoded `v=1` message sent through the interceptor is validated the same
   way and sent unchanged. Any other version fails with `UnsupportedCodecMetadataException`.
 - Upgrading from 0.5.x: upgrade consumers first. A 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2"), while
   this version reads both, so producers move to `v=2` only once every consumer of their queues can read it.
@@ -183,7 +184,7 @@ try {
 } catch (InvalidPayloadException e) {
     // bad payload data, consider DLQ or logging
 } catch (DecompressedPayloadTooLargeException e) {
-    // the payload would decode past maxDecodedPayloadBytes or its declared raw length
+    // refused: too much output, a declared length over the limit, or a zstd window too large for it
 } catch (CompressionException e) {
     // payload decompression failed
 } catch (CodecException e) {

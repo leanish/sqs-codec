@@ -6,8 +6,9 @@
 package io.github.leanish.sqs.codec.algorithms.compression;
 
 /**
- * Thrown when a payload would decode to more bytes than its limit allows: the configured limit, or the raw length a
- * compressed payload declares.
+ * Thrown when a payload is refused against its limit (the configured limit, or the raw length a compressed payload
+ * declares): decoding produced more than it, a declared length is over it, or a zstd frame's window is larger than it
+ * needs. It doesn't establish the payload's actual decoded size.
  */
 public class DecompressedPayloadTooLargeException extends CompressionException {
 

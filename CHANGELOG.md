@@ -22,13 +22,14 @@ All notable changes to this project are documented in this file.
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few bytes).
-- Every compressed payload carries its raw length (`l`), and must decode to exactly that length, on receive and when an
+  For `v=2`, a frame whose window is larger than its `l` needs is refused.
+- Every compressed `v=2` payload carries its raw length (`l`), and must decode to exactly that length, on receive and when an
   already encoded message is validated before sending: one without a valid `l` fails, and an `l` over the limit fails
   before decompressing. `withIncludeRawPayloadLength` is gone. `l` is still ignored when `c=none`. A message over the
   limit, or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
 - The metadata version is now `v=2`, the format above, written for every newly encoded message. `v=1` messages (0.5.x) are still read,
   deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds their decompression
-  (a 0.5.x zstd frame whose window is larger than it is refused). Any other version fails. A 0.5.x consumer refuses
+  (a 0.5.x zstd frame whose window is larger than it needs, rounded up to a power of two, is refused). Any other version fails. A 0.5.x consumer refuses
   `v=2`, so upgrade consumers before producers.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.

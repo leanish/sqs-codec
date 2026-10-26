@@ -1461,21 +1461,43 @@ class SqsCodecInterceptorTest {
                 .hasMessage("Decompressed payload with zstd has " + length + " bytes, but its metadata declares " + (length + 1));
     }
 
-    @ParameterizedTest
-    @EnumSource(value = CompressionAlgorithm.class, names = {"GZIP", "ZSTD"})
-    void modifyResponse_legacyBombStopsAtTheConfiguredLimit(CompressionAlgorithm compressionAlgorithm) {
+    @Test
+    void modifyResponse_legacyBombStopsAtTheConfiguredLimit() {
         String body = Base64PayloadCodec.instance().encodeToString(
-                compressionAlgorithm.implementation().compress(new byte[8 * 1024 * 1024]));
+                CompressionAlgorithm.GZIP.implementation().compress(new byte[8 * 1024 * 1024]));
         // A v=1 raw length doesn't bound the decompression: the configured limit does.
-        ReceiveMessageResponse response = receivedWith(body, "v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=" + 8 * 1024 * 1024);
+        ReceiveMessageResponse response = receivedWith(body, "v=1;c=gzip;e=base64;h=none;l=" + 8 * 1024 * 1024);
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .withMaxDecodedPayloadBytes(1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
-                // zstd's one-pass frame declares an 8 MiB window, refused up front; gzip stops when its output passes the limit.
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessageContaining(compressionAlgorithm.id())
-                .hasMessageContaining("1048576");
+                .hasMessage("Decompressed payload with gzip exceeds 1048576 bytes");
+    }
+
+    @Test
+    void modifyResponse_legacyZstdBombWithinItsWindowStopsWhenItsOutputPassesTheLimit() {
+        // A streamed level-3 frame declares a 2 MiB window, within a 4 MiB limit, so only the output bound stops it.
+        ReceiveMessageResponse response = receivedWith(
+                streamedZstdBody("\0".repeat(8 * 1024 * 1024), 3),
+                "v=1;c=zstd;e=base64;h=none");
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .withMaxDecodedPayloadBytes(4 * 1024 * 1024)
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with zstd exceeds 4194304 bytes");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "01", "+1", "02", "+2", "3"})
+    void modifyResponse_refusesAVersionThatIsNotExactlyOneOrTwo(String version) {
+        ReceiveMessageResponse response = receivedWith(compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD), "v=" + version + ";c=zstd;e=base64;h=none;l=12");
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Unsupported codec version: " + version);
     }
 
     @Test

@@ -258,7 +258,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             return decodeLegacy(codec, messageBodyBytes, metadata);
         }
         // A compressed v=2 payload decodes to exactly its declared raw length, so that length bounds the decompression.
-        int expectedLength = metadata.rawLength().orElseThrow();
+        int expectedLength = metadata.rawLength()
+                .orElseThrow(() -> new IllegalStateException("A compressed v=2 payload always declares its raw length"));
         if (expectedLength > maxDecodedPayloadBytes) {
             throw DecompressedPayloadTooLargeException.declaredOverLimit(
                     compression.id(), expectedLength, maxDecodedPayloadBytes);

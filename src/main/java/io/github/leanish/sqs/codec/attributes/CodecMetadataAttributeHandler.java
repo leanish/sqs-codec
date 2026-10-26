@@ -147,15 +147,14 @@ public class CodecMetadataAttributeHandler {
         if (versionValue == null) {
             throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_VERSION_KEY);
         }
-        try {
-            int parsedVersion = Integer.parseInt(versionValue);
-            if (parsedVersion != CodecAttributes.VERSION_VALUE && parsedVersion != CodecAttributes.LEGACY_VERSION_VALUE) {
-                throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
-            }
-            return parsedVersion;
-        } catch (NumberFormatException e) {
-            throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
+        // Exactly as written: "01" or "+1" isn't the legacy version.
+        if (versionValue.equals(String.valueOf(CodecAttributes.VERSION_VALUE))) {
+            return CodecAttributes.VERSION_VALUE;
         }
+        if (versionValue.equals(String.valueOf(CodecAttributes.LEGACY_VERSION_VALUE))) {
+            return CodecAttributes.LEGACY_VERSION_VALUE;
+        }
+        throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
     }
 
     private static int parseRawLength(String metadataValue, Map<String, String> values) {

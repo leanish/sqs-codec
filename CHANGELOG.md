@@ -28,7 +28,8 @@ All notable changes to this project are documented in this file.
   limit, or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
 - The metadata version is now `v=2`, the format above, written on every send. `v=1` messages (0.5.x) are still read,
   deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds their decompression
-  (a 0.5.x zstd frame whose window is larger than it is refused). Any other version fails.
+  (a 0.5.x zstd frame whose window is larger than it is refused). Any other version fails. A 0.5.x consumer refuses
+  `v=2`, so upgrade consumers before producers.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
 

@@ -23,6 +23,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.reactivestreams.Publisher;
 
@@ -150,25 +151,6 @@ class SqsCodecInterceptorTest {
                 .containsKey(CodecAttributes.META);
         assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
                 .isEqualTo("v=1;c=zstd;e=base64;h=none;l=12");
-    }
-
-    @Test
-    void modifyRequest_omitsRawLengthMetadataWhenConfigured() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
-                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
-                .withSkipCompressionWhenLarger(false)
-                .withIncludeRawPayloadLength(false);
-        SendMessageRequest request = SendMessageRequest.builder()
-                .messageBody(PAYLOAD)
-                .build();
-
-        SendMessageRequest encoded = (SendMessageRequest) interceptor.modifyRequest(
-                new ModifyRequestContext(request),
-                new ExecutionAttributes());
-
-        String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8));
-        assertThat(encoded.messageAttributes().get(CodecAttributes.META).stringValue())
-                .isEqualTo("v=1;c=zstd;e=base64;h=md5;s=" + expectedChecksum);
     }
 
     @Test
@@ -470,7 +452,7 @@ class SqsCodecInterceptorTest {
                 .messageBody(encodedPayload)
                 .messageAttributes(Map.of(
                         CodecAttributes.META,
-                        MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none")))
+                        MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=1024")))
                 .build();
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
@@ -1265,7 +1247,7 @@ class SqsCodecInterceptorTest {
                         .body(encodedPayload)
                         .messageAttributes(Map.of(
                                 CodecAttributes.META,
-                                MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none")))
+                                MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=1024")))
                         .build())
                 .build();
 
@@ -1281,16 +1263,16 @@ class SqsCodecInterceptorTest {
         assertThat(SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES).isEqualTo(16 * 1024 * 1024);
         String body = Base64PayloadCodec.instance().encodeToString(
                 CompressionAlgorithm.GZIP.implementation().compress(new byte[16 * 1024 * 1024 + 1]));
-        ReceiveMessageResponse response = receivedWith(body, "v=1;c=gzip;e=base64;h=none");
+        ReceiveMessageResponse response = receivedWith(body, "v=1;c=gzip;e=base64;h=none;l=" + (16 * 1024 * 1024 + 1));
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with gzip exceeds 16777216 bytes");
+                .hasMessage("Payload with gzip declares 16777217 decoded bytes, over the 16777216-byte limit");
     }
 
     @Test
-    void modifyResponse_snappyDeclaringMoreThanItsRawLengthIsAMismatch() {
+    void modifyResponse_snappyDeclaringMoreThanItsRawLengthIsRefusedBeforeDecompressing() {
         int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
         ReceiveMessageResponse response = receivedWith(
                 compressedBody(CompressionAlgorithm.SNAPPY, PAYLOAD),
@@ -1298,9 +1280,8 @@ class SqsCodecInterceptorTest {
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
-                .isInstanceOf(CompressionException.class)
-                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with snappy has " + length + " bytes, but its metadata declares " + (length - 1));
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Payload with snappy declares " + length + " decoded bytes, over the " + (length - 1) + "-byte limit");
     }
 
     @Test
@@ -1314,10 +1295,11 @@ class SqsCodecInterceptorTest {
 
     @ParameterizedTest
     @EnumSource(value = CompressionAlgorithm.class, names = {"GZIP", "ZSTD"})
-    void modifyResponse_bombWithoutRawLengthStopsAtTheLimit(CompressionAlgorithm compressionAlgorithm) {
+    void modifyResponse_bombStopsAtItsDeclaredRawLength(CompressionAlgorithm compressionAlgorithm) {
         String body = Base64PayloadCodec.instance().encodeToString(
                 compressionAlgorithm.implementation().compress(new byte[8 * 1024 * 1024]));
-        ReceiveMessageResponse response = receivedWith(body, "v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none");
+        // The bomb claims 1 MiB, within the limit, so it reaches decompression, which stops there.
+        ReceiveMessageResponse response = receivedWith(body, "v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=" + 1024 * 1024);
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .withMaxDecodedPayloadBytes(1024 * 1024)
@@ -1341,7 +1323,7 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    void modifyResponse_payloadLongerThanItsRawLengthIsAMismatch() {
+    void modifyResponse_payloadLongerThanItsRawLengthStopsThere() {
         int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
         ReceiveMessageResponse response = receivedWith(
                 compressedBody(CompressionAlgorithm.GZIP, PAYLOAD),
@@ -1349,9 +1331,8 @@ class SqsCodecInterceptorTest {
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
-                .isInstanceOf(CompressionException.class)
-                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with gzip has more than the " + (length - 1) + " bytes its metadata declares");
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with gzip exceeds " + (length - 1) + " bytes");
     }
 
     @Test
@@ -1369,31 +1350,15 @@ class SqsCodecInterceptorTest {
     }
 
     @ParameterizedTest
-    @MethodSource("unusableRawLengths")
-    void modifyResponse_unusableRawLengthFallsBackToTheConfiguredLimit(String rawLength) {
+    @ValueSource(strings = {"", ";l=", ";l=abc", ";l=-5", ";l=99999999999"})
+    void modifyResponse_compressedPayloadWithoutAUsableRawLengthIsRefused(String rawLength) {
         ReceiveMessageResponse response = receivedWith(
                 compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD),
-                "v=1;c=zstd;e=base64;h=none;l=" + rawLength);
-
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
-                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
-
-        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
-    }
-
-    @ParameterizedTest
-    @MethodSource("unusableRawLengths")
-    void modifyResponse_unusableRawLengthStillEnforcesTheConfiguredLimit(String rawLength) {
-        ReceiveMessageResponse response = receivedWith(
-                Base64PayloadCodec.instance().encodeToString(
-                        CompressionAlgorithm.GZIP.implementation().compress(new byte[2048])),
-                "v=1;c=gzip;e=base64;h=none;l=" + rawLength);
+                "v=1;c=zstd;e=base64;h=none" + rawLength);
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
-                .withMaxDecodedPayloadBytes(1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
-                .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with gzip exceeds 1024 bytes");
+                .isInstanceOf(UnsupportedCodecMetadataException.class);
     }
 
     @Test
@@ -1417,7 +1382,7 @@ class SqsCodecInterceptorTest {
                 CompressionAlgorithm.ZSTD.implementation().compress(new byte[8 * 1024 * 1024]));
         Map<String, MessageAttributeValue> attributes = Map.of(
                 CodecAttributes.META,
-                MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none"));
+                MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none;l=" + 1024 * 1024));
         SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor().withMaxDecodedPayloadBytes(1024 * 1024);
         SendMessageRequest single = SendMessageRequest.builder().messageBody(bomb).messageAttributes(attributes).build();
         SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
@@ -1442,10 +1407,6 @@ class SqsCodecInterceptorTest {
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
                 .hasMessage("Payload with zstd declares a decoding window larger than its 0-byte limit allows");
-    }
-
-    private static Stream<String> unusableRawLengths() {
-        return Stream.of("", "abc", "-5", "99999999999");
     }
 
     private static String compressedBody(CompressionAlgorithm compressionAlgorithm, String payload) {
@@ -1634,7 +1595,7 @@ class SqsCodecInterceptorTest {
                         : EncodingAlgorithm.BASE64,
                 checksumAlgorithm);
         Map<String, MessageAttributeValue> attributes = new HashMap<>();
-        CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes, true)
+        CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes)
                 .applyTo(attributes);
         return attributes;
     }

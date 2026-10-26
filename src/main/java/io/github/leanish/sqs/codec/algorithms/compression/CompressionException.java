@@ -37,10 +37,4 @@ public class CompressionException extends CodecException {
                 "Decompressed payload with " + algorithm + " has " + actualLength
                         + " bytes, but its metadata declares " + expectedLength);
     }
-
-    public static CompressionException longerThanDeclared(String algorithm, int expectedLength) {
-        return new CompressionException(
-                "Decompressed payload with " + algorithm + " has more than the " + expectedLength
-                        + " bytes its metadata declares");
-    }
 }

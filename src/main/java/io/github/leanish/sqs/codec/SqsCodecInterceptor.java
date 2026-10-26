@@ -11,7 +11,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.OptionalInt;
 import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
@@ -58,7 +57,6 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             EncodingAlgorithm.NONE,
             ChecksumAlgorithm.MD5,
             /* skipCompressionWhenLarger= */ true,
-            /* includeRawPayloadLength= */ true,
             DEFAULT_MAX_DECODED_PAYLOAD_BYTES);
 
     private final CompressionAlgorithm compressionAlgorithm;
@@ -66,10 +64,9 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private final EncodingAlgorithm encodingAlgorithm;
     private final ChecksumAlgorithm checksumAlgorithm;
     private final boolean skipCompressionWhenLarger;
-    private final boolean includeRawPayloadLength;
     // The most bytes a payload may decode to, wherever this interceptor decodes one (received messages, and pre-encoded
-    // messages it validates before sending). A compressed payload that declares its raw length (l) must decode to
-    // exactly that length, which may not exceed this limit.
+    // messages it validates before sending). A compressed payload must decode to exactly its declared raw length (l),
+    // which may not exceed this limit.
     private final int maxDecodedPayloadBytes;
 
     private SqsCodecInterceptor(
@@ -78,14 +75,12 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             EncodingAlgorithm encodingAlgorithm,
             ChecksumAlgorithm checksumAlgorithm,
             boolean skipCompressionWhenLarger,
-            boolean includeRawPayloadLength,
             int maxDecodedPayloadBytes) {
         this.compressionAlgorithm = Objects.requireNonNull(compressionAlgorithm, "compressionAlgorithm");
         this.compressionLevel = compressionLevel;
         this.encodingAlgorithm = Objects.requireNonNull(encodingAlgorithm, "encodingAlgorithm");
         this.checksumAlgorithm = Objects.requireNonNull(checksumAlgorithm, "checksumAlgorithm");
         this.skipCompressionWhenLarger = skipCompressionWhenLarger;
-        this.includeRawPayloadLength = includeRawPayloadLength;
         if (maxDecodedPayloadBytes <= 0) {
             throw new IllegalArgumentException("maxDecodedPayloadBytes must be positive: " + maxDecodedPayloadBytes);
         }
@@ -255,37 +250,16 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
                 configuration.compressionAlgorithm(),
                 configuration.encodingAlgorithm());
         CompressionAlgorithm compression = configuration.compressionAlgorithm();
-        // The declared raw length only tightens the limit, and only for compressed payloads (it's ignored with c=none).
-        OptionalInt declaredLength = compression == CompressionAlgorithm.NONE
-                ? OptionalInt.empty()
-                : metadata.rawLength();
-        if (declaredLength.isEmpty()) {
+        if (compression == CompressionAlgorithm.NONE) {
             return codec.decode(messageBodyBytes, maxDecodedPayloadBytes);
         }
-        int expectedLength = declaredLength.getAsInt();
+        // A compressed payload decodes to exactly its declared raw length, so that length bounds the decompression.
+        int expectedLength = metadata.rawLength();
         if (expectedLength > maxDecodedPayloadBytes) {
             throw DecompressedPayloadTooLargeException.declaredOverLimit(
                     compression.id(), expectedLength, maxDecodedPayloadBytes);
         }
-        byte[] decoded;
-        try {
-            decoded = codec.decode(messageBodyBytes, expectedLength);
-        } catch (DecompressedPayloadTooLargeException e) {
-            // Within the configured limit, a payload longer than its raw length is a metadata mismatch, not a size
-            // problem: whether its output passed l, or its own header (snappy) declares more than l but no more than
-            // the limit. A zstd window refused up front stays a size problem: nothing was decoded to compare.
-            if (e.outputExceeded()) {
-                throw CompressionException.longerThanDeclared(compression.id(), expectedLength);
-            }
-            OptionalInt payloadDeclared = e.declaredLength();
-            // A negative declared length means one past Integer.MAX_VALUE: a size problem, never a mismatch.
-            if (payloadDeclared.isPresent()
-                    && payloadDeclared.getAsInt() >= 0
-                    && payloadDeclared.getAsInt() <= maxDecodedPayloadBytes) {
-                throw CompressionException.lengthMismatch(compression.id(), expectedLength, payloadDeclared.getAsInt());
-            }
-            throw e;
-        }
+        byte[] decoded = codec.decode(messageBodyBytes, expectedLength);
         if (decoded.length != expectedLength) {
             throw CompressionException.lengthMismatch(compression.id(), expectedLength, decoded.length);
         }
@@ -338,11 +312,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             byte[] payloadBytes) {
         Map<String, MessageAttributeValue> attributes = new HashMap<>(originalAttributes);
         if (shouldWriteMetadata(configuration)) {
-            CodecMetadataAttributeHandler.forOutbound(
-                            configuration,
-                            payloadBytes,
-                            includeRawPayloadLength)
-                    .applyTo(attributes);
+            CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes).applyTo(attributes);
         }
         validateOutboundAttributeCount(attributes);
         return attributes;

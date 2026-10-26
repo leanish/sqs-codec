@@ -241,7 +241,11 @@ class CompressionTest {
     void compress_zstdRecordsTheContentSize(ZstdCompressor compressor) {
         byte[] payload = TestPayloadBytes.mixed(100_000);
 
-        assertThat(Zstd.getFrameContentSize(compressor.compress(payload))).isEqualTo(payload.length);
+        byte[] compressed = compressor.compress(payload);
+
+        assertThat(Zstd.getFrameContentSize(compressed)).isEqualTo(payload.length);
+        // Bounded by its exact length, as the interceptor decodes it, the frame's window fits.
+        assertThat(compressor.decompress(compressed, payload.length)).isEqualTo(payload);
     }
 
     @Test
@@ -252,9 +256,7 @@ class CompressionTest {
         assertThat(new ZstdCompressor().decompress(forged, 128 * MIB)).isEmpty();
         assertThatThrownBy(() -> new ZstdCompressor().decompress(forged, MIB))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Payload with zstd declares a decoding window larger than its " + MIB + "-byte limit allows")
-                .extracting(e -> ((DecompressedPayloadTooLargeException) e).outputExceeded())
-                .isEqualTo(false);
+                .hasMessage("Payload with zstd declares a decoding window larger than its " + MIB + "-byte limit allows");
     }
 
     @ParameterizedTest

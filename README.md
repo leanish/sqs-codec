@@ -81,14 +81,13 @@ Defaults:
 - `ASCII85` reduces encoded-body overhead versus Base64 in theory, but the practical size win is small enough that it should be treated as a niche transport option rather than a new default.
 - `MD5` is intended for non-adversarial integrity checks; prefer `SHA256` when producers may be attacker-controlled.
 - `skipCompressionWhenLarger`: `true`
-- `includeRawPayloadLength`: `true`
 - `maxDecodedPayloadBytes`: `16 MiB` (`SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES`)
 - Decoding never produces more than `maxDecodedPayloadBytes` bytes, wherever the interceptor decodes a payload: on receive, and when it validates an already encoded message before sending. A payload that would decode to more fails with `DecompressedPayloadTooLargeException` as soon as it passes the limit, so a small message can't expand without bound. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive.
-- A compressed payload that declares its raw length (`l`) must decode to exactly that many bytes, on receive and when an already encoded message is validated before sending. An `l` over the limit fails with `DecompressedPayloadTooLargeException` before decompressing; a payload that decodes to more or fewer bytes than its `l` fails with `CompressionException`. A missing or unparseable `l` falls back to the limit, and `l` is still ignored when `c=none`.
+- Every compressed payload declares its raw length (`l`) and must decode to exactly that many bytes, on receive and when an already encoded message is validated before sending. A compressed payload without a valid `l` fails with `UnsupportedCodecMetadataException`; an `l` over the limit fails with `DecompressedPayloadTooLargeException` before decompressing; decompression stops with `DecompressedPayloadTooLargeException` as soon as it passes `l`, and a payload that decodes to fewer bytes fails with `CompressionException`. `l` is ignored when `c=none`.
 - A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until a dead-letter queue takes it, if one is configured.
 - The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten.
-- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. The decoder refuses a frame whose declared window is larger than the limit (rounded up to a power of two, at least 1 KiB) before allocating it, with `DecompressedPayloadTooLargeException`. When a payload declares `l`, that limit is `l`: a streamed frame from an earlier version, which declares its level's default window, is refused even when that window is under `maxDecodedPayloadBytes`.
-- `DecompressedPayloadTooLargeException` means the payload would pass the limit in force: `maxDecodedPayloadBytes`, or `l` for a refused zstd window. A payload that decodes to, or (snappy) declares, more bytes than its `l` but no more than `maxDecodedPayloadBytes` fails with `CompressionException` as a mismatch.
+- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. The decoder refuses, with `DecompressedPayloadTooLargeException` and before allocating it, a frame whose declared window is larger than `l` needs (rounded up to a power of two, at least 1 KiB). Snappy's declared length is checked against `l` before it allocates.
+- `DecompressedPayloadTooLargeException` means the payload would pass the limit in force: `maxDecodedPayloadBytes` for an uncompressed payload or an `l` over it, and `l` itself for a compressed one.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if compressed payload would be larger than the original body, the interceptor sends the original body and writes `c=none`.
 - When outbound processing resolves to `c=none` and `h=none`, the interceptor does not add `x-codec-meta`.
 - Compression level is local send-side configuration only; it does not change codec metadata.
@@ -99,12 +98,6 @@ Disable `skipCompressionWhenLarger` and always use configured compression:
 ```java
 SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
         .withSkipCompressionWhenLarger(false);
-```
-
-Disable raw payload length metadata (`l`) on send:
-```java
-SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
-        .withIncludeRawPayloadLength(false);
 ```
 
 Tune compression effort with a named level:
@@ -149,8 +142,8 @@ Notes:
 - `s` must be absent when `h=none`.
 - `s` is emitted as unpadded URL-safe Base64 on send.
 - If checksum values are produced or compared outside this library, use the canonical unpadded form; padded values are not normalized on read.
-- `l` is ignored if missing/invalid on read.
-- On send, `l` is emitted only when compression is actually used (`c!=none` in final metadata) and `withIncludeRawPayloadLength(true)` is enabled.
+- `l` is required, a non-negative byte count, when `c` is not `none`, and ignored when `c=none`.
+- On send, `l` is emitted exactly when compression is actually used (`c!=none` in final metadata).
 - Unknown keys are ignored for forward compatibility.
 - When `x-codec-meta` is already present on send, the interceptor validates that body and checksum match the declared metadata before skipping re-encoding.
 - If send-side processing (including `skipCompressionWhenLarger`) ends with `c=none` and `h=none`, no metadata attribute is emitted.
@@ -160,8 +153,8 @@ Outbound metadata emission matrix (final per-message decision):
 - `c=none,e=none,h!=none`: `v;c;e;h;s` (no `l`)
 - `c=none,e!=none,h=none`: `v;c;e;h` (no `l`)
 - `c=none,e!=none,h!=none`: `v;c;e;h;s` (no `l`)
-- `c!=none,h=none`: `v;c;e;h;l` (or `v;c;e;h` when raw length metadata is disabled)
-- `c!=none,h!=none`: `v;c;e;h;s;l` (or `v;c;e;h;s` when raw length metadata is disabled)
+- `c!=none,h=none`: `v;c;e;h;l`
+- `c!=none,h!=none`: `v;c;e;h;s;l`
 
 SQS attribute limit:
 - SQS supports at most 10 message attributes per message.
@@ -182,7 +175,7 @@ try {
 } catch (InvalidPayloadException e) {
     // bad payload data, consider DLQ or logging
 } catch (DecompressedPayloadTooLargeException e) {
-    // the payload would decode past maxDecodedPayloadBytes (or its declared raw length)
+    // the payload would decode past maxDecodedPayloadBytes or its declared raw length
 } catch (CompressionException e) {
     // payload decompression failed
 } catch (CodecException e) {

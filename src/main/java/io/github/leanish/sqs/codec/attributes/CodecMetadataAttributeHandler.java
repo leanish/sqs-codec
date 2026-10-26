@@ -8,7 +8,6 @@ package io.github.leanish.sqs.codec.attributes;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
@@ -26,6 +25,7 @@ public class CodecMetadataAttributeHandler {
     private final CodecConfiguration configuration;
     @Nullable
     private final String checksumValue;
+    // The raw payload length (l): required, and written, exactly when the payload is compressed; -1 otherwise.
     private final int rawLength;
 
     private CodecMetadataAttributeHandler(
@@ -41,17 +41,14 @@ public class CodecMetadataAttributeHandler {
         return attributes.containsKey(CodecAttributes.META);
     }
 
-    public static CodecMetadataAttributeHandler forOutbound(
-            CodecConfiguration configuration,
-            byte[] payloadBytes,
-            boolean includeRawPayloadLength) {
+    public static CodecMetadataAttributeHandler forOutbound(CodecConfiguration configuration, byte[] payloadBytes) {
         CodecConfiguration effectiveConfiguration = effectiveConfiguration(configuration);
         validateNonNoOpMetadata(
                 effectiveConfiguration.compressionAlgorithm(),
                 effectiveConfiguration.encodingAlgorithm(),
                 effectiveConfiguration.checksumAlgorithm());
         String checksumValue = checksumValue(effectiveConfiguration.checksumAlgorithm(), payloadBytes);
-        int rawLength = includeRawPayloadLength ? payloadBytes.length : -1;
+        int rawLength = effectiveConfiguration.compressionAlgorithm() == CompressionAlgorithm.NONE ? -1 : payloadBytes.length;
         return new CodecMetadataAttributeHandler(
                 effectiveConfiguration,
                 checksumValue,
@@ -80,10 +77,15 @@ public class CodecMetadataAttributeHandler {
     }
 
     /**
-     * The raw payload length the sender declared ({@code l}), when present and valid.
+     * The raw payload length the sender declared ({@code l}), which every compressed payload carries.
+     *
+     * @throws IllegalStateException when the payload isn't compressed, so it has no raw length
      */
-    public OptionalInt rawLength() {
-        return rawLength < 0 ? OptionalInt.empty() : OptionalInt.of(rawLength);
+    public int rawLength() {
+        if (configuration.compressionAlgorithm() == CompressionAlgorithm.NONE) {
+            throw new IllegalStateException("Only a compressed payload declares a raw length");
+        }
+        return rawLength;
     }
 
     public void applyTo(Map<String, MessageAttributeValue> attributes) {
@@ -122,7 +124,7 @@ public class CodecMetadataAttributeHandler {
 
         validateCompressionEncoding(metadataValue, compressionAlgorithm, encodingAlgorithm);
         validateNonNoOpMetadata(compressionAlgorithm, encodingAlgorithm, checksumAlgorithm);
-        int rawLength = parseRawLength(values);
+        int rawLength = compressionAlgorithm == CompressionAlgorithm.NONE ? -1 : parseRawLength(metadataValue, values);
         String checksumValue = parseChecksumValue(values, checksumAlgorithm);
         CodecConfiguration configuration = new CodecConfiguration(
                 version,
@@ -151,16 +153,19 @@ public class CodecMetadataAttributeHandler {
         }
     }
 
-    private static int parseRawLength(Map<String, String> values) {
+    private static int parseRawLength(String metadataValue, Map<String, String> values) {
         String rawLengthValue = values.get(CodecAttributes.META_RAW_LENGTH_KEY);
-        if (rawLengthValue == null || rawLengthValue.isBlank()) {
-            return -1;
+        if (rawLengthValue == null) {
+            throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_RAW_LENGTH_KEY);
         }
         try {
             int parsedRawLength = Integer.parseInt(rawLengthValue);
-            return parsedRawLength < 0 ? -1 : parsedRawLength;
+            if (parsedRawLength < 0) {
+                throw UnsupportedCodecMetadataException.malformed(metadataValue);
+            }
+            return parsedRawLength;
         } catch (NumberFormatException e) {
-            return -1;
+            throw UnsupportedCodecMetadataException.malformed(metadataValue);
         }
     }
 
@@ -256,6 +261,7 @@ public class CodecMetadataAttributeHandler {
         return isKnownKey(key)
                 && value.isEmpty()
                 && !CodecAttributes.META_CHECKSUM_VALUE_KEY.equals(key)
+                // Ignored without compression; required and parsed strictly with it.
                 && !CodecAttributes.META_RAW_LENGTH_KEY.equals(key);
     }
 
@@ -280,8 +286,7 @@ public class CodecMetadataAttributeHandler {
         if (checksumValue != null) {
             metadataValue.append(";s=").append(checksumValue);
         }
-        if (configuration.compressionAlgorithm() != CompressionAlgorithm.NONE
-                && rawLength >= 0) {
+        if (configuration.compressionAlgorithm() != CompressionAlgorithm.NONE) {
             metadataValue.append(";l=").append(rawLength);
         }
         return metadataValue.toString();

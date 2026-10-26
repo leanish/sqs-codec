@@ -26,7 +26,7 @@ All notable changes to this project are documented in this file.
   already encoded message is validated before sending: one without a valid `l` fails, and an `l` over the limit fails
   before decompressing. `withIncludeRawPayloadLength` is gone. `l` is still ignored when `c=none`. A message over the
   limit, or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
-- The metadata version is now `v=2`, the format above, written on every send. `v=1` messages (0.5.x) are still read,
+- The metadata version is now `v=2`, the format above, written for every newly encoded message. `v=1` messages (0.5.x) are still read,
   deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds their decompression
   (a 0.5.x zstd frame whose window is larger than it is refused). Any other version fails. A 0.5.x consumer refuses
   `v=2`, so upgrade consumers before producers.

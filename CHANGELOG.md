@@ -26,6 +26,10 @@ All notable changes to this project are documented in this file.
 - Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every
   pull request against one advisory snapshot of base and head, scans `main` on pushes and daily, and rescans open pull requests daily.
 
+### Changed
+- Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
+  and sandboxed environments refuse.
+
 ### Security
 - Floor Guava at `33.7.2-jre` in Error Prone and Checkstyle configurations to address
   [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94), preserving the configured Checkstyle tool version.

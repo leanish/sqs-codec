@@ -81,7 +81,13 @@ Defaults:
 - `ASCII85` reduces encoded-body overhead versus Base64 in theory, but the practical size win is small enough that it should be treated as a niche transport option rather than a new default.
 - `MD5` is intended for non-adversarial integrity checks; prefer `SHA256` when producers may be attacker-controlled.
 - `skipCompressionWhenLarger`: `true`
-- `includeRawPayloadLength`: `true`
+- `maxDecodedPayloadBytes`: `16 MiB` (`SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES`)
+- Decoding never produces more than `maxDecodedPayloadBytes` bytes, wherever the interceptor decodes a payload: on receive, and when it validates an already encoded message before sending. A payload that would decode to more fails with `DecompressedPayloadTooLargeException` as soon as it passes the limit, so a small message can't expand without bound. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive.
+- Every compressed `v=2` payload declares its raw length (`l`) and must decode to exactly that many bytes, on receive and when an already encoded message is validated before sending. A compressed `v=2` payload without a valid `l` fails with `UnsupportedCodecMetadataException`; an `l` over the limit fails with `DecompressedPayloadTooLargeException` before decompressing; decompression stops with `DecompressedPayloadTooLargeException` as soon as it passes `l`, and a payload that decodes to fewer bytes fails with `CompressionException`. `l` is ignored when `c=none`.
+- A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until a dead-letter queue takes it, if one is configured.
+- The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten.
+- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. For `v=2`, the decoder refuses, with `DecompressedPayloadTooLargeException` and before allocating it, a frame whose declared window is larger than `l` needs (rounded up to a power of two, at least 1 KiB). Snappy's declared length is checked against `l` (`maxDecodedPayloadBytes` for `v=1`) before it allocates.
+- `DecompressedPayloadTooLargeException` means the payload was refused against the limit in force (`maxDecodedPayloadBytes` for an uncompressed payload or an `l` over it, `l` itself for a compressed `v=2` one, `maxDecodedPayloadBytes` for a compressed `v=1` one): decoding produced more than it, a declared length is over it, or a zstd frame's window is larger than it needs. It doesn't establish the payload's actual decoded size.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if compressed payload would be larger than the original body, the interceptor sends the original body and writes `c=none`.
 - When outbound processing resolves to `c=none` and `h=none`, the interceptor does not add `x-codec-meta`.
 - Compression level is local send-side configuration only; it does not change codec metadata.
@@ -92,12 +98,6 @@ Disable `skipCompressionWhenLarger` and always use configured compression:
 ```java
 SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
         .withSkipCompressionWhenLarger(false);
-```
-
-Disable raw payload length metadata (`l`) on send:
-```java
-SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
-        .withIncludeRawPayloadLength(false);
 ```
 
 Tune compression effort with a named level:
@@ -118,7 +118,7 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
 ## Attributes
 
 Codec metadata is stored in a single attribute:
-- `x-codec-meta` (String), for example: `v=1;c=zstd;e=base64;h=md5;s=t2tngCwK9b7C9eqVQunqfg;l=12`
+- `x-codec-meta` (String), for example: `v=2;c=zstd;e=base64;h=md5;s=t2tngCwK9b7C9eqVQunqfg;l=12`
 
 Keys:
 - `v`: codec version
@@ -131,7 +131,16 @@ Keys:
 Notes:
 - Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
 - `ascii85` is emitted and accepted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks.
-- `v` is required and must be the current supported version (`1`).
+- `v` is required, exactly `2` or `1`. Metadata the interceptor writes is always `2`. Reading accepts `2` and, deprecated
+  until 0.7.0, `1` (what 0.5.x writes):
+  a `v=1` payload may lack `l` or carry one that isn't a number (it's then ignored), and its decompression is bounded by
+  `maxDecodedPayloadBytes` rather than by `l`, since 0.5.x streamed zstd frames with the level's window; a valid `l` it
+  declares must still match. A 0.5.x zstd frame whose window is larger than `maxDecodedPayloadBytes` needs, rounded up
+  to a power of two (at least 1 KiB), is refused: the `MAXIMUM` level's 128 MiB under the 16 MiB default, say. A 3 MiB
+  limit admits a 4 MiB window; the output stays bounded by the limit either way. An already encoded `v=1` message sent through the interceptor is validated the same
+  way and sent unchanged. Any other version fails with `UnsupportedCodecMetadataException`.
+- Upgrading from 0.5.x: upgrade consumers first. A 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2"), while
+  this version reads both, so producers move to `v=2` only once every consumer of their queues can read it.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.
@@ -142,8 +151,8 @@ Notes:
 - `s` must be absent when `h=none`.
 - `s` is emitted as unpadded URL-safe Base64 on send.
 - If checksum values are produced or compared outside this library, use the canonical unpadded form; padded values are not normalized on read.
-- `l` is ignored if missing/invalid on read.
-- On send, `l` is emitted only when compression is actually used (`c!=none` in final metadata) and `withIncludeRawPayloadLength(true)` is enabled.
+- `l` is required for `v=2`, a non-negative byte count, when `c` is not `none`, and ignored when `c=none`; optional for `v=1`.
+- On send, `l` is emitted exactly when compression is actually used (`c!=none` in final metadata).
 - Unknown keys are ignored for forward compatibility.
 - When `x-codec-meta` is already present on send, the interceptor validates that body and checksum match the declared metadata before skipping re-encoding.
 - If send-side processing (including `skipCompressionWhenLarger`) ends with `c=none` and `h=none`, no metadata attribute is emitted.
@@ -153,8 +162,8 @@ Outbound metadata emission matrix (final per-message decision):
 - `c=none,e=none,h!=none`: `v;c;e;h;s` (no `l`)
 - `c=none,e!=none,h=none`: `v;c;e;h` (no `l`)
 - `c=none,e!=none,h!=none`: `v;c;e;h;s` (no `l`)
-- `c!=none,h=none`: `v;c;e;h;l` (or `v;c;e;h` when raw length metadata is disabled)
-- `c!=none,h!=none`: `v;c;e;h;s;l` (or `v;c;e;h;s` when raw length metadata is disabled)
+- `c!=none,h=none`: `v;c;e;h;l`
+- `c!=none,h!=none`: `v;c;e;h;s;l`
 
 SQS attribute limit:
 - SQS supports at most 10 message attributes per message.
@@ -174,6 +183,8 @@ try {
     // use decoded payloads
 } catch (InvalidPayloadException e) {
     // bad payload data, consider DLQ or logging
+} catch (DecompressedPayloadTooLargeException e) {
+    // refused: too much output, a declared length over the limit, or a zstd window too large for it
 } catch (CompressionException e) {
     // payload decompression failed
 } catch (CodecException e) {

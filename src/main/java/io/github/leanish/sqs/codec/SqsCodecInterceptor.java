@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
@@ -19,6 +20,8 @@ import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
+import io.github.leanish.sqs.codec.algorithms.compression.CompressionException;
+import io.github.leanish.sqs.codec.algorithms.compression.DecompressedPayloadTooLargeException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
 import io.github.leanish.sqs.codec.attributes.CodecMetadataAttributeHandler;
@@ -47,20 +50,25 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private static final int MAX_SQS_MESSAGE_ATTRIBUTES = 10;
+    /** The default limit on a decoded payload: 16 MiB. */
+    public static final int DEFAULT_MAX_DECODED_PAYLOAD_BYTES = 16 * 1024 * 1024;
     private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
             CompressionAlgorithm.NONE,
             null,
             EncodingAlgorithm.NONE,
             ChecksumAlgorithm.MD5,
             /* skipCompressionWhenLarger= */ true,
-            /* includeRawPayloadLength= */ true);
+            DEFAULT_MAX_DECODED_PAYLOAD_BYTES);
 
     private final CompressionAlgorithm compressionAlgorithm;
     private final @Nullable CompressionLevel compressionLevel;
     private final EncodingAlgorithm encodingAlgorithm;
     private final ChecksumAlgorithm checksumAlgorithm;
     private final boolean skipCompressionWhenLarger;
-    private final boolean includeRawPayloadLength;
+    // The most bytes a payload may decode to, wherever this interceptor decodes one (received messages, and pre-encoded
+    // messages it validates before sending). A compressed payload must decode to exactly its declared raw length (l),
+    // which may not exceed this limit.
+    private final int maxDecodedPayloadBytes;
 
     private SqsCodecInterceptor(
             CompressionAlgorithm compressionAlgorithm,
@@ -68,13 +76,16 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             EncodingAlgorithm encodingAlgorithm,
             ChecksumAlgorithm checksumAlgorithm,
             boolean skipCompressionWhenLarger,
-            boolean includeRawPayloadLength) {
+            int maxDecodedPayloadBytes) {
         this.compressionAlgorithm = Objects.requireNonNull(compressionAlgorithm, "compressionAlgorithm");
         this.compressionLevel = compressionLevel;
         this.encodingAlgorithm = Objects.requireNonNull(encodingAlgorithm, "encodingAlgorithm");
         this.checksumAlgorithm = Objects.requireNonNull(checksumAlgorithm, "checksumAlgorithm");
         this.skipCompressionWhenLarger = skipCompressionWhenLarger;
-        this.includeRawPayloadLength = includeRawPayloadLength;
+        if (maxDecodedPayloadBytes <= 0) {
+            throw new IllegalArgumentException("maxDecodedPayloadBytes must be positive: " + maxDecodedPayloadBytes);
+        }
+        this.maxDecodedPayloadBytes = maxDecodedPayloadBytes;
         this.compressionAlgorithm.validateCompressionLevel(compressionLevel);
     }
 
@@ -172,7 +183,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private void validateOutboundPreEncodedPayload(String messageBody, Map<String, MessageAttributeValue> attributes) {
         CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(attributes);
         CodecConfiguration configuration = metadata.configuration();
-        byte[] payloadBytes = decodePayloadIfNeeded(messageBody, configuration);
+        byte[] payloadBytes = decodePayloadIfNeeded(messageBody, metadata);
         if (shouldValidateChecksum(configuration)) {
             validateChecksum(configuration, requiredChecksumValue(metadata), payloadBytes);
         }
@@ -217,7 +228,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         boolean shouldDecode = shouldDecode(configuration);
         boolean shouldValidateChecksum = shouldValidateChecksum(configuration);
 
-        byte[] payloadBytes = decodePayloadIfNeeded(message.body(), configuration);
+        byte[] payloadBytes = decodePayloadIfNeeded(message.body(), metadata);
         if (shouldValidateChecksum) {
             validateChecksum(configuration, requiredChecksumValue(metadata), payloadBytes);
         }
@@ -230,7 +241,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
                 .build();
     }
 
-    private byte[] decodePayloadIfNeeded(String messageBody, CodecConfiguration configuration) {
+    private byte[] decodePayloadIfNeeded(String messageBody, CodecMetadataAttributeHandler metadata) {
+        CodecConfiguration configuration = metadata.configuration();
         byte[] messageBodyBytes = messageBody.getBytes(StandardCharsets.UTF_8);
         if (!shouldDecode(configuration)) {
             return messageBodyBytes;
@@ -238,7 +250,39 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         Codec codec = new Codec(
                 configuration.compressionAlgorithm(),
                 configuration.encodingAlgorithm());
-        return codec.decode(messageBodyBytes);
+        CompressionAlgorithm compression = configuration.compressionAlgorithm();
+        if (compression == CompressionAlgorithm.NONE) {
+            return codec.decode(messageBodyBytes, maxDecodedPayloadBytes);
+        }
+        if (configuration.version() == CodecAttributes.LEGACY_VERSION_VALUE) {
+            return decodeLegacy(codec, messageBodyBytes, metadata);
+        }
+        // A compressed v=2 payload decodes to exactly its declared raw length, so that length bounds the decompression.
+        int expectedLength = metadata.rawLength()
+                .orElseThrow(() -> new IllegalStateException("A compressed v=2 payload always declares its raw length"));
+        if (expectedLength > maxDecodedPayloadBytes) {
+            throw DecompressedPayloadTooLargeException.declaredOverLimit(
+                    compression.id(), expectedLength, maxDecodedPayloadBytes);
+        }
+        byte[] decoded = codec.decode(messageBodyBytes, expectedLength);
+        if (decoded.length != expectedLength) {
+            throw CompressionException.lengthMismatch(compression.id(), expectedLength, decoded.length);
+        }
+        return decoded;
+    }
+
+    /**
+     * A compressed v=1 payload (0.5.x, read until 0.7.0): its raw length is optional, and its zstd frames were streamed
+     * with the level's window, so the configured limit bounds the decompression; a raw length it declares must match.
+     */
+    private byte[] decodeLegacy(Codec codec, byte[] messageBodyBytes, CodecMetadataAttributeHandler metadata) {
+        byte[] decoded = codec.decode(messageBodyBytes, maxDecodedPayloadBytes);
+        OptionalInt declaredLength = metadata.rawLength();
+        if (declaredLength.isPresent() && decoded.length != declaredLength.getAsInt()) {
+            throw CompressionException.lengthMismatch(
+                    metadata.configuration().compressionAlgorithm().id(), declaredLength.getAsInt(), decoded.length);
+        }
+        return decoded;
     }
 
     private boolean shouldDecode(CodecConfiguration configuration) {
@@ -287,11 +331,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             byte[] payloadBytes) {
         Map<String, MessageAttributeValue> attributes = new HashMap<>(originalAttributes);
         if (shouldWriteMetadata(configuration)) {
-            CodecMetadataAttributeHandler.forOutbound(
-                            configuration,
-                            payloadBytes,
-                            includeRawPayloadLength)
-                    .applyTo(attributes);
+            CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes).applyTo(attributes);
         }
         validateOutboundAttributeCount(attributes);
         return attributes;

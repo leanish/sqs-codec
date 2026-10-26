@@ -29,7 +29,7 @@ class CodecTest {
         byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
 
         byte[] encoded = codec.encode(payloadBytes);
-        byte[] decoded = codec.decode(encoded);
+        byte[] decoded = codec.decode(encoded, Integer.MAX_VALUE);
 
         assertThat(new String(encoded, StandardCharsets.UTF_8))
                 .isEqualTo(payload);
@@ -43,7 +43,7 @@ class CodecTest {
         String payload = "{\"value\":42}";
         byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
 
-        String decoded = new String(codec.decode(encoded), StandardCharsets.UTF_8);
+        String decoded = new String(codec.decode(encoded, Integer.MAX_VALUE), StandardCharsets.UTF_8);
 
         assertThat(decoded)
                 .isEqualTo(payload);
@@ -84,7 +84,7 @@ class CodecTest {
         String payload = "{\"value\":42}";
         byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
 
-        String decoded = new String(codec.decode(encoded), StandardCharsets.UTF_8);
+        String decoded = new String(codec.decode(encoded, Integer.MAX_VALUE), StandardCharsets.UTF_8);
 
         assertThat(decoded)
                 .isEqualTo(payload);
@@ -96,7 +96,7 @@ class CodecTest {
         String payload = "{\"value\":42}";
         byte[] encoded = codec.encode(payload.getBytes(StandardCharsets.UTF_8));
 
-        String decoded = new String(codec.decode(encoded), StandardCharsets.UTF_8);
+        String decoded = new String(codec.decode(encoded, Integer.MAX_VALUE), StandardCharsets.UTF_8);
 
         assertThat(decoded)
                 .isEqualTo(payload);
@@ -111,7 +111,7 @@ class CodecTest {
 
         assertThat(new String(encoded, StandardCharsets.UTF_8))
                 .isNotEqualTo(payload);
-        assertThat(new String(codec.decode(encoded), StandardCharsets.UTF_8))
+        assertThat(new String(codec.decode(encoded, Integer.MAX_VALUE), StandardCharsets.UTF_8))
                 .isEqualTo(payload);
     }
 
@@ -119,7 +119,7 @@ class CodecTest {
     void decode_invalidBase64() {
         Codec codec = new Codec(CompressionAlgorithm.ZSTD);
 
-        assertThatThrownBy(() -> codec.decode("!!!".getBytes(StandardCharsets.UTF_8)))
+        assertThatThrownBy(() -> codec.decode("!!!".getBytes(StandardCharsets.UTF_8), Integer.MAX_VALUE))
                 .isInstanceOf(InvalidPayloadException.class)
                 .hasMessage("Invalid base64 payload")
                 .hasCauseInstanceOf(IllegalArgumentException.class);

@@ -158,12 +158,12 @@ public class CodecMetadataAttributeHandler {
         if (rawLengthValue == null) {
             throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_RAW_LENGTH_KEY);
         }
+        // Digits only: no sign, so "-5" and "+5" are refused alike.
+        if (!rawLengthValue.matches("[0-9]+")) {
+            throw UnsupportedCodecMetadataException.malformed(metadataValue);
+        }
         try {
-            int parsedRawLength = Integer.parseInt(rawLengthValue);
-            if (parsedRawLength < 0) {
-                throw UnsupportedCodecMetadataException.malformed(metadataValue);
-            }
-            return parsedRawLength;
+            return Integer.parseInt(rawLengthValue);
         } catch (NumberFormatException e) {
             throw UnsupportedCodecMetadataException.malformed(metadataValue);
         }

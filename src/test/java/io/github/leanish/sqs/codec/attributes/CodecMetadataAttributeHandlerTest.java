@@ -66,7 +66,7 @@ class CodecMetadataAttributeHandlerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", ";l=", ";l=-1", ";l=abc", ";l=99999999999"})
+    @ValueSource(strings = {"", ";l=", ";l=-1", ";l=+5", ";l=abc", ";l=99999999999"})
     void fromAttributes_compressedPayloadRequiresAValidRawLength(String rawLength) {
         String rawMetadata = "v=1;c=gzip;e=base64;h=none" + rawLength;
 

@@ -8,6 +8,7 @@ package io.github.leanish.sqs.codec.attributes;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
@@ -25,7 +26,8 @@ public class CodecMetadataAttributeHandler {
     private final CodecConfiguration configuration;
     @Nullable
     private final String checksumValue;
-    // The raw payload length (l): required, and written, exactly when the payload is compressed; -1 otherwise.
+    // The raw payload length (l), -1 when absent: written, and required on read (v=2), exactly when the payload is
+    // compressed; a v=1 payload may lack it.
     private final int rawLength;
 
     private CodecMetadataAttributeHandler(
@@ -77,15 +79,11 @@ public class CodecMetadataAttributeHandler {
     }
 
     /**
-     * The raw payload length the sender declared ({@code l}), which every compressed payload carries.
-     *
-     * @throws IllegalStateException when the payload isn't compressed, so it has no raw length
+     * The raw payload length the sender declared ({@code l}): present for every compressed v=2 payload, possibly absent for
+     * a v=1 one, and absent without compression.
      */
-    public int rawLength() {
-        if (configuration.compressionAlgorithm() == CompressionAlgorithm.NONE) {
-            throw new IllegalStateException("Only a compressed payload declares a raw length");
-        }
-        return rawLength;
+    public OptionalInt rawLength() {
+        return rawLength < 0 ? OptionalInt.empty() : OptionalInt.of(rawLength);
     }
 
     public void applyTo(Map<String, MessageAttributeValue> attributes) {
@@ -124,7 +122,14 @@ public class CodecMetadataAttributeHandler {
 
         validateCompressionEncoding(metadataValue, compressionAlgorithm, encodingAlgorithm);
         validateNonNoOpMetadata(compressionAlgorithm, encodingAlgorithm, checksumAlgorithm);
-        int rawLength = compressionAlgorithm == CompressionAlgorithm.NONE ? -1 : parseRawLength(metadataValue, values);
+        int rawLength;
+        if (compressionAlgorithm == CompressionAlgorithm.NONE) {
+            rawLength = -1;
+        } else if (version == CodecAttributes.LEGACY_VERSION_VALUE) {
+            rawLength = parseLegacyRawLength(values);
+        } else {
+            rawLength = parseRawLength(metadataValue, values);
+        }
         String checksumValue = parseChecksumValue(values, checksumAlgorithm);
         CodecConfiguration configuration = new CodecConfiguration(
                 version,
@@ -144,7 +149,7 @@ public class CodecMetadataAttributeHandler {
         }
         try {
             int parsedVersion = Integer.parseInt(versionValue);
-            if (parsedVersion != CodecAttributes.VERSION_VALUE) {
+            if (parsedVersion != CodecAttributes.VERSION_VALUE && parsedVersion != CodecAttributes.LEGACY_VERSION_VALUE) {
                 throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
             }
             return parsedVersion;
@@ -166,6 +171,19 @@ public class CodecMetadataAttributeHandler {
             return Integer.parseInt(rawLengthValue);
         } catch (NumberFormatException e) {
             throw UnsupportedCodecMetadataException.malformed(metadataValue);
+        }
+    }
+
+    /** v=1's raw length, as 0.5.x read it: missing, blank, negative or unparseable is absent. */
+    private static int parseLegacyRawLength(Map<String, String> values) {
+        String rawLengthValue = values.get(CodecAttributes.META_RAW_LENGTH_KEY);
+        if (rawLengthValue == null || rawLengthValue.isBlank()) {
+            return -1;
+        }
+        try {
+            return Math.max(Integer.parseInt(rawLengthValue), -1);
+        } catch (NumberFormatException e) {
+            return -1;
         }
     }
 
@@ -286,7 +304,7 @@ public class CodecMetadataAttributeHandler {
         if (checksumValue != null) {
             metadataValue.append(";s=").append(checksumValue);
         }
-        if (configuration.compressionAlgorithm() != CompressionAlgorithm.NONE) {
+        if (configuration.compressionAlgorithm() != CompressionAlgorithm.NONE && rawLength >= 0) {
             metadataValue.append(";l=").append(rawLength);
         }
         return metadataValue.toString();

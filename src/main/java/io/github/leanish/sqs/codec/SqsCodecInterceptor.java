@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
@@ -253,8 +254,11 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         if (compression == CompressionAlgorithm.NONE) {
             return codec.decode(messageBodyBytes, maxDecodedPayloadBytes);
         }
-        // A compressed payload decodes to exactly its declared raw length, so that length bounds the decompression.
-        int expectedLength = metadata.rawLength();
+        if (configuration.version() == CodecAttributes.LEGACY_VERSION_VALUE) {
+            return decodeLegacy(codec, messageBodyBytes, metadata);
+        }
+        // A compressed v=2 payload decodes to exactly its declared raw length, so that length bounds the decompression.
+        int expectedLength = metadata.rawLength().orElseThrow();
         if (expectedLength > maxDecodedPayloadBytes) {
             throw DecompressedPayloadTooLargeException.declaredOverLimit(
                     compression.id(), expectedLength, maxDecodedPayloadBytes);
@@ -262,6 +266,20 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         byte[] decoded = codec.decode(messageBodyBytes, expectedLength);
         if (decoded.length != expectedLength) {
             throw CompressionException.lengthMismatch(compression.id(), expectedLength, decoded.length);
+        }
+        return decoded;
+    }
+
+    /**
+     * A compressed v=1 payload (0.5.x, read until 0.7.0): its raw length is optional, and its zstd frames were streamed
+     * with the level's window, so the configured limit bounds the decompression; a raw length it declares must match.
+     */
+    private byte[] decodeLegacy(Codec codec, byte[] messageBodyBytes, CodecMetadataAttributeHandler metadata) {
+        byte[] decoded = codec.decode(messageBodyBytes, maxDecodedPayloadBytes);
+        OptionalInt declaredLength = metadata.rawLength();
+        if (declaredLength.isPresent() && decoded.length != declaredLength.getAsInt()) {
+            throw CompressionException.lengthMismatch(
+                    metadata.configuration().compressionAlgorithm().id(), declaredLength.getAsInt(), decoded.length);
         }
         return decoded;
     }

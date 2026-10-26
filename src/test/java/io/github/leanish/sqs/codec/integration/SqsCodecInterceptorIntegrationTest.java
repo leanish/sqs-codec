@@ -82,7 +82,7 @@ class SqsCodecInterceptorIntegrationTest {
             Map<String, MessageAttributeValue> attributes = message.messageAttributes();
             String expectedChecksum = ChecksumAlgorithm.MD5.implementation().checksum(payloadBytes);
             assertThat(attributes.get(CodecAttributes.META).stringValue())
-                    .isEqualTo("v=1;c=zstd;e=base64;h=md5;s=" + expectedChecksum + ";l=12");
+                    .isEqualTo("v=2;c=zstd;e=base64;h=md5;s=" + expectedChecksum + ";l=12");
         }
     }
 
@@ -151,7 +151,7 @@ class SqsCodecInterceptorIntegrationTest {
                                 "shopId");
                 assertThat(attributes.get(CodecAttributes.META).stringValue())
                         .isEqualTo(
-                                "v=1;c=gzip;e=base64;h=sha256;s="
+                                "v=2;c=gzip;e=base64;h=sha256;s="
                                         + ChecksumAlgorithm.SHA256.implementation().checksum(payloadBytes)
                                         + ";l="
                                         + payloadBytes.length);
@@ -178,7 +178,7 @@ class SqsCodecInterceptorIntegrationTest {
 
             assertThat(message.body()).isEqualTo(payload);
             assertThat(message.messageAttributes().get(CodecAttributes.META).stringValue())
-                    .isEqualTo("v=1;c=none;e=base64;h=none");
+                    .isEqualTo("v=2;c=none;e=base64;h=none");
         }
     }
 
@@ -201,7 +201,7 @@ class SqsCodecInterceptorIntegrationTest {
 
             assertThat(message.body()).isEqualTo(payload);
             assertThat(message.messageAttributes().get(CodecAttributes.META).stringValue())
-                    .isEqualTo("v=1;c=gzip;e=ascii85;h=none;l=12");
+                    .isEqualTo("v=2;c=gzip;e=ascii85;h=none;l=12");
         }
     }
 
@@ -218,7 +218,7 @@ class SqsCodecInterceptorIntegrationTest {
                     .messageBody("!!")
                     .messageAttributes(Map.of(
                             CodecAttributes.META,
-                            MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none;l=2")))
+                            MessageAttributeUtils.stringAttribute("v=2;c=zstd;e=base64;h=none;l=2")))
                     .build());
 
             assertReceiveThrows(
@@ -244,7 +244,7 @@ class SqsCodecInterceptorIntegrationTest {
                     .messageBody(payload)
                     .messageAttributes(Map.of(
                             CodecAttributes.META,
-                            MessageAttributeUtils.stringAttribute("v=1;c=none;e=none;h=md5;s=bad;l=16")))
+                            MessageAttributeUtils.stringAttribute("v=2;c=none;e=none;h=md5;s=bad;l=16")))
                     .build());
 
             assertReceiveThrows(

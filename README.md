@@ -118,7 +118,7 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
 ## Attributes
 
 Codec metadata is stored in a single attribute:
-- `x-codec-meta` (String), for example: `v=1;c=zstd;e=base64;h=md5;s=t2tngCwK9b7C9eqVQunqfg;l=12`
+- `x-codec-meta` (String), for example: `v=2;c=zstd;e=base64;h=md5;s=t2tngCwK9b7C9eqVQunqfg;l=12`
 
 Keys:
 - `v`: codec version
@@ -131,7 +131,12 @@ Keys:
 Notes:
 - Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
 - `ascii85` is emitted and accepted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks.
-- `v` is required and must be the current supported version (`1`).
+- `v` is required. Send always writes `2`. Reading accepts `2` and, deprecated until 0.7.0, `1` (what 0.5.x writes):
+  a `v=1` payload may lack `l` or carry one that isn't a number (it's then ignored), and its decompression is bounded by
+  `maxDecodedPayloadBytes` rather than by `l`, since 0.5.x streamed zstd frames with the level's window; a valid `l` it
+  declares must still match. A 0.5.x zstd frame whose window is larger than `maxDecodedPayloadBytes` (the `MAXIMUM`
+  level's 128 MiB, say) is refused. An already encoded `v=1` message sent through the interceptor is validated the same
+  way and sent unchanged. Any other version fails with `UnsupportedCodecMetadataException`.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.

@@ -9,8 +9,9 @@ All notable changes to this project are documented in this file.
   zstd and 1 MB with gzip) and exhaust a consumer's memory on receive. Decoding now stops with
   `DecompressedPayloadTooLargeException` as soon as it passes `maxDecodedPayloadBytes` (default 16 MiB, set with
   `withMaxDecodedPayloadBytes(...)`) or the payload's raw length, on receive and when validating already encoded
-  outbound messages. Snappy's declared length is checked before it allocates, and zstd's decoder refuses a frame whose
-  declared window is larger than the raw length needs before allocating it.
+  outbound messages. Snappy's declared length is checked before it allocates, and zstd's decoder refuses, before allocating it,
+  a window larger than the raw length (`v=2`) or the configured limit (`v=1`) needs, rounded up to a power of two
+  (at least 1 KiB).
 - Floor Guava at `33.7.2-jre` in Error Prone and Checkstyle configurations to address
   [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94), preserving the configured Checkstyle tool version.
 - Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10`, the lowest stable version fixing all seven
@@ -18,7 +19,7 @@ All notable changes to this project are documented in this file.
   stream recursion and pooled-buffer reuse). This security fix skips the usual seven-day release cooldown.
 
 ### Changed
-- Breaking, no compatibility with earlier versions kept: `Compressor.decompress(byte[])` is now
+- Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few bytes).

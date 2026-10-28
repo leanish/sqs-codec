@@ -22,8 +22,8 @@ dependencies {
     checkstyle(providers.provider { "com.puppycrawl.tools:checkstyle:${checkstyleExtension.toolVersion}" })
 
     // BOMs
-    compileOnly(platform("software.amazon.awssdk:bom:2.57.1"))
-    testImplementation(platform("software.amazon.awssdk:bom:2.57.1"))
+    compileOnly(platform("software.amazon.awssdk:bom:2.57.2"))
+    testImplementation(platform("software.amazon.awssdk:bom:2.57.2"))
     testImplementation(platform("org.mockito:mockito-bom:5.24.0"))
     mockitoAgent(platform("org.mockito:mockito-bom:5.24.0"))
     testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))

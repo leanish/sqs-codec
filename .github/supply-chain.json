@@ -1,5 +1,5 @@
 {
-  "ownPackages": {
+  "trustedPackages": {
     "Maven": { "groups": ["io.github.leanish"], "pluginIdPrefixes": ["io.github.leanish."] },
     "GitHub Actions": { "owners": ["leanish", "actions", "aws-actions"] }
   }

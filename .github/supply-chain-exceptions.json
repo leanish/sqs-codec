@@ -1,0 +1,13 @@
+{
+  "vulnerabilities": [
+    {
+      "id": "GHSA-v5x9-67m3-7m56",
+      "ecosystem": "Maven",
+      "package": "com.google.guava:guava",
+      "version": "33.7.2-jre",
+      "paths": [":annotationProcessor", ":checkstyle", ":testAnnotationProcessor"],
+      "reason": "Low-severity hash flooding in HashBiMap/LinkedHashMultimap construction, published only in guava's repository on 2026-10-31 for 13.0 through 33.7.2 with no fixed release. Here guava runs only inside build tools (Checkstyle, annotation processors), not in the library. Revisit when a fix or a reviewed record exists.",
+      "expires": "2026-11-16"
+    }
+  ]
+}

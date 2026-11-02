@@ -17,6 +17,10 @@ All notable changes to this project are documented in this file.
 - Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10`, the lowest stable version fixing all seven
   advisories published on 2026-10-03, including CVE-2026-90559 (out-of-bounds accesses, unbounded allocations,
   stream recursion and pooled-buffer reuse). This security fix skips the usual seven-day release cooldown.
+- Upgraded `com.github.luben:zstd-jni` from `1.5.7-24` to `1.5.7-25`, fixing three advisories published on 2026-10-28
+  in zstd-jni's repository (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5, GHSA-h5m7-4hv9-cvp3: memory-safety bugs in
+  dictionary training and multi-dictionary decompression, which this library doesn't use). Taken before the seven-day
+  release cooldown, on the owner's decision.
 
 ### Changed
 - Breaking: `Compressor.decompress(byte[])` is now

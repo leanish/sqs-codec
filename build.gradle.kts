@@ -94,3 +94,13 @@ pitest {
         listOf("--enable-native-access=ALL-UNNAMED", "-javaagent:${agent.single().asFile.absolutePath}")
     }
 }
+
+// The publishing workflow's prepare job stages the publications here; its publish job uploads exactly these files.
+publishing {
+    repositories {
+        maven {
+            name = "Staging"
+            url = uri(layout.buildDirectory.dir("publication-staging"))
+        }
+    }
+}

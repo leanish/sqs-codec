@@ -32,6 +32,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: leanish/java-conventions/.github/workflows/publishing-github-packages.yml@f3cd09f2020a1b2cf464a970ddabfd072a7ca845 # publish-split, repinned to main once java-conventions#110 merges
+    uses: leanish/java-conventions/.github/workflows/publishing-github-packages.yml@b4c890455eff18cf46ba876ca6e9e6def5598728 # v0.6.4
     with:
       coordinates: io/github/leanish/sqs-codec

@@ -38,10 +38,10 @@ All notable changes to this project are documented in this file.
   `v=2`, so upgrade consumers before producers.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
-- The "Publishing GitHub Packages" workflow no longer runs Gradle with the write token. A `prepare` job builds and
-  stages the publication with read-only access, a `publish` job (no checkout, no Gradle) uploads exactly the staged
-  artifacts and checksums, refusing to replace a published file with other bytes or an older SNAPSHOT build over a
-  newer one, and a `verify` job resolves the published version from scratch. Releases are dispatched from their
+- The "Publishing GitHub Packages" workflow no longer runs Gradle with the write token: it calls java-conventions'
+  reusable publishing workflow, where a `prepare` job builds and stages the publication with read-only access and a
+  `publish` job (no checkout, no Gradle) uploads exactly the expected artifacts and checksums, refusing to replace a
+  published file with other bytes or an older SNAPSHOT build over a newer one. Releases are dispatched from their
   `vX.Y.Z` tag, which must match the build's version.
 
 ### Added

@@ -216,7 +216,7 @@ CI (`ci.yml`) runs full `build` on JDK 25.
 The [leanish/supply-chain](https://github.com/leanish/supply-chain) gate (`supply-chain.yml`) checks every PR for what it makes worse (new advisories, young versions, unpinned new actions), scans `main` on every push and daily, and rescans open PRs daily.
 Legacy runtime checks (`testing-legacy-jdk.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
 The build, mutation testing, GitHub publishing, and legacy-JDK workflows use GitHub-hosted `ubuntu-26.04` runners.
-Publishing (`publishing-github.yml`) runs Gradle only with a read-only token: its `prepare` job stages the publication in `build/publication-staging` (the build's `Staging` repository), and only its `publish` job, which runs no Gradle or repository code, holds `packages: write` and uploads exactly the staged artifacts and checksums; GitHub Packages generates the Maven metadata itself.
+Publishing (`publishing-github.yml`) calls [java-conventions' reusable publishing workflow](https://github.com/leanish/java-conventions#plugin-project-ci-maintainers), which runs Gradle only with a read-only token (staging the publication in `build/publication-staging`, the build's `Staging` repository) and uploads exactly the expected artifacts and checksums from a job that runs no Gradle or repository code; GitHub Packages generates the Maven metadata itself.
 
 Run full checks (tests, checkstyle, spotless, jacoco):
 ```bash

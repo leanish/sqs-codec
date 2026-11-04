@@ -32,6 +32,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: leanish/java-conventions/.github/workflows/publishing-github-packages.yml@b4c890455eff18cf46ba876ca6e9e6def5598728 # v0.6.4
+    uses: leanish/java-conventions/.github/workflows/publishing-github-packages.yml@1c9d12dd537b82a01cc9e27f482db004e3860f54 # v0.6.5
     with:
       coordinates: io/github/leanish/sqs-codec

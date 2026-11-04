@@ -43,11 +43,12 @@ All notable changes to this project are documented in this file.
   `v=2`, so upgrade consumers before producers.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
-- The "Publishing GitHub Packages" workflow no longer runs Gradle with the write token: it calls java-conventions'
-  reusable publishing workflow, where a `prepare` job builds and stages the publication with read-only access and a
-  `publish` job (no checkout, no Gradle) uploads exactly the expected artifacts and checksums, refusing to replace a
-  published file with other bytes or an older SNAPSHOT build over a newer one. Releases are dispatched from their
-  `vX.Y.Z` tag, which must match the build's version.
+- Publishing to GitHub Packages no longer runs the build next to the package write token, so a compromised Gradle
+  plugin, dependency or action in the build can't publish or overwrite packages. The build now runs with read access
+  only and stages sqs-codec's publication; a separate job that runs none of the repository's code uploads only
+  sqs-codec's artifacts and checksums for that version, and never replaces a published file with different bytes or a
+  newer SNAPSHOT with an older one. Releases are now dispatched from their `vX.Y.Z` tag, which must match the build's
+  version (SNAPSHOTs from `main`). The two jobs come from java-conventions' reusable publishing workflow.
 
 ### Added
 - Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every

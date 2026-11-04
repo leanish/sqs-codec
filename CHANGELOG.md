@@ -12,8 +12,11 @@ All notable changes to this project are documented in this file.
   outbound messages. Snappy's declared length is checked before it allocates, and zstd's decoder refuses, before allocating it,
   a window larger than the raw length (`v=2`) or the configured limit (`v=1`) needs, rounded up to a power of two
   (at least 1 KiB).
-- Floor Guava at `33.7.2-jre` in Error Prone and Checkstyle configurations to address
-  [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94), preserving the configured Checkstyle tool version.
+- Floor Guava at `33.8.0-jre` in Error Prone and Checkstyle configurations (through java-conventions `0.6.5`) to address
+  [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) and
+  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56), preserving the configured
+  Checkstyle tool version. `33.8.0-jre` (and the `error_prone_annotations` `2.52.0` it requires) was taken before the
+  seven-day release cooldown, on the owner's decision.
 - Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10`, the lowest stable version fixing all seven
   advisories published on 2026-10-03, including CVE-2026-90559 (out-of-bounds accesses, unbounded allocations,
   stream recursion and pooled-buffer reuse). This security fix skips the usual seven-day release cooldown.
@@ -23,6 +26,8 @@ All notable changes to this project are documented in this file.
   release cooldown, on the owner's decision.
 
 ### Changed
+- Moved to java-conventions `0.6.5`: Error Prone `2.51.0` (with a commonmark `0.31.0` floor), NullAway `0.14.3`,
+  JaCoCo `0.8.16` and PIT `1.30.1`.
 - Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger

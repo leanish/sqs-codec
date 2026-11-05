@@ -216,6 +216,7 @@ CI (`ci.yml`) runs full `build` on JDK 25.
 The [leanish/supply-chain](https://github.com/leanish/supply-chain) gate (`supply-chain.yml`) checks every PR for what it makes worse (new advisories, young versions, unpinned new actions), scans `main` on every push and daily, and rescans open PRs daily.
 Legacy runtime checks (`testing-legacy-jdk.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
 The build, mutation testing, GitHub publishing, and legacy-JDK workflows use GitHub-hosted `ubuntu-26.04` runners.
+Publishing (`publishing-github.yml`, run by hand: releases from their `vX.Y.Z` tag, SNAPSHOTs from `main`) keeps the build away from the package write token: after the checks above, the build runs with read access only and stages the publication in `build/publication-staging` (the build's `Staging` repository), then a job that runs none of the repository's code uploads only sqs-codec's artifacts and checksums for that version. Both jobs come from [java-conventions' reusable publishing workflow](https://github.com/leanish/java-conventions#plugin-project-ci-maintainers).
 
 Run full checks (tests, checkstyle, spotless, jacoco):
 ```bash

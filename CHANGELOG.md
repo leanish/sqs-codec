@@ -43,11 +43,11 @@ All notable changes to this project are documented in this file.
   `v=2`, so upgrade consumers before producers.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
-- Publishing to GitHub Packages now separates building from uploading. The build runs with read access only and
-  stages sqs-codec's publication; a separate job holds the package write token and runs no repository build code. The
-  upload job restricts publication paths to the configured coordinates, version, and expected files, and rejects files
-  it finds already published with different bytes. Publication still relies on the build's output and version
-  information. Dispatch releases from their matching `vX.Y.Z` tag and SNAPSHOTs from `main`. Both jobs come from
+- Publishing to GitHub Packages now separates building from uploading. The build runs with read access only and stages
+  sqs-codec's publication; a separate job holds the package write token and runs none of the repository's code. The
+  upload job restricts publication paths to the configured coordinates and the expected files for the build's version,
+  and rejects files it finds already published with different bytes. Publication still relies on the build's output and
+  version information. Dispatch releases from their matching `vX.Y.Z` tag and SNAPSHOTs from `main`. Both jobs come from
   java-conventions' reusable publishing workflow.
 
 ### Added

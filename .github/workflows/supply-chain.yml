@@ -1,7 +1,8 @@
 name: supply-chain
 
 # The supply-chain gate (leanish/leanish-development): on PR events, compares base and head against one advisory
-# snapshot; on pushes to main and daily, scans main. See https://github.com/leanish/leanish-development.
+# snapshot; on pushes to main, daily and when run by hand, scans main.
+# See https://github.com/leanish/leanish-development.
 
 on:
   pull_request:

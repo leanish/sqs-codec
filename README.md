@@ -140,14 +140,15 @@ Notes:
   limit admits a 4 MiB window; the output stays bounded by the limit either way. An already encoded `v=1` message sent through the interceptor is validated the same
   way and sent unchanged. Any other version fails with `UnsupportedCodecMetadataException`.
 - Upgrading from 0.5.x: before replacing consumers, check that retained compressed `v=1` messages fit the new
-  consumers' decoded-size and zstd-window limits. Any usable non-negative declared `l` must equal the decoded byte
+  consumers' decoded-size and zstd-window limits. A numeric, non-negative declared `l` must equal the decoded byte
   length; 0.5.x ignored mismatches, while this version rejects them. Raising the limit does not bypass that check.
 
-  If retained messages are incompatible, pause producers and drain them with compatible 0.5.x consumers, or arrange
-  their correction and replay before cutover. To consume legacy zstd `MAXIMUM` frames with this version, temporarily
-  configure `withMaxDecodedPayloadBytes(128 * 1024 * 1024)` before receiving them. This admits their 128 MiB window and
-  also raises the decoded-output allowance, so account for consumer memory. Restore the intended limit only after
-  incompatible legacy traffic has stopped and those messages are drained.
+  One incompatible message fails the whole receive (see above), so if retained messages are incompatible, pause
+  producers and drain them with 0.5.x consumers, or arrange their correction and replay before cutover. To consume
+  legacy zstd `MAXIMUM` frames with this version, temporarily configure `withMaxDecodedPayloadBytes(128 * 1024 * 1024)`
+  before receiving them. This admits their 128 MiB window and also raises the decoded-output allowance, so account for
+  consumer memory. Restore the intended limit only after incompatible legacy traffic has stopped and those messages are
+  drained.
 
   Upgrade consumers before producers: a 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2"), while this
   version reads both, so producers move to `v=2` only once every consumer of their queues can read it.

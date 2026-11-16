@@ -39,6 +39,7 @@ import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.UnsupportedAlgorithmException;
 import io.github.leanish.sqs.codec.algorithms.compression.CompressionException;
 import io.github.leanish.sqs.codec.algorithms.compression.DecompressedPayloadTooLargeException;
+import io.github.leanish.sqs.codec.algorithms.encoding.Ascii85PayloadCodec;
 import io.github.leanish.sqs.codec.algorithms.encoding.Base64PayloadCodec;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
@@ -1511,6 +1512,114 @@ class SqsCodecInterceptorTest {
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         assertThat(sent).isSameAs(request);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "2"})
+    void modifyResponse_refusesANonCanonicalAscii85FinalGroup(String version) {
+        // "Man " and a zero byte: its canonical final group is "!!", and "!\"" decodes to the same byte.
+        String metadata = "v=" + version + ";c=none;e=ascii85;h=none";
+        ReceiveMessageResponse canonical = receivedWith("9jqo^!!", metadata);
+        ReceiveMessageResponse alias = receivedWith("9jqo^!\"", metadata);
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(canonical), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo("Man \0");
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(alias), new ExecutionAttributes()))
+                .isInstanceOf(InvalidPayloadException.class)
+                .hasMessage("Invalid ascii85 payload");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "2"})
+    void modifyRequest_refusesAPreEncodedNonCanonicalAscii85FinalGroup(String version) {
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META,
+                MessageAttributeUtils.stringAttribute("v=" + version + ";c=none;e=ascii85;h=none"));
+        SendMessageRequest single = SendMessageRequest.builder().messageBody("9jqo^!\"").messageAttributes(attributes).build();
+        SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
+                .entries(SendMessageBatchRequestEntry.builder().id("1").messageBody("9jqo^!\"").messageAttributes(attributes).build())
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
+                .isInstanceOf(InvalidPayloadException.class)
+                .hasMessage("Invalid ascii85 payload");
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes()))
+                .isInstanceOf(InvalidPayloadException.class)
+                .hasMessage("Invalid ascii85 payload");
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonUtf8PayloadCases")
+    void modifyResponse_refusesADecodedPayloadThatIsNotUtf8(String body, String metadata) {
+        ReceiveMessageResponse response = receivedWith(body, metadata);
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(InvalidPayloadException.class)
+                .hasMessage("Decoded payload is not valid UTF-8");
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonUtf8PayloadCases")
+    void modifyRequest_refusesAPreEncodedPayloadThatIsNotUtf8(String body, String metadata) {
+        Map<String, MessageAttributeValue> attributes = Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute(metadata));
+        SendMessageRequest single = SendMessageRequest.builder().messageBody(body).messageAttributes(attributes).build();
+        SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
+                .entries(SendMessageBatchRequestEntry.builder().id("1").messageBody(body).messageAttributes(attributes).build())
+                .build();
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
+                .isInstanceOf(InvalidPayloadException.class)
+                .hasMessage("Decoded payload is not valid UTF-8");
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes()))
+                .isInstanceOf(InvalidPayloadException.class)
+                .hasMessage("Decoded payload is not valid UTF-8");
+    }
+
+    @Test
+    void modifyResponse_checksumMismatchOutranksInvalidUtf8() {
+        String otherChecksum = ChecksumAlgorithm.MD5.implementation().checksum(new byte[] {0});
+        ReceiveMessageResponse response = receivedWith(
+                Base64PayloadCodec.instance().encodeToString(new byte[] {(byte) 0xff}),
+                "v=2;c=none;e=base64;h=md5;s=" + otherChecksum);
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(ChecksumValidationException.class)
+                .hasMessage("Payload checksum mismatch");
+    }
+
+    @Test
+    void modifyResponse_legacyVersionDecodesMultibyteText() {
+        String payload = "{\"name\":\"Jyväskylä 🦊\"}";
+        String checksum = ChecksumAlgorithm.MD5.implementation().checksum(payload.getBytes(StandardCharsets.UTF_8));
+        ReceiveMessageResponse response = receivedWith(streamedZstdBody(payload, 3), "v=1;c=zstd;e=base64;h=md5;s=" + checksum);
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(payload);
+    }
+
+    /** One byte, 0xff, that is never valid UTF-8, behind each decoding path, with a valid checksum or none. */
+    private static Stream<Arguments> nonUtf8PayloadCases() {
+        byte[] notUtf8 = {(byte) 0xff};
+        String md5 = ChecksumAlgorithm.MD5.implementation().checksum(notUtf8);
+        String base64 = Base64PayloadCodec.instance().encodeToString(notUtf8);
+        String gzipBase64 = Base64PayloadCodec.instance().encodeToString(CompressionAlgorithm.GZIP.implementation().compress(notUtf8));
+        return Stream.of(
+                Arguments.of(base64, "v=2;c=none;e=base64;h=md5;s=" + md5),
+                Arguments.of(base64, "v=2;c=none;e=base64;h=none"),
+                Arguments.of(Ascii85PayloadCodec.instance().encodeToString(notUtf8), "v=2;c=none;e=ascii85;h=md5;s=" + md5),
+                Arguments.of(gzipBase64, "v=2;c=gzip;e=base64;h=md5;s=" + md5 + ";l=1"),
+                Arguments.of(gzipBase64, "v=1;c=gzip;e=base64;h=md5;s=" + md5));
     }
 
     /** A zstd frame as 0.5.x wrote it: streamed, so it declares its level's window and no content size. */

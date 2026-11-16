@@ -42,6 +42,8 @@ It intentionally rejects:
 - payloads containing whitespace
 - shorthand forms such as `z` and `y`
 - malformed or overflowing 5-character groups
+- a final partial group other than the one the encoder writes for those bytes
+  (`!"` for the byte `00`, whose form is `!!`)
 
 This avoids dialect drift between producers and consumers and prevents the
 decoder from silently accepting multiple textual representations for the same

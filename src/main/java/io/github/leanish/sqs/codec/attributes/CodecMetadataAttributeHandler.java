@@ -303,7 +303,7 @@ public class CodecMetadataAttributeHandler {
         if (checksumValue != null) {
             metadataValue.append(";s=").append(checksumValue);
         }
-        if (configuration.compressionAlgorithm() != CompressionAlgorithm.NONE && rawLength >= 0) {
+        if (rawLength >= 0) {
             metadataValue.append(";l=").append(rawLength);
         }
         return metadataValue.toString();

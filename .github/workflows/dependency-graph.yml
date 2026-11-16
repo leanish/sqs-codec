@@ -36,6 +36,8 @@ jobs:
   submit:
     name: Submit dependency graph
     needs: dependency-graph
+    # A fork PR's token is read-only, so submitting would fail there.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-26.04
     permissions:
       # The dependency submission API needs write access; this job runs no build code.

@@ -24,7 +24,6 @@ final class BoundedReads {
      * than {@code maxLength} bytes: memory grows with what was read, never with what the payload claims.
      */
     static byte[] readAtMost(InputStream input, int maxLength, String algorithm) throws IOException {
-        requireNonNegative(maxLength);
         ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(maxLength, BUFFER_SIZE));
         byte[] buffer = new byte[BUFFER_SIZE];
         int read;

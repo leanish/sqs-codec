@@ -1298,6 +1298,59 @@ class SqsCodecInterceptorTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void modifyResponse_checksumOnlyBodyIsNotBoundedByTheLimit() {
+        String body = "hello";
+        String checksum = ChecksumAlgorithm.MD5.implementation().checksum(body.getBytes(StandardCharsets.UTF_8));
+        ReceiveMessageResponse response = receivedWith(body, "v=2;c=none;e=none;h=md5;s=" + checksum);
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .withMaxDecodedPayloadBytes(4)
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(body);
+    }
+
+    @Test
+    void modifyResponse_encodedUncompressedBodyOverTheLimitIsRefused() {
+        ReceiveMessageResponse response = receivedWith(
+                Base64PayloadCodec.instance().encodeToString("hello".getBytes(StandardCharsets.UTF_8)),
+                "v=2;c=none;e=base64;h=none");
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .withMaxDecodedPayloadBytes(4)
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with none exceeds 4 bytes");
+    }
+
+    @Test
+    void modifyRequest_freshCompressedSendIsNotBoundedButAConsumerWithTheSameLimitRefusesIt() {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
+                .withMaxDecodedPayloadBytes(512);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody("a".repeat(1024))
+                .build();
+
+        SendMessageRequest sent = (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+        ReceiveMessageResponse received = ReceiveMessageResponse.builder()
+                .messages(Message.builder()
+                        .body(sent.messageBody())
+                        .messageAttributes(sent.messageAttributes())
+                        .build())
+                .build();
+
+        assertThat(sent.messageAttributes().get(CodecAttributes.META).stringValue())
+                .startsWith("v=2;c=gzip;e=base64;")
+                .endsWith(";l=1024");
+        assertThatThrownBy(() -> interceptor.modifyResponse(new ModifyResponseContext(received), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Payload with gzip declares 1024 decoded bytes, over the 512-byte limit");
+    }
+
     @ParameterizedTest
     @EnumSource(value = CompressionAlgorithm.class, names = {"GZIP", "ZSTD"})
     void modifyResponse_bombStopsAtItsDeclaredRawLength(CompressionAlgorithm compressionAlgorithm) {

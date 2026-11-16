@@ -28,8 +28,18 @@ All notable changes to this project are documented in this file.
 ### Changed
 - The build moved to java-conventions `0.6.5`, for the Guava fix above and newer build checks; no code changes were
   needed.
+- Upgraded dependencies (net, from 0.5.1; the Security entries above give the advisory-driven steps):
+  <!-- zstd-jni's destination is provisional: update it when zstd-jni's next upgrade lands before the release. -->
+  - `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-25`
+  - `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`
+  - `software.amazon.awssdk:bom` (compile-only and tests) from `2.55.10` to `2.57.2`
+- Upgraded the Gradle wrapper from `9.8.0` to `9.8.2`.
 - Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
+- Breaking: `CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes, includeRawPayloadLength)` is now
+  `forOutbound(configuration, payloadBytes)`, which writes `l` exactly when the configuration compresses.
+  `CodecAttributes.VERSION_VALUE` is now `2`, and `LEGACY_VERSION_VALUE` (`1`) is new; code compiled against 0.5.x
+  keeps the inlined `1` until it's recompiled.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few bytes).
   For `v=2`, a frame whose window is larger than its `l` needs is refused.
@@ -53,6 +63,11 @@ All notable changes to this project are documented in this file.
 ### Added
 - Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every
   pull request against one advisory snapshot of base and head, scans `main` on pushes and daily, and rescans open pull requests daily.
+
+### Documentation
+- Corrected the README on when metadata is omitted (`c`, `e` and `h` all `none`), what `maxDecodedPayloadBytes`
+  bounds, what checksums protect against, and that exception messages can quote received metadata.
+  `CompressionLevel`'s Javadoc now says `SNAPPY` and `NONE` reject explicit levels.
 
 ## 0.5.1 - 2026-10-03
 

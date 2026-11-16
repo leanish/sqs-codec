@@ -10,7 +10,7 @@ package io.github.leanish.sqs.codec.algorithms;
  *
  * <p>{@link CompressionAlgorithm#GZIP} and {@link CompressionAlgorithm#ZSTD} map these values to
  * algorithm-specific settings. {@link CompressionAlgorithm#SNAPPY} and
- * {@link CompressionAlgorithm#NONE} ignore this setting.
+ * {@link CompressionAlgorithm#NONE} reject explicit levels with {@link UnsupportedAlgorithmException}.
  */
 public enum CompressionLevel {
     /** Use the minimum supported compression effort. */

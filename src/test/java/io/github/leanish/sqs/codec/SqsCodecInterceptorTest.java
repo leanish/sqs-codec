@@ -1514,43 +1514,16 @@ class SqsCodecInterceptorTest {
         assertThat(sent).isSameAs(request);
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"1", "2"})
-    void modifyResponse_refusesANonCanonicalAscii85FinalGroup(String version) {
-        // "Man " and a zero byte: its canonical final group is "!!", and "!\"" decodes to the same byte.
-        String metadata = "v=" + version + ";c=none;e=ascii85;h=none";
-        ReceiveMessageResponse canonical = receivedWith("9jqo^!!", metadata);
-        ReceiveMessageResponse alias = receivedWith("9jqo^!\"", metadata);
+    @Test
+    void modifyResponse_decodesAnotherSpellingOfAnAscii85FinalGroupToTheSameBytes() {
+        // "Man " and a zero byte: the encoder writes the final group "!!", and "!\"" decodes to the same byte.
+        String metadata = "v=2;c=none;e=ascii85;h=none";
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
-                .modifyResponse(new ModifyResponseContext(canonical), new ExecutionAttributes());
-
-        assertThat(decoded.messages().get(0).body()).isEqualTo("Man \0");
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
-                .modifyResponse(new ModifyResponseContext(alias), new ExecutionAttributes()))
-                .isInstanceOf(InvalidPayloadException.class)
-                .hasMessage("Invalid ascii85 payload");
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"1", "2"})
-    void modifyRequest_refusesAPreEncodedNonCanonicalAscii85FinalGroup(String version) {
-        Map<String, MessageAttributeValue> attributes = Map.of(
-                CodecAttributes.META,
-                MessageAttributeUtils.stringAttribute("v=" + version + ";c=none;e=ascii85;h=none"));
-        SendMessageRequest single = SendMessageRequest.builder().messageBody("9jqo^!\"").messageAttributes(attributes).build();
-        SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
-                .entries(SendMessageBatchRequestEntry.builder().id("1").messageBody("9jqo^!\"").messageAttributes(attributes).build())
-                .build();
-
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
-                .modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
-                .isInstanceOf(InvalidPayloadException.class)
-                .hasMessage("Invalid ascii85 payload");
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
-                .modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes()))
-                .isInstanceOf(InvalidPayloadException.class)
-                .hasMessage("Invalid ascii85 payload");
+        for (String body : List.of("9jqo^!!", "9jqo^!\"")) {
+            ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                    .modifyResponse(new ModifyResponseContext(receivedWith(body, metadata)), new ExecutionAttributes());
+            assertThat(decoded.messages().get(0).body()).as(body).isEqualTo("Man \0");
+        }
     }
 
     @ParameterizedTest

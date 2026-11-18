@@ -11,8 +11,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 class Ascii85PayloadCodecTest {
 
@@ -93,32 +91,6 @@ class Ascii85PayloadCodecTest {
                 .cause()
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("ASCII85 chunk exceeds 32-bit range");
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"!\"", "!;", "!!\"", "!!!\"", "9jqo^!\""})
-    void ascii85_rejectsNonCanonicalFinalGroup(String encoded) {
-        // Each final group decodes to zero bytes, whose canonical form is all '!'.
-        assertThatThrownBy(() -> Ascii85PayloadCodec.instance().decode(encoded.getBytes(StandardCharsets.US_ASCII)))
-                .isInstanceOf(InvalidPayloadException.class)
-                .hasMessage("Invalid ascii85 payload")
-                .cause()
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("ASCII85 payload has a non-canonical final group");
-    }
-
-    @Test
-    void ascii85_acceptsEveryCanonicalFinalGroup() {
-        Ascii85PayloadCodec ascii85Codec = Ascii85PayloadCodec.instance();
-
-        for (int value = 0; value < 1 << 16; value++) {
-            byte[] oneByte = {(byte) value};
-            byte[] twoBytes = {(byte) (value >> 8), (byte) value};
-            byte[] threeBytes = {(byte) (value >> 8), (byte) value, (byte) (value * 31)};
-            assertThat(ascii85Codec.decode(ascii85Codec.encode(oneByte))).as("%s", value).containsExactly(oneByte);
-            assertThat(ascii85Codec.decode(ascii85Codec.encode(twoBytes))).as("%s", value).containsExactly(twoBytes);
-            assertThat(ascii85Codec.decode(ascii85Codec.encode(threeBytes))).as("%s", value).containsExactly(threeBytes);
-        }
     }
 
     @Test

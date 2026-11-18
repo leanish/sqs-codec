@@ -6,7 +6,6 @@
 package io.github.leanish.sqs.codec.algorithms.encoding;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 
 import com.google.errorprone.annotations.Immutable;
 
@@ -96,23 +95,9 @@ public final class Ascii85PayloadCodec implements PayloadCodec {
         }
         if (trailingChars > 0) {
             long value = decodeChunk(encoded, inputOffset, trailingChars);
-            int trailingBytes = trailingChars - 1;
-            requireCanonicalFinalGroup(encoded, inputOffset, value, trailingBytes);
-            writeDecodedBytes(value, decoded, outputOffset, trailingBytes);
+            writeDecodedBytes(value, decoded, outputOffset, trailingChars - 1);
         }
         return decoded;
-    }
-
-    /**
-     * A final partial group decodes padded with 'u', so several spellings yield the same bytes; only the one the encoder
-     * writes (the kept bytes padded with zeros, encoded and truncated) is accepted.
-     */
-    private static void requireCanonicalFinalGroup(byte[] encoded, int offset, long value, int trailingBytes) {
-        long keptBytes = value & ~(MAX_UINT32 >>> (trailingBytes * Byte.SIZE));
-        byte[] canonical = encodeChunk(keptBytes);
-        if (!Arrays.equals(encoded, offset, offset + trailingBytes + 1, canonical, 0, trailingBytes + 1)) {
-            throw new IllegalArgumentException("ASCII85 payload has a non-canonical final group");
-        }
     }
 
     private static byte[] encodeChunk(long value) {

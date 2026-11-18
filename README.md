@@ -131,8 +131,8 @@ Keys:
 
 Notes:
 - Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
-- `ascii85` is emitted and accepted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks.
-- Messages built outside this interceptor, `v=1` ones included, must use that canonical ASCII85 form when `e=ascii85`, and must decode to valid UTF-8; 0.5.x accepted ones that don't, and this version refuses them. Before upgrading consumers, correct and replay such retained messages, or drain them with 0.5.x consumers; raising `maxDecodedPayloadBytes` doesn't help.
+- `ascii85` is emitted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks. The decoder refuses framing, whitespace and shorthands, but accepts other spellings of a final partial group that decode to the same bytes ([details](docs/ascii85.md)).
+- Messages built outside this interceptor, `v=1` ones included, must decode to valid UTF-8; 0.5.x accepted ones that don't, and this version refuses them. Before upgrading consumers, correct and replay such retained messages, or drain them with 0.5.x consumers; raising `maxDecodedPayloadBytes` doesn't help.
 - `v` is required, exactly `2` or `1`. Metadata the interceptor writes is always `2`. Reading accepts `2` and, deprecated
   until 0.7.0, `1` (what 0.5.x writes):
   a `v=1` payload may lack `l` or carry one that isn't a number (it's then ignored), and its decompression is bounded by

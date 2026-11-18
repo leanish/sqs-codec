@@ -1,12 +1,3 @@
 {
-  "releaseAge": [
-    {
-      "ecosystem": "Maven",
-      "package": "com.github.luben:zstd-jni",
-      "version": "1.5.7-25",
-      "advisory": "GHSA-5p5w-hg9r-gx2p",
-      "reason": "Owner's decision (2026-11-02) to take the fix before the 7-day wait: 1.5.7-25 fixes three memory-safety advisories (two high) published 2026-10-28 only in zstd-jni's repository, so none is reviewed yet and none can justify the young version on its own.",
-      "expires": "2026-11-16"
-    }
-  ]
+  "releaseAge": []
 }

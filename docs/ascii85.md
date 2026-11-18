@@ -34,7 +34,7 @@ This keeps the wire format deterministic and easy to reason about.
 
 ### Canonical decode
 
-The library accepts only the same canonical representation that it emits.
+The library accepts the canonical representation that it emits.
 
 It intentionally rejects:
 
@@ -43,9 +43,12 @@ It intentionally rejects:
 - shorthand forms such as `z` and `y`
 - malformed or overflowing 5-character groups
 
-This avoids dialect drift between producers and consumers and prevents the
-decoder from silently accepting multiple textual representations for the same
-payload.
+This avoids dialect drift between producers and consumers.
+
+One exception: a final partial group is decoded padded with `u`, so other
+spellings of it that decode to the same bytes are accepted too (`!"` for the
+byte `00`, whose canonical form is `!!`). They carry the same bytes, so the
+decoded payload is the same either way.
 
 ### In-repo implementation
 

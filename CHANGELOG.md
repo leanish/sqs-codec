@@ -24,16 +24,14 @@ All notable changes to this project are documented in this file.
   in zstd-jni's repository (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5, GHSA-h5m7-4hv9-cvp3: memory-safety bugs in
   dictionary training and multi-dictionary decompression, which this library doesn't use). Taken before the seven-day
   release cooldown, on the owner's decision.
+- The workflows use `gradle/actions` `v6.4.1`, which fixes
+  [GHSA-chpw-2mqm-95cc](https://github.com/gradle/actions/security/advisories/GHSA-chpw-2mqm-95cc): the dependency
+  graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
 
 ### Changed
 - The build moved to java-conventions `0.6.5`, for the Guava fix above and newer build checks; no code changes were
   needed.
-- Upgraded dependencies (net, from 0.5.1; the Security entries above give the advisory-driven steps):
-  <!-- zstd-jni's destination is provisional: update it when zstd-jni's next upgrade lands before the release. -->
-  - `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-25`
-  - `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`
-  - `software.amazon.awssdk:bom` (compile-only and tests) from `2.55.10` to `2.57.2`
-- Upgraded the Gradle wrapper from `9.8.0` to `9.8.2`.
+- Upgraded `com.github.luben:zstd-jni` from `1.5.7-25` to `1.5.7-26`.
 - Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
 - Breaking: `CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes, includeRawPayloadLength)` is now
@@ -47,10 +45,13 @@ All notable changes to this project are documented in this file.
   already encoded message is validated before sending: one without a valid `l` fails, and an `l` over the limit fails
   before decompressing. `withIncludeRawPayloadLength` is gone. `l` is still ignored when `c=none`. A message over the
   limit, or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
-- The metadata version is now `v=2`, the format above, written for every newly encoded message. `v=1` messages (0.5.x) are still read,
-  deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds their decompression
-  (a 0.5.x zstd frame whose window is larger than it needs, rounded up to a power of two, is refused). Any other version fails. A 0.5.x consumer refuses
-  `v=2`, so upgrade consumers before producers.
+- The metadata version is now `v=2`, the format above, written for every newly encoded message. `v=1` messages (0.5.x)
+  are still read, deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds
+  their decompression (a 0.5.x zstd frame whose window is larger than it needs, rounded up to a power of two, is
+  refused). Any other version fails. Upgrade consumers before producers; 0.5.x consumers refuse `v=2`. Retained `v=1`
+  messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames whose window is over
+  the configured limit) each fail the whole
+  receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
 - Publishing to GitHub Packages no longer runs the build next to the package write token, so a compromised Gradle
@@ -64,10 +65,19 @@ All notable changes to this project are documented in this file.
 - Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every
   pull request against one advisory snapshot of base and head, scans `main` on pushes and daily, and rescans open pull requests daily.
 
+### Fixed
+- A decoded payload that isn't valid UTF-8 fails with `InvalidPayloadException`, on receive and when an already encoded
+  message is validated before sending. It used to be delivered with the invalid bytes replaced by U+FFFD, after its
+  checksum had passed on the original bytes. Bodies the interceptor encodes are always valid UTF-8, so only messages
+  built elsewhere are affected; like any decoding error, such a message fails the whole receive.
+- Upgrading: retained messages built outside the interceptor, `v=1` ones included, that don't decode to valid UTF-8
+  must be corrected and replayed, or drained with 0.5.x consumers, before consumers move to this version; raising
+  `maxDecodedPayloadBytes` doesn't help.
+
 ### Documentation
-- Corrected the README on when metadata is omitted (`c`, `e` and `h` all `none`), what `maxDecodedPayloadBytes`
-  bounds, what checksums protect against, and that exception messages can quote received metadata.
-  `CompressionLevel`'s Javadoc now says `SNAPPY` and `NONE` reject explicit levels.
+- `docs/ascii85.md` and the README said the experimental ASCII85 decoder accepts only the canonical form it writes. It
+  also accepts other spellings of a final partial group that decode to the same bytes (`!"` for the byte `00`, whose
+  form is `!!`); the docs now say so.
 
 ## 0.5.1 - 2026-10-03
 

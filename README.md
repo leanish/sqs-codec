@@ -76,7 +76,7 @@ Defaults:
 - Encoding: `NONE`
 - Checksum: `MD5`
 - When compression is enabled and encoding remains `NONE`, the effective payload encoding is `BASE64`.
-- `ASCII85` is experimental; it uses a strict canonical dialect without `<~ ~>` framing, whitespace, or `z`/`y` shorthands.
+- `ASCII85` is experimental; it's written in a canonical dialect without `<~ ~>` framing, whitespace, or `z`/`y` shorthands, which the decoder also refuses.
 - `ASCII85` is intentionally transport-focused between `sqs-codec` endpoints rather than interoperability-focused with third-party ASCII85 tools.
 - `ASCII85` reduces encoded-body overhead versus Base64 in theory, but the practical size win is small enough that it should be treated as a niche transport option rather than a new default.
 - `MD5` and `SHA256` detect accidental corruption. They're unkeyed, so neither authenticates the producer: whoever can send to the queue can attach a matching checksum to any body, or send `h=none`. Control who can send with the queue's access policy.
@@ -86,6 +86,7 @@ Defaults:
 - Every compressed `v=2` payload declares its raw length (`l`) and must decode to exactly that many bytes, on receive and when an already encoded message is validated before sending. A compressed `v=2` payload without a valid `l` fails with `UnsupportedCodecMetadataException`; an `l` over the limit fails with `DecompressedPayloadTooLargeException` before decompressing; decompression stops with `DecompressedPayloadTooLargeException` as soon as it passes `l`, and a payload that decodes to fewer bytes fails with `CompressionException`. `l` is ignored when `c=none`.
 - A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until a dead-letter queue takes it, if one is configured.
 - The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten.
+- A decoded payload must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException`, on receive and when an already encoded message is validated before sending.
 - Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. For `v=2`, the decoder refuses, with `DecompressedPayloadTooLargeException` and before allocating it, a frame whose declared window is larger than `l` needs (rounded up to a power of two, at least 1 KiB). Snappy's declared length is checked against `l` (`maxDecodedPayloadBytes` for `v=1`) before it allocates.
 - `DecompressedPayloadTooLargeException` means the payload was refused against the limit in force (`maxDecodedPayloadBytes` for an encoded, uncompressed payload (`c=none`, `e` not `none`) or an `l` over it, `l` itself for a compressed `v=2` one, `maxDecodedPayloadBytes` for a compressed `v=1` one): decoding produced more than it, a declared length is over it, or a zstd frame's window is larger than it needs. It doesn't establish the payload's actual decoded size.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if compressed payload would be larger than the original body, the interceptor sends the original body and falls back to `c=none,e=none`.
@@ -130,7 +131,8 @@ Keys:
 
 Notes:
 - Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
-- `ascii85` is emitted and accepted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks.
+- `ascii85` is emitted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks. The decoder refuses framing, whitespace and shorthands, but accepts other spellings of a final partial group that decode to the same bytes ([details](docs/ascii85.md)).
+- Messages built outside this interceptor, `v=1` ones included, must decode to valid UTF-8; 0.5.x accepted ones that don't, and this version refuses them. Before upgrading consumers, correct and replay such retained messages, or drain them with 0.5.x consumers; raising `maxDecodedPayloadBytes` doesn't help.
 - `v` is required, exactly `2` or `1`. Metadata the interceptor writes is always `2`. Reading accepts `2` and, deprecated
   until 0.7.0, `1` (what 0.5.x writes):
   a `v=1` payload may lack `l` or carry one that isn't a number (it's then ignored), and its decompression is bounded by
@@ -139,8 +141,19 @@ Notes:
   to a power of two (at least 1 KiB), is refused: the `MAXIMUM` level's 128 MiB under the 16 MiB default, say. A 3 MiB
   limit admits a 4 MiB window; the output stays bounded by the limit either way. An already encoded `v=1` message sent through the interceptor is validated the same
   way and sent unchanged. Any other version fails with `UnsupportedCodecMetadataException`.
-- Upgrading from 0.5.x: upgrade consumers first. A 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2"), while
-  this version reads both, so producers move to `v=2` only once every consumer of their queues can read it.
+- Upgrading from 0.5.x: before replacing consumers, check that retained compressed `v=1` messages fit the new
+  consumers' decoded-size and zstd-window limits. A numeric, non-negative declared `l` must equal the decoded byte
+  length; 0.5.x ignored mismatches, while this version rejects them. Raising the limit does not bypass that check.
+
+  One incompatible message fails the whole receive (see above), so if retained messages are incompatible, pause
+  producers and drain them with 0.5.x consumers, or arrange their correction and replay before cutover. To consume
+  legacy zstd `MAXIMUM` frames with this version, temporarily configure `withMaxDecodedPayloadBytes(128 * 1024 * 1024)`
+  before receiving them. This admits their 128 MiB window and also raises the decoded-output allowance, so account for
+  consumer memory. Restore the intended limit only after incompatible legacy traffic has stopped and those messages are
+  drained.
+
+  Upgrade consumers before producers: a 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2"), while this
+  version reads both, so producers move to `v=2` only once every consumer of their queues can read it.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.
@@ -175,9 +188,6 @@ SQS attribute limit:
 All codec failures extend `CodecException`. You can catch the base type
 to handle any codec error, or specific exceptions when you want targeted
 responses.
-
-Messages of `UnsupportedCodecMetadataException` and `UnsupportedAlgorithmException` can quote received metadata as
-the sender wrote it; treat them as untrusted text when logging.
 
 Catch specific decode failures surfaced by the interceptor:
 ```java

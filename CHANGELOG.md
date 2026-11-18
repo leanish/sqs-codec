@@ -41,7 +41,8 @@ All notable changes to this project are documented in this file.
   are still read, deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds
   their decompression (a 0.5.x zstd frame whose window is larger than it needs, rounded up to a power of two, is
   refused). Any other version fails. Upgrade consumers before producers; 0.5.x consumers refuse `v=2`. Retained `v=1`
-  messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames) each fail the whole
+  messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames whose window is over
+  the configured limit) each fail the whole
   receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.

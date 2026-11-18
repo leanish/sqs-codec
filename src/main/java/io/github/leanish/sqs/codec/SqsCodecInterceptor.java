@@ -192,7 +192,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             validateChecksum(configuration, requiredChecksumValue(metadata), payloadBytes);
         }
         if (shouldDecode(configuration)) {
-            // Refused here as on receive, rather than sending a message no receiver accepts.
+            // Refused here as on receive, rather than sending a message this version's receivers refuse.
             requireUtf8(payloadBytes);
         }
     }

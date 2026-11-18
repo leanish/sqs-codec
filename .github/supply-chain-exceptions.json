@@ -1,3 +1,28 @@
 {
-  "releaseAge": []
+  "releaseAge": [
+    {
+      "ecosystem": "Maven",
+      "package": "com.github.luben:zstd-jni",
+      "version": "1.5.7-28",
+      "advisory": "GHSA-779h-x4xj-2f4f",
+      "reason": "Owner's decision: take the fix for zstd-jni's three repository advisories of 2026-11-14 before the seven-day wait, so main's scan passes again.",
+      "expires": "2026-11-21"
+    },
+    {
+      "ecosystem": "Maven",
+      "package": "com.github.luben:zstd-jni",
+      "version": "1.5.7-28",
+      "advisory": "GHSA-c62c-wjcx-gjxx",
+      "reason": "Owner's decision: take the fix for zstd-jni's three repository advisories of 2026-11-14 before the seven-day wait, so main's scan passes again.",
+      "expires": "2026-11-21"
+    },
+    {
+      "ecosystem": "Maven",
+      "package": "com.github.luben:zstd-jni",
+      "version": "1.5.7-28",
+      "advisory": "GHSA-fh94-9rh7-3mwc",
+      "reason": "Owner's decision: take the fix for zstd-jni's three repository advisories of 2026-11-14 before the seven-day wait, so main's scan passes again.",
+      "expires": "2026-11-21"
+    }
+  ]
 }

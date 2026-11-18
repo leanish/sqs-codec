@@ -58,6 +58,20 @@ All notable changes to this project are documented in this file.
 - Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every
   pull request against one advisory snapshot of base and head, scans `main` on pushes and daily, and rescans open pull requests daily.
 
+### Fixed
+- A decoded payload that isn't valid UTF-8 fails with `InvalidPayloadException`, on receive and when an already encoded
+  message is validated before sending. It used to be delivered with the invalid bytes replaced by U+FFFD, after its
+  checksum had passed on the original bytes. Bodies the interceptor encodes are always valid UTF-8, so only messages
+  built elsewhere are affected; like any decoding error, such a message fails the whole receive.
+- Upgrading: retained messages built outside the interceptor, `v=1` ones included, that don't decode to valid UTF-8
+  must be corrected and replayed, or drained with 0.5.x consumers, before consumers move to this version; raising
+  `maxDecodedPayloadBytes` doesn't help.
+
+### Documentation
+- `docs/ascii85.md` and the README said the experimental ASCII85 decoder accepts only the canonical form it writes. It
+  also accepts other spellings of a final partial group that decode to the same bytes (`!"` for the byte `00`, whose
+  form is `!!`); the docs now say so.
+
 ## 0.5.1 - 2026-10-03
 
 ### Added

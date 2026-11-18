@@ -5,6 +5,9 @@
  */
 package io.github.leanish.sqs.codec;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,6 +25,7 @@ import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.compression.CompressionException;
 import io.github.leanish.sqs.codec.algorithms.compression.DecompressedPayloadTooLargeException;
+import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
 import io.github.leanish.sqs.codec.attributes.CodecMetadataAttributeHandler;
@@ -187,6 +191,10 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         if (shouldValidateChecksum(configuration)) {
             validateChecksum(configuration, requiredChecksumValue(metadata), payloadBytes);
         }
+        if (shouldDecode(configuration)) {
+            // Refused here as on receive, rather than sending a message this version's receivers refuse.
+            requireUtf8(payloadBytes);
+        }
     }
 
     private ReceiveMessageRequest ensureCodecAttributesRequested(ReceiveMessageRequest request) {
@@ -237,8 +245,21 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         }
 
         return message.toBuilder()
-                .body(new String(payloadBytes, StandardCharsets.UTF_8))
+                .body(requireUtf8(payloadBytes))
                 .build();
+    }
+
+    /** The decoded payload as text: one that isn't valid UTF-8 is refused rather than altered. */
+    private static String requireUtf8(byte[] payloadBytes) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(payloadBytes))
+                    .toString();
+        } catch (CharacterCodingException e) {
+            throw new InvalidPayloadException("Decoded payload is not valid UTF-8", e);
+        }
     }
 
     private byte[] decodePayloadIfNeeded(String messageBody, CodecMetadataAttributeHandler metadata) {

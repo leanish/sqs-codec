@@ -62,8 +62,9 @@ All notable changes to this project are documented in this file.
   java-conventions' reusable publishing workflow.
 
 ### Added
-- Added the [leanish/supply-chain](https://github.com/leanish/supply-chain) gate as a `supply-chain` workflow: it checks every
-  pull request against one advisory snapshot of base and head, scans `main` on pushes and daily, and rescans open pull requests daily.
+- Added the [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain gate as a
+  `supply-chain` workflow: it compares each pull request's base and head against one advisory snapshot, and scans
+  `main`.
 
 ### Fixed
 - A decoded payload that isn't valid UTF-8 fails with `InvalidPayloadException`, on receive and when an already encoded

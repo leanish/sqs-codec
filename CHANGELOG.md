@@ -25,9 +25,8 @@ All notable changes to this project are documented in this file.
   dictionary training and multi-dictionary decompression, which this library doesn't use). Taken before the seven-day
   release cooldown, on the owner's decision.
 - Upgraded `com.github.luben:zstd-jni` from `1.5.7-26` to `1.5.7-28`, fixing three advisories published on 2026-11-14
-  in zstd-jni's repository (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx, GHSA-fh94-9rh7-3mwc: native use-after-free and
-  buffer-overflow bugs in its streams and multi-dictionary decompression). Taken before the seven-day release cooldown,
-  on the owner's decision.
+  in zstd-jni's repository (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx, GHSA-fh94-9rh7-3mwc). Taken before the seven-day
+  release cooldown, on the owner's decision.
 - The workflows use `gradle/actions` `v6.4.1`, which fixes
   [GHSA-chpw-2mqm-95cc](https://github.com/gradle/actions/security/advisories/GHSA-chpw-2mqm-95cc): the dependency
   graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.

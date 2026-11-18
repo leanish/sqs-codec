@@ -10,7 +10,6 @@ version = "0.6.0-SNAPSHOT"
 description = "AWS SQS payload interceptor for automatic compression and encoding."
 
 val checkstyleExtension = extensions.getByType<CheckstyleExtension>()
-checkstyleExtension.toolVersion = "14.4.0"
 
 // Mockito loads as a JVM agent instead of attaching itself at runtime, which JDK 21+ warns about and sandboxes forbid.
 val mockitoAgent = configurations.create("mockitoAgent")

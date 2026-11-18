@@ -52,9 +52,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 - Added the [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain gate as a
-  `supply-chain` workflow: it compares each pull request's base and head against one advisory snapshot when the PR is
-  opened, updated, reopened, or edited (for example, retargeted), and scans `main` on pushes, daily, and when run by
-  hand. Scheduled runs do not rescan open pull requests.
+  `supply-chain` workflow: it compares each pull request's base and head against one advisory snapshot, and scans
+  `main`.
 
 ## 0.5.1 - 2026-10-03
 

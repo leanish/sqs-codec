@@ -40,13 +40,9 @@ All notable changes to this project are documented in this file.
 - The metadata version is now `v=2`, the format above, written for every newly encoded message. `v=1` messages (0.5.x)
   are still read, deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds
   their decompression (a 0.5.x zstd frame whose window is larger than it needs, rounded up to a power of two, is
-  refused). Any other version fails. Before upgrading consumers, drain incompatible `v=1` messages with 0.5.x consumers
-  or arrange their correction and replay: one such message fails the whole receive. Retained payloads must fit the
-  configured decoded-size and zstd-window limits. Legacy zstd `MAXIMUM` frames need a compatible window allowance: for
-  example, temporarily use `withMaxDecodedPayloadBytes(128 * 1024 * 1024)`, which also raises the decoded-output limit.
-  On a compressed `v=1` message, a numeric, non-negative `l` must now match the decoded length; increasing the limit
-  does not allow a mismatch. Restore the intended limit after incompatible legacy traffic has stopped and those messages
-  are drained. Upgrade consumers before producers; 0.5.x consumers refuse `v=2`.
+  refused). Any other version fails. Upgrade consumers before producers; 0.5.x consumers refuse `v=2`. Retained `v=1`
+  messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames) each fail the whole
+  receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
 - Publishing to GitHub Packages no longer runs the build next to the package write token, so a compromised Gradle

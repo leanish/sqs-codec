@@ -24,6 +24,9 @@ All notable changes to this project are documented in this file.
   in zstd-jni's repository (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5, GHSA-h5m7-4hv9-cvp3: memory-safety bugs in
   dictionary training and multi-dictionary decompression, which this library doesn't use). Taken before the seven-day
   release cooldown, on the owner's decision.
+- The workflows use `gradle/actions` `v6.4.1`, which fixes
+  [GHSA-chpw-2mqm-95cc](https://github.com/gradle/actions/security/advisories/GHSA-chpw-2mqm-95cc): the dependency
+  graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
 
 ### Changed
 - The build moved to java-conventions `0.6.5`, for the Guava fix above and newer build checks; no code changes were

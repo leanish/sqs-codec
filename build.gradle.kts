@@ -22,8 +22,8 @@ dependencies {
     checkstyle(providers.provider { "com.puppycrawl.tools:checkstyle:${checkstyleExtension.toolVersion}" })
 
     // BOMs
-    compileOnly(platform("software.amazon.awssdk:bom:2.57.2"))
-    testImplementation(platform("software.amazon.awssdk:bom:2.57.2"))
+    compileOnly(platform("software.amazon.awssdk:bom:2.57.13"))
+    testImplementation(platform("software.amazon.awssdk:bom:2.57.13"))
     testImplementation(platform("org.mockito:mockito-bom:5.24.0"))
     mockitoAgent(platform("org.mockito:mockito-bom:5.24.0"))
     testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
@@ -31,7 +31,7 @@ dependencies {
     // Consumers provide AWS SDK versions; keep it compileOnly to avoid forcing a version.
     compileOnly("software.amazon.awssdk:sqs")
 
-    implementation("com.github.luben:zstd-jni:1.5.7-25")
+    implementation("com.github.luben:zstd-jni:1.5.7-26")
     implementation("org.xerial.snappy:snappy-java:1.1.10.12")
 
     testImplementation("software.amazon.awssdk:sqs")

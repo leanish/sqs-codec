@@ -31,6 +31,7 @@ All notable changes to this project are documented in this file.
 ### Changed
 - The build moved to java-conventions `0.6.5`, for the Guava fix above and newer build checks; no code changes were
   needed.
+- Upgraded `com.github.luben:zstd-jni` from `1.5.7-25` to `1.5.7-26`.
 - Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger

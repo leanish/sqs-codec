@@ -34,6 +34,10 @@ All notable changes to this project are documented in this file.
 - Upgraded `com.github.luben:zstd-jni` from `1.5.7-25` to `1.5.7-26`.
 - Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
+- Breaking: `CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes, includeRawPayloadLength)` is now
+  `forOutbound(configuration, payloadBytes)`, which writes `l` exactly when the configuration compresses.
+  `CodecAttributes.VERSION_VALUE` is now `2`, and `LEGACY_VERSION_VALUE` (`1`) is new; code compiled against 0.5.x
+  keeps the inlined `1` until it's recompiled.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few bytes).
   For `v=2`, a frame whose window is larger than its `l` needs is refused.

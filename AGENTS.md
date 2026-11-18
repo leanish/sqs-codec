@@ -13,7 +13,7 @@ Always run `./gradlew check` after each code change.
 - Java target is JDK 17.
 - Toolchain comes from `java-conventions` (default compile/runtime JDK 25).
 - CI (`ci.yml`) runs full `build` on JDK 25.
-- Legacy runtime checks (`legacy-jdk-check.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
+- Legacy runtime checks (`testing-legacy-jdk.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
 - Tests use AssertJ assertions.
 - Keep responsibilities well-separated; avoid mixing concerns in the same class.
 - Keep attribute keys in `CodecAttributes`.
@@ -26,6 +26,6 @@ Always run `./gradlew check` after each code change.
 - Keep null-checks at boundaries (external inputs, SDK responses, IO).
 
 ## Versions and releases
-- `main` always carries the next version with `-SNAPSHOT`; other PRs never change `version`.
+- Between releases, `main` carries the next version with `-SNAPSHOT`; other PRs never change `version`.
 - A release PR only drops `-SNAPSHOT` (plus the dated `CHANGELOG.md` heading); the `vX.Y.Z` tag goes on its merge commit, and `publishing-github.yml` is dispatched from that tag (`gh workflow run publishing-github.yml --ref vX.Y.Z`).
 - Right after publishing, a PR that only starts the next development version (`X.Y.(Z+1)-SNAPSHOT`); the release can still pick a higher number if a feature or breaking change lands first.

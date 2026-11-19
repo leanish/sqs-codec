@@ -38,6 +38,10 @@ All notable changes to this project are documented in this file.
   `installGitHooks` (run by `./gradlew build`) installs the conventions' current hook instead. Besides running Spotless
   and Checkstyle, it refuses a commit when a staged file differs from its working copy after formatting, including a
   partially staged file. An installed copy of the old hook is replaced on the next build.
+- The repository's own Checkstyle files (`config/checkstyle/`) are removed, so Checkstyle uses the conventions'
+  configuration. The removed one was the conventions' configuration without the Jackson 2 import rule, and its
+  suppressions matched nothing here. Without it, Spotless also orders imports like Checkstyle's `ImportOrder`; no file
+  needed changes.
 - Upgraded `com.github.luben:zstd-jni` from `1.5.7-25` to `1.5.7-26`.
 - Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.

@@ -62,7 +62,8 @@ All notable changes to this project are documented in this file.
 - The metadata version is now `v=2`, the format above, written for every newly encoded message. `v=1` messages (0.5.x)
   are still read, deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds
   their decompression (a 0.5.x zstd frame whose window is larger than it needs, rounded up to a power of two, is
-  refused). Any other version fails. Upgrade consumers before producers; 0.5.x consumers refuse `v=2`. Retained `v=1`
+  refused). Any other version fails. 0.5.x consumers refuse `v=2`: upgrade consumers before producers, or, when the
+  same clients send and receive, deploy with `withLegacyMetadataWrites(true)` first (see "Added"). Retained `v=1`
   messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames whose window is over
   the configured limit) each fail the whole
   receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.
@@ -76,6 +77,11 @@ All notable changes to this project are documented in this file.
   java-conventions' reusable publishing workflow.
 
 ### Added
+- Added `withLegacyMetadataWrites(boolean)` (default `false`), deprecated and removed in 0.7.0, for upgrading from 0.5.x
+  when the same clients send and receive. While enabled, fresh sends write `v=1` with the same payload, checksum and
+  `l` as `v=2`, which 0.5.x consumers read, and a pre-encoded message that isn't `v=1` is refused on send. Deploy this
+  version everywhere with it enabled, then disable it once every consumer runs this version; the README's "Upgrading
+  from 0.5.x" describes the steps, rollback and the move to 0.7.0.
 - Added the [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain gate as a
   `supply-chain` workflow: it compares each pull request's base and head against one advisory snapshot, and scans
   `main`.

@@ -29,6 +29,8 @@ import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
 import io.github.leanish.sqs.codec.attributes.CodecMetadataAttributeHandler;
+import io.github.leanish.sqs.codec.attributes.UnsupportedCodecMetadataException;
+import lombok.AccessLevel;
 import lombok.With;
 import software.amazon.awssdk.core.SdkRequest;
 import software.amazon.awssdk.core.SdkResponse;
@@ -62,7 +64,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             EncodingAlgorithm.NONE,
             ChecksumAlgorithm.MD5,
             /* skipCompressionWhenLarger= */ true,
-            DEFAULT_MAX_DECODED_PAYLOAD_BYTES);
+            DEFAULT_MAX_DECODED_PAYLOAD_BYTES,
+            /* legacyMetadataWrites= */ false);
 
     private final CompressionAlgorithm compressionAlgorithm;
     private final @Nullable CompressionLevel compressionLevel;
@@ -73,6 +76,9 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     // messages it validates before sending). A compressed payload must decode to exactly its declared raw length (l),
     // which may not exceed this limit.
     private final int maxDecodedPayloadBytes;
+    // Transitional (removed in 0.7.0): fresh sends write v=1, which 0.5.x consumers read, instead of v=2.
+    @With(AccessLevel.NONE)
+    private final boolean legacyMetadataWrites;
 
     private SqsCodecInterceptor(
             CompressionAlgorithm compressionAlgorithm,
@@ -80,7 +86,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             EncodingAlgorithm encodingAlgorithm,
             ChecksumAlgorithm checksumAlgorithm,
             boolean skipCompressionWhenLarger,
-            int maxDecodedPayloadBytes) {
+            int maxDecodedPayloadBytes,
+            boolean legacyMetadataWrites) {
         this.compressionAlgorithm = Objects.requireNonNull(compressionAlgorithm, "compressionAlgorithm");
         this.compressionLevel = compressionLevel;
         this.encodingAlgorithm = Objects.requireNonNull(encodingAlgorithm, "encodingAlgorithm");
@@ -90,6 +97,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             throw new IllegalArgumentException("maxDecodedPayloadBytes must be positive: " + maxDecodedPayloadBytes);
         }
         this.maxDecodedPayloadBytes = maxDecodedPayloadBytes;
+        this.legacyMetadataWrites = legacyMetadataWrites;
         this.compressionAlgorithm.validateCompressionLevel(compressionLevel);
     }
 
@@ -103,6 +111,33 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
      */
     public SqsCodecInterceptor withoutCompressionLevel() {
         return withCompressionLevel(null);
+    }
+
+    /**
+     * Whether fresh sends write the 0.5.x metadata version ({@code v=1}) instead of {@code v=2}, for upgrading from
+     * 0.5.x when the same clients send and receive. The payload, checksum and raw length ({@code l}) are the same as with
+     * {@code v=2}; only the version differs, and 0.5.x consumers read it. While enabled, a pre-encoded message whose
+     * metadata isn't {@code v=1} is refused on send with {@link UnsupportedCodecMetadataException}, and so is the whole
+     * batch it's in. Receiving is unaffected: both versions are read either way.
+     *
+     * <p>Enable it on every client while any consumer of its queues still runs 0.5.x, and disable it once all of them run
+     * this version; the README's "Upgrading from 0.5.x" describes the order. Disabled by default.
+     *
+     * @param legacyMetadataWrites {@code true} to write {@code v=1}, {@code false} to write {@code v=2}
+     * @return a copy of this interceptor with the given setting
+     * @deprecated transitional: removed in 0.7.0, together with reading {@code v=1}. Drop the call once every consumer
+     *     runs 0.6.x and the option is disabled everywhere.
+     */
+    @Deprecated(since = "0.6.0")
+    public SqsCodecInterceptor withLegacyMetadataWrites(boolean legacyMetadataWrites) {
+        return new SqsCodecInterceptor(
+                compressionAlgorithm,
+                compressionLevel,
+                encodingAlgorithm,
+                checksumAlgorithm,
+                skipCompressionWhenLarger,
+                maxDecodedPayloadBytes,
+                legacyMetadataWrites);
     }
 
     @Override
@@ -187,6 +222,10 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private void validateOutboundPreEncodedPayload(String messageBody, Map<String, MessageAttributeValue> attributes) {
         CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(attributes);
         CodecConfiguration configuration = metadata.configuration();
+        if (legacyMetadataWrites && configuration.version() != CodecAttributes.LEGACY_VERSION_VALUE) {
+            // 0.5.x consumers, which this setting exists for, would refuse it and fail their whole receive.
+            throw UnsupportedCodecMetadataException.preEncodedVersionWithLegacyWrites(configuration.version());
+        }
         byte[] payloadBytes = decodePayloadIfNeeded(messageBody, metadata);
         if (shouldValidateChecksum(configuration)) {
             validateChecksum(configuration, requiredChecksumValue(metadata), payloadBytes);
@@ -340,7 +379,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private CodecConfiguration configuration() {
         return new CodecConfiguration(
-                CodecAttributes.VERSION_VALUE,
+                legacyMetadataWrites ? CodecAttributes.LEGACY_VERSION_VALUE : CodecAttributes.VERSION_VALUE,
                 compressionAlgorithm,
                 encodingAlgorithm,
                 checksumAlgorithm);

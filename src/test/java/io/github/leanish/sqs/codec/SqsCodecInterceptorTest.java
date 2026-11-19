@@ -67,6 +67,8 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 class SqsCodecInterceptorTest {
 
     private static final String PAYLOAD = "{\"value\":42}";
+    /** Compressible enough that no algorithm falls back to {@code c=none}. */
+    private static final String LEGACY_WRITE_PAYLOAD = PAYLOAD.repeat(50);
 
     @Test
     void modifyRequest_happyCase() {
@@ -1632,6 +1634,162 @@ class SqsCodecInterceptorTest {
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0).body()).isEqualTo(payload);
+    }
+
+    @ParameterizedTest
+    @MethodSource("legacyWriteCases")
+    @SuppressWarnings("deprecation") // exercises the transitional option
+    void modifyRequest_legacyMetadataWritesChangeOnlyTheVersion(SqsCodecInterceptor configured, String expectedKeys) {
+        SendMessageRequest current = sent(configured, LEGACY_WRITE_PAYLOAD);
+        SendMessageRequest legacy = sent(configured.withLegacyMetadataWrites(true), LEGACY_WRITE_PAYLOAD);
+
+        String currentMetadata = metadataOf(current);
+        assertThat(currentMetadata).startsWith("v=2;" + expectedKeys);
+        assertThat(currentMetadata.contains(";l=" + LEGACY_WRITE_PAYLOAD.length()))
+                .isEqualTo(!expectedKeys.startsWith("c=none"));
+        assertThat(metadataOf(legacy)).isEqualTo("v=1;" + currentMetadata.substring("v=2;".length()));
+        assertThat(legacy.messageBody()).isEqualTo(current.messageBody());
+    }
+
+    @Test
+    @SuppressWarnings("deprecation") // exercises the transitional option
+    void modifyRequest_legacyMetadataWritesKeepTheSkipCompressionFallback() {
+        SqsCodecInterceptor zstd = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+                .withLegacyMetadataWrites(true);
+        String checksum = ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8));
+
+        SendMessageRequest withChecksum = sent(zstd, PAYLOAD);
+        SendMessageRequest withoutChecksum = sent(zstd.withChecksumAlgorithm(ChecksumAlgorithm.NONE), PAYLOAD);
+
+        assertThat(withChecksum.messageBody()).isEqualTo(PAYLOAD);
+        assertThat(metadataOf(withChecksum)).isEqualTo("v=1;c=none;e=none;h=md5;s=" + checksum);
+        assertThat(withoutChecksum.messageBody()).isEqualTo(PAYLOAD);
+        assertThat(withoutChecksum.messageAttributes()).doesNotContainKey(CodecAttributes.META);
+    }
+
+    @Test
+    @SuppressWarnings("deprecation") // exercises the transitional option
+    void withLegacyMetadataWrites_survivesOtherWithersAndCanBeTurnedOff() {
+        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor()
+                .withLegacyMetadataWrites(true)
+                .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
+                .withCompressionLevel(CompressionLevel.HIGH)
+                .withMaxDecodedPayloadBytes(1024)
+                .withoutCompressionLevel();
+
+        assertThat(metadataOf(sent(legacy, LEGACY_WRITE_PAYLOAD))).startsWith("v=1;c=gzip;");
+        assertThat(metadataOf(sent(legacy.withLegacyMetadataWrites(false), LEGACY_WRITE_PAYLOAD))).startsWith("v=2;c=gzip;");
+        assertThat(metadataOf(sent(SqsCodecInterceptor.defaultInterceptor(), LEGACY_WRITE_PAYLOAD))).startsWith("v=2;");
+    }
+
+    @Test
+    @SuppressWarnings("deprecation") // exercises the transitional option
+    void modifyRequest_legacyMetadataWritesApplyToEveryFreshBatchEntry() {
+        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.SNAPPY)
+                .withLegacyMetadataWrites(true);
+        SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
+                .entries(
+                        SendMessageBatchRequestEntry.builder().id("1").messageBody(LEGACY_WRITE_PAYLOAD).build(),
+                        SendMessageBatchRequestEntry.builder().id("2").messageBody(LEGACY_WRITE_PAYLOAD + "!").build())
+                .build();
+
+        SendMessageBatchRequest encoded = (SendMessageBatchRequest) legacy
+                .modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes());
+
+        assertThat(encoded.entries())
+                .extracting(entry -> entry.messageAttributes().get(CodecAttributes.META).stringValue())
+                .allSatisfy(metadata -> assertThat(metadata).startsWith("v=1;c=snappy;e=base64;h=md5;"));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation") // exercises the transitional option
+    void modifyResponse_legacyWritesAreReadAndLegacyWritersStillReadVersionTwo() {
+        SqsCodecInterceptor zstd = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
+        List<SqsCodecInterceptor> interceptors = List.of(zstd, zstd.withLegacyMetadataWrites(true));
+
+        for (SqsCodecInterceptor writer : interceptors) {
+            SendMessageRequest sent = sent(writer, LEGACY_WRITE_PAYLOAD);
+            for (SqsCodecInterceptor reader : interceptors) {
+                ReceiveMessageResponse decoded = (ReceiveMessageResponse) reader.modifyResponse(
+                        new ModifyResponseContext(receivedWith(sent.messageBody(), metadataOf(sent))),
+                        new ExecutionAttributes());
+                assertThat(decoded.messages().get(0).body()).as(metadataOf(sent)).isEqualTo(LEGACY_WRITE_PAYLOAD);
+            }
+        }
+    }
+
+    @Test
+    @SuppressWarnings("deprecation") // exercises the transitional option
+    void modifyRequest_legacyMetadataWritesRefuseAPreEncodedVersionTwoMessage() {
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META, MessageAttributeUtils.stringAttribute(
+                        "v=2;c=zstd;e=base64;h=none;l=" + PAYLOAD.length()));
+        String body = compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD);
+        SendMessageRequest single = SendMessageRequest.builder().messageBody(body).messageAttributes(attributes).build();
+        SendMessageBatchRequest mixedBatch = SendMessageBatchRequest.builder()
+                .entries(
+                        SendMessageBatchRequestEntry.builder().id("fresh").messageBody(PAYLOAD).build(),
+                        SendMessageBatchRequestEntry.builder().id("pre").messageBody(body).messageAttributes(attributes).build())
+                .build();
+        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor().withLegacyMetadataWrites(true);
+
+        assertThatThrownBy(() -> legacy.modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Cannot send pre-encoded codec metadata v=2 while legacy metadata writes are enabled");
+        assertThatThrownBy(() -> legacy.modifyRequest(new ModifyRequestContext(mixedBatch), new ExecutionAttributes()))
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Cannot send pre-encoded codec metadata v=2 while legacy metadata writes are enabled");
+        assertThat(SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
+                .isSameAs(single);
+    }
+
+    @Test
+    @SuppressWarnings("deprecation") // exercises the transitional option
+    void modifyRequest_legacyMetadataWritesSendAPreEncodedLegacyMessageUnchanged() {
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none"));
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(streamedZstdBody(PAYLOAD, 3))
+                .messageAttributes(attributes)
+                .build();
+
+        SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor()
+                .withLegacyMetadataWrites(true)
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(sent).isSameAs(request);
+    }
+
+    private static Stream<Arguments> legacyWriteCases() {
+        SqsCodecInterceptor defaults = SqsCodecInterceptor.defaultInterceptor();
+        return Stream.of(
+                Arguments.of(defaults, "c=none;e=none;h=md5;"),
+                Arguments.of(defaults.withCompressionAlgorithm(CompressionAlgorithm.GZIP), "c=gzip;e=base64;h=md5;"),
+                Arguments.of(defaults.withCompressionAlgorithm(CompressionAlgorithm.ZSTD), "c=zstd;e=base64;h=md5;"),
+                Arguments.of(
+                        defaults.withCompressionAlgorithm(CompressionAlgorithm.ZSTD).withCompressionLevel(CompressionLevel.MAXIMUM),
+                        "c=zstd;e=base64;h=md5;"),
+                Arguments.of(defaults.withCompressionAlgorithm(CompressionAlgorithm.SNAPPY), "c=snappy;e=base64;h=md5;"),
+                Arguments.of(
+                        defaults.withEncodingAlgorithm(EncodingAlgorithm.BASE64).withChecksumAlgorithm(ChecksumAlgorithm.SHA256),
+                        "c=none;e=base64;h=sha256;"),
+                Arguments.of(
+                        defaults.withEncodingAlgorithm(EncodingAlgorithm.ASCII85).withChecksumAlgorithm(ChecksumAlgorithm.NONE),
+                        "c=none;e=ascii85;h=none"));
+    }
+
+    private static SendMessageRequest sent(SqsCodecInterceptor interceptor, String payload) {
+        return (SendMessageRequest) interceptor.modifyRequest(
+                new ModifyRequestContext(SendMessageRequest.builder().messageBody(payload).build()),
+                new ExecutionAttributes());
+    }
+
+    private static String metadataOf(SendMessageRequest request) {
+        return request.messageAttributes().get(CodecAttributes.META).stringValue();
     }
 
     /** One byte, 0xff, that is never valid UTF-8, behind each decoding path, with a valid checksum or none. */

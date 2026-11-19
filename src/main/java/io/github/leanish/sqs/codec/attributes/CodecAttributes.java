@@ -28,7 +28,9 @@ public class CodecAttributes {
     public static final int VERSION_VALUE = 2;
     /**
      * The 0.5.x metadata version, still read (deprecated, removed in 0.7.0): {@code l} is optional and read leniently, and
-     * compressed payloads are bounded by the configured limit alone. Never written.
+     * compressed payloads are bounded by the configured limit alone. The interceptor writes it only while legacy
+     * metadata writes are enabled; {@link CodecMetadataAttributeHandler#forOutbound} writes whatever version its
+     * configuration carries.
      */
     public static final int LEGACY_VERSION_VALUE = 1;
 

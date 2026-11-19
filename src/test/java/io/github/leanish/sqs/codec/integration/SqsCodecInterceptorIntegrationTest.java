@@ -21,6 +21,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import io.github.leanish.sqs.codec.MetadataVersion;
 import io.github.leanish.sqs.codec.SqsCodecInterceptor;
 import io.github.leanish.sqs.codec.algorithms.ChecksumAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
@@ -374,7 +375,7 @@ class SqsCodecInterceptorIntegrationTest {
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())))
                 .overrideConfiguration(config -> config.addExecutionInterceptor(
-                        SqsCodecInterceptor.defaultInterceptor()
+                        SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                                 .withCompressionAlgorithm(compressionAlgorithm)
                                 .withEncodingAlgorithm(encodingAlgorithm)
                                 .withChecksumAlgorithm(checksumAlgorithm)

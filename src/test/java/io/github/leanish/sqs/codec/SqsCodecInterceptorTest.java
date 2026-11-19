@@ -72,7 +72,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyRequest_happyCase() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                 .withSkipCompressionWhenLarger(false);
         SendMessageRequest request = SendMessageRequest.builder()
@@ -102,7 +102,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyRequest_prefersOriginalPayloadWhenCompressedPayloadIsLarger() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(PAYLOAD)
@@ -125,7 +125,7 @@ class SqsCodecInterceptorTest {
     void modifyRequest_prefersOriginalPayloadWhenCompressedPayloadHasEqualSize() {
         String payload = payloadWithEqualEncodedLengthForGzip();
         byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP);
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(payload)
@@ -143,7 +143,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyRequest_includesRawLengthMetadataWithoutChecksum() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
                 .withSkipCompressionWhenLarger(false);
@@ -165,7 +165,7 @@ class SqsCodecInterceptorTest {
     void modifyRequest_keepsCompressedPayloadWhenItIsSmaller() {
         String compressiblePayload = "a".repeat(2048);
         int payloadLength = compressiblePayload.getBytes(StandardCharsets.UTF_8).length;
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(compressiblePayload)
@@ -193,12 +193,12 @@ class SqsCodecInterceptorTest {
                 .encode(payloadBytes);
         byte[] maximumEncodedPayload = new Codec(compressionAlgorithm, CompressionLevel.MAXIMUM)
                 .encode(payloadBytes);
-        SqsCodecInterceptor minimumInterceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor minimumInterceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(compressionAlgorithm)
                 .withCompressionLevel(CompressionLevel.MINIMUM)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
                 .withSkipCompressionWhenLarger(false);
-        SqsCodecInterceptor maximumInterceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor maximumInterceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(compressionAlgorithm)
                 .withCompressionLevel(CompressionLevel.MAXIMUM)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
@@ -227,7 +227,7 @@ class SqsCodecInterceptorTest {
     @ParameterizedTest
     @MethodSource("configurableCompressionAlgorithms")
     void defaultInterceptor_leavesCompressionLevelUnset(CompressionAlgorithm compressionAlgorithm) {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(compressionAlgorithm)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
                 .withSkipCompressionWhenLarger(false);
@@ -247,7 +247,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void withCompressionLevel_rejectsUnsupportedAlgorithm() {
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionLevel(CompressionLevel.HIGH))
                 .isInstanceOf(UnsupportedAlgorithmException.class)
                 .hasMessage("Compression level HIGH is not supported for compression algorithm none");
@@ -255,7 +255,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void withCompressionAlgorithm_rejectsUnsupportedAlgorithmWhenCompressionLevelIsAlreadyConfigured() {
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withCompressionLevel(CompressionLevel.HIGH)
                 .withCompressionAlgorithm(CompressionAlgorithm.SNAPPY))
@@ -266,7 +266,7 @@ class SqsCodecInterceptorTest {
     @ParameterizedTest
     @MethodSource("configurableCompressionAlgorithms")
     void withoutCompressionLevel_clearsConfiguredCompressionLevel(CompressionAlgorithm compressionAlgorithm) {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(compressionAlgorithm)
                 .withCompressionLevel(CompressionLevel.MAXIMUM)
                 .withoutCompressionLevel()
@@ -298,7 +298,7 @@ class SqsCodecInterceptorTest {
                                         + ChecksumAlgorithm.MD5.implementation().checksum(payloadBytes)
                                         + ";l=12")))
                 .build();
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor();
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2);
 
         SdkRequest modified = interceptor.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
@@ -309,7 +309,7 @@ class SqsCodecInterceptorTest {
     @ParameterizedTest
     @EnumSource(value = EncodingAlgorithm.class, names = {"BASE64", "ASCII85"})
     void modifyRequest_explicitEncodingWithoutCompression(EncodingAlgorithm encodingAlgorithm) {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.NONE)
                 .withEncodingAlgorithm(encodingAlgorithm)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE);
@@ -328,7 +328,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyRequest_preservesExplicitAscii85WhenCompressionIsEnabled() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withEncodingAlgorithm(EncodingAlgorithm.ASCII85)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE)
@@ -352,7 +352,7 @@ class SqsCodecInterceptorTest {
     @Test
     void modifyRequest_preservesExplicitAscii85WhenCompressionLevelIsConfigured() {
         byte[] payloadBytes = PAYLOAD.getBytes(StandardCharsets.UTF_8);
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withCompressionLevel(CompressionLevel.HIGH)
                 .withEncodingAlgorithm(EncodingAlgorithm.ASCII85)
@@ -382,7 +382,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("v=2;c=none;e=none;h=md5;l=12")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOfSatisfying(ChecksumValidationException.class, exception -> {
                     assertThat(exception.detail()).isEqualTo(CodecAttributes.META_CHECKSUM_VALUE_KEY);
@@ -399,7 +399,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("v=2;c=none;e=none;h=md5;s=bad;l=12")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(ChecksumValidationException.class)
                 .hasMessage("Payload checksum mismatch");
@@ -414,7 +414,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("v=2;c=none;e=none;h=none;s=bad;l=12")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Codec metadata must enable compression, encoding or checksum");
@@ -429,7 +429,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("v=2;c=none;e=none;h=none;s=;l=12")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Codec metadata must enable compression, encoding or checksum");
@@ -444,7 +444,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("v=2;c=zstd;e=base64;h=none;l=12")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(InvalidPayloadException.class)
                 .hasMessage("Invalid base64 payload");
@@ -463,7 +463,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("v=2;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=1024")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(CompressionException.class)
                 .hasMessage(expectedMessage);
@@ -483,7 +483,7 @@ class SqsCodecInterceptorTest {
                                         + (payloadBytes.length + 1))))
                 .build();
 
-        SendMessageRequest encoded = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor()
+        SendMessageRequest encoded = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         assertThat(encoded).isSameAs(request);
@@ -498,7 +498,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("v=3;c=none;e=none;h=md5")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Unsupported codec version: 3");
@@ -513,7 +513,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("c=zstd;e=base64;h=none;l=12")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Missing required codec metadata key: v");
@@ -528,7 +528,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute("v=2;c=none;e=none;h=none")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Codec metadata must enable compression, encoding or checksum");
@@ -543,7 +543,7 @@ class SqsCodecInterceptorTest {
                         MessageAttributeUtils.stringAttribute(" ")))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Unsupported codec metadata:  ");
@@ -551,7 +551,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyRequest_explicitCompression() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                 .withChecksumAlgorithm(ChecksumAlgorithm.MD5)
                 .withSkipCompressionWhenLarger(false);
@@ -571,7 +571,7 @@ class SqsCodecInterceptorTest {
     void modifyRequest_unknownRequests() {
         SdkRequest request = Mockito.mock(SdkRequest.class);
 
-        SdkRequest modified = SqsCodecInterceptor.defaultInterceptor()
+        SdkRequest modified = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         assertThat(modified)
@@ -590,7 +590,7 @@ class SqsCodecInterceptorTest {
                 .messageAttributeNames(attributeNames)
                 .build();
 
-        SdkRequest modified = SqsCodecInterceptor.defaultInterceptor()
+        SdkRequest modified = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         if (expectSameInstance) {
@@ -604,7 +604,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyRequest_noChecksum() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE);
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(PAYLOAD)
@@ -618,7 +618,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyRequest_skippedCompressionWithoutChecksumOmitsMetadata() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE);
         SendMessageRequest request = SendMessageRequest.builder()
@@ -638,7 +638,7 @@ class SqsCodecInterceptorTest {
                 .messageAttributes(customAttributes(9))
                 .build();
 
-        SdkRequest modified = SqsCodecInterceptor.defaultInterceptor()
+        SdkRequest modified = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         assertThat(modified).isInstanceOf(SendMessageRequest.class);
@@ -651,7 +651,7 @@ class SqsCodecInterceptorTest {
                 .messageAttributes(customAttributes(10))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(CodecException.class)
                 .hasMessageContaining("SQS supports at most 10 message attributes")
@@ -666,7 +666,7 @@ class SqsCodecInterceptorTest {
                 .messageAttributes(preEncodedAttributesWithCustomAttributes(10))
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(CodecException.class)
                 .hasMessageContaining("SQS supports at most 10 message attributes")
@@ -683,7 +683,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(CodecException.class)
                 .hasMessageContaining("SQS supports at most 10 message attributes")
@@ -702,7 +702,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(ChecksumValidationException.class)
                 .hasMessage("Payload checksum mismatch");
@@ -733,7 +733,7 @@ class SqsCodecInterceptorTest {
                                                         + ";l=4")))
                                 .build())
                 .build();
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                 .withSkipCompressionWhenLarger(false);
 
@@ -777,7 +777,7 @@ class SqsCodecInterceptorTest {
                                 .messageBody(compressiblePayload)
                                 .build())
                 .build();
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
 
         SendMessageBatchRequest encoded = (SendMessageBatchRequest) interceptor.modifyRequest(
@@ -824,7 +824,7 @@ class SqsCodecInterceptorTest {
                         .messageAttributes(attributes)
                         .build())
                 .build();
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(interceptorCompression)
                 .withChecksumAlgorithm(ChecksumAlgorithm.SHA256);
 
@@ -854,7 +854,7 @@ class SqsCodecInterceptorTest {
                         .messageAttributes(attributes)
                         .build())
                 .build();
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withChecksumAlgorithm(interceptorChecksum);
 
@@ -883,7 +883,7 @@ class SqsCodecInterceptorTest {
                         .messageAttributes(attributes)
                         .build())
                 .build();
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withChecksumAlgorithm(otherChecksumAlgorithm(checksumAlgorithm));
 
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) interceptor.modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
@@ -910,7 +910,7 @@ class SqsCodecInterceptorTest {
                 .messages(encodedMessage, plainMessage)
                 .build();
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages())
@@ -930,7 +930,7 @@ class SqsCodecInterceptorTest {
                 .messages(message)
                 .build();
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0))
@@ -957,7 +957,7 @@ class SqsCodecInterceptorTest {
                 .messages(message)
                 .build();
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0)).isSameAs(message);
@@ -979,7 +979,7 @@ class SqsCodecInterceptorTest {
                 .messages(message)
                 .build();
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
@@ -999,7 +999,7 @@ class SqsCodecInterceptorTest {
                 .messages(message)
                 .build();
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
@@ -1011,7 +1011,7 @@ class SqsCodecInterceptorTest {
                 .messages(List.of())
                 .build();
 
-        SdkResponse modified = SqsCodecInterceptor.defaultInterceptor()
+        SdkResponse modified = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(modified)
@@ -1022,7 +1022,7 @@ class SqsCodecInterceptorTest {
     void modifyResponse_emptyResponses() {
         SdkResponse response = Mockito.mock(SdkResponse.class);
 
-        SdkResponse modified = SqsCodecInterceptor.defaultInterceptor()
+        SdkResponse modified = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(modified)
@@ -1043,7 +1043,7 @@ class SqsCodecInterceptorTest {
                         .messageAttributes(attributes)
                         .build())
                 .build();
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                 .withChecksumAlgorithm(ChecksumAlgorithm.NONE);
 
@@ -1070,7 +1070,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
@@ -1093,7 +1093,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes());
 
@@ -1114,7 +1114,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
@@ -1133,7 +1133,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
                 .isInstanceOf(expectedException)
@@ -1151,7 +1151,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
@@ -1172,7 +1172,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
                 .isInstanceOfSatisfying(ChecksumValidationException.class, exception -> {
@@ -1194,7 +1194,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
                 .isInstanceOfSatisfying(ChecksumValidationException.class, exception -> {
@@ -1217,7 +1217,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
                 .isInstanceOf(ChecksumValidationException.class)
@@ -1237,7 +1237,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
                 .isInstanceOf(InvalidPayloadException.class)
@@ -1259,7 +1259,7 @@ class SqsCodecInterceptorTest {
                         .build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().modifyResponse(
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).modifyResponse(
                 new ModifyResponseContext(response),
                 new ExecutionAttributes()))
                 .isInstanceOf(CompressionException.class)
@@ -1273,7 +1273,7 @@ class SqsCodecInterceptorTest {
                 CompressionAlgorithm.GZIP.implementation().compress(new byte[16 * 1024 * 1024 + 1]));
         ReceiveMessageResponse response = receivedWith(body, "v=2;c=gzip;e=base64;h=none;l=" + (16 * 1024 * 1024 + 1));
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
                 .hasMessage("Payload with gzip declares 16777217 decoded bytes, over the 16777216-byte limit");
@@ -1286,7 +1286,7 @@ class SqsCodecInterceptorTest {
                 compressedBody(CompressionAlgorithm.SNAPPY, PAYLOAD),
                 "v=2;c=snappy;e=base64;h=none;l=" + (length - 1));
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
                 .hasMessage("Payload with snappy declares " + length + " decoded bytes, over the " + (length - 1) + "-byte limit");
@@ -1294,10 +1294,10 @@ class SqsCodecInterceptorTest {
 
     @Test
     void withMaxDecodedPayloadBytes_rejectsZeroAndNegative() {
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().withMaxDecodedPayloadBytes(0))
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).withMaxDecodedPayloadBytes(0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("maxDecodedPayloadBytes must be positive: 0");
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().withMaxDecodedPayloadBytes(-1))
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).withMaxDecodedPayloadBytes(-1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -1307,7 +1307,7 @@ class SqsCodecInterceptorTest {
         String checksum = ChecksumAlgorithm.MD5.implementation().checksum(body.getBytes(StandardCharsets.UTF_8));
         ReceiveMessageResponse response = receivedWith(body, "v=2;c=none;e=none;h=md5;s=" + checksum);
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withMaxDecodedPayloadBytes(4)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
@@ -1320,7 +1320,7 @@ class SqsCodecInterceptorTest {
                 Base64PayloadCodec.instance().encodeToString("hello".getBytes(StandardCharsets.UTF_8)),
                 "v=2;c=none;e=base64;h=none");
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withMaxDecodedPayloadBytes(4)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
@@ -1329,7 +1329,7 @@ class SqsCodecInterceptorTest {
 
     @Test
     void modifyRequest_freshCompressedSendIsNotBoundedButAConsumerWithTheSameLimitRefusesIt() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withMaxDecodedPayloadBytes(512);
         SendMessageRequest request = SendMessageRequest.builder()
@@ -1362,7 +1362,7 @@ class SqsCodecInterceptorTest {
         // The bomb claims 1 MiB, within the limit, so it reaches decompression, which stops there.
         ReceiveMessageResponse response = receivedWith(body, "v=2;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=" + 1024 * 1024);
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withMaxDecodedPayloadBytes(1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
@@ -1376,7 +1376,7 @@ class SqsCodecInterceptorTest {
                 compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD),
                 "v=2;c=zstd;e=base64;h=none;l=" + (1024 * 1024 + 1));
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withMaxDecodedPayloadBytes(1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
@@ -1390,7 +1390,7 @@ class SqsCodecInterceptorTest {
                 compressedBody(CompressionAlgorithm.GZIP, PAYLOAD),
                 "v=2;c=gzip;e=base64;h=none;l=" + (length - 1));
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
                 .hasMessage("Decompressed payload with gzip exceeds " + (length - 1) + " bytes");
@@ -1403,7 +1403,7 @@ class SqsCodecInterceptorTest {
                 compressedBody(CompressionAlgorithm.SNAPPY, PAYLOAD),
                 "v=2;c=snappy;e=base64;h=none;l=" + (length + 1));
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(CompressionException.class)
                 .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
@@ -1417,7 +1417,7 @@ class SqsCodecInterceptorTest {
                 compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD),
                 "v=2;c=zstd;e=base64;h=none" + rawLength);
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class);
     }
@@ -1430,7 +1430,7 @@ class SqsCodecInterceptorTest {
                 compressedBody(CompressionAlgorithm.ZSTD, payload),
                 "v=2;c=zstd;e=base64;h=none;l=" + length);
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withMaxDecodedPayloadBytes(length)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
@@ -1444,7 +1444,7 @@ class SqsCodecInterceptorTest {
         Map<String, MessageAttributeValue> attributes = Map.of(
                 CodecAttributes.META,
                 MessageAttributeUtils.stringAttribute("v=2;c=zstd;e=base64;h=none;l=" + 1024 * 1024));
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor().withMaxDecodedPayloadBytes(1024 * 1024);
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).withMaxDecodedPayloadBytes(1024 * 1024);
         SendMessageRequest single = SendMessageRequest.builder().messageBody(bomb).messageAttributes(attributes).build();
         SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
                 .entries(SendMessageBatchRequestEntry.builder().id("1").messageBody(bomb).messageAttributes(attributes).build())
@@ -1464,7 +1464,7 @@ class SqsCodecInterceptorTest {
                 Base64PayloadCodec.instance().encodeToString(forged),
                 "v=2;c=zstd;e=base64;h=none;l=0");
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
                 .hasMessage("Payload with zstd declares a decoding window larger than its 0-byte limit allows");
@@ -1477,7 +1477,7 @@ class SqsCodecInterceptorTest {
                 streamedZstdBody(PAYLOAD, 3),
                 "v=1;c=zstd;e=base64;h=none" + rawLength);
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
@@ -1489,7 +1489,7 @@ class SqsCodecInterceptorTest {
         int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
         ReceiveMessageResponse response = receivedWith(streamedZstdBody(PAYLOAD, 3), "v=1;c=zstd;e=base64;h=none;l=" + length);
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
@@ -1500,7 +1500,7 @@ class SqsCodecInterceptorTest {
         // The maximum level streams with a 128 MiB window: over the default 16 MiB limit, even for a few bytes.
         ReceiveMessageResponse response = receivedWith(streamedZstdBody(PAYLOAD, 22), "v=1;c=zstd;e=base64;h=none");
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
                 .hasMessage("Payload with zstd declares a decoding window larger than its 16777216-byte limit allows");
@@ -1511,7 +1511,7 @@ class SqsCodecInterceptorTest {
         int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
         ReceiveMessageResponse response = receivedWith(streamedZstdBody(PAYLOAD, 3), "v=1;c=zstd;e=base64;h=none;l=" + (length + 1));
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(CompressionException.class)
                 .hasMessage("Decompressed payload with zstd has " + length + " bytes, but its metadata declares " + (length + 1));
@@ -1524,7 +1524,7 @@ class SqsCodecInterceptorTest {
         // A v=1 raw length doesn't bound the decompression: the configured limit does.
         ReceiveMessageResponse response = receivedWith(body, "v=1;c=gzip;e=base64;h=none;l=" + 8 * 1024 * 1024);
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withMaxDecodedPayloadBytes(1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
@@ -1538,7 +1538,7 @@ class SqsCodecInterceptorTest {
                 streamedZstdBody("\0".repeat(8 * 1024 * 1024), 3),
                 "v=1;c=zstd;e=base64;h=none");
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withMaxDecodedPayloadBytes(4 * 1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
@@ -1550,7 +1550,7 @@ class SqsCodecInterceptorTest {
     void modifyResponse_refusesAVersionThatIsNotExactlyOneOrTwo(String version) {
         ReceiveMessageResponse response = receivedWith(compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD), "v=" + version + ";c=zstd;e=base64;h=none;l=12");
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Unsupported codec version: " + version);
@@ -1563,7 +1563,7 @@ class SqsCodecInterceptorTest {
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none"));
         SendMessageRequest request = SendMessageRequest.builder().messageBody(body).messageAttributes(attributes).build();
 
-        SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor()
+        SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         assertThat(sent).isSameAs(request);
@@ -1575,7 +1575,7 @@ class SqsCodecInterceptorTest {
         String metadata = "v=2;c=none;e=ascii85;h=none";
 
         for (String body : List.of("9jqo^!!", "9jqo^!\"")) {
-            ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+            ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                     .modifyResponse(new ModifyResponseContext(receivedWith(body, metadata)), new ExecutionAttributes());
             assertThat(decoded.messages().get(0).body()).as(body).isEqualTo("Man \0");
         }
@@ -1586,7 +1586,7 @@ class SqsCodecInterceptorTest {
     void modifyResponse_refusesADecodedPayloadThatIsNotUtf8(String body, String metadata) {
         ReceiveMessageResponse response = receivedWith(body, metadata);
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(InvalidPayloadException.class)
                 .hasMessage("Decoded payload is not valid UTF-8");
@@ -1601,11 +1601,11 @@ class SqsCodecInterceptorTest {
                 .entries(SendMessageBatchRequestEntry.builder().id("1").messageBody(body).messageAttributes(attributes).build())
                 .build();
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
                 .isInstanceOf(InvalidPayloadException.class)
                 .hasMessage("Decoded payload is not valid UTF-8");
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes()))
                 .isInstanceOf(InvalidPayloadException.class)
                 .hasMessage("Decoded payload is not valid UTF-8");
@@ -1618,7 +1618,7 @@ class SqsCodecInterceptorTest {
                 Base64PayloadCodec.instance().encodeToString(new byte[] {(byte) 0xff}),
                 "v=2;c=none;e=base64;h=md5;s=" + otherChecksum);
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(ChecksumValidationException.class)
                 .hasMessage("Payload checksum mismatch");
@@ -1630,7 +1630,7 @@ class SqsCodecInterceptorTest {
         String checksum = ChecksumAlgorithm.MD5.implementation().checksum(payload.getBytes(StandardCharsets.UTF_8));
         ReceiveMessageResponse response = receivedWith(streamedZstdBody(payload, 3), "v=1;c=zstd;e=base64;h=md5;s=" + checksum);
 
-        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
 
         assertThat(decoded.messages().get(0).body()).isEqualTo(payload);
@@ -1638,25 +1638,25 @@ class SqsCodecInterceptorTest {
 
     @ParameterizedTest
     @MethodSource("legacyWriteCases")
-    @SuppressWarnings("deprecation") // exercises the transitional option
-    void modifyRequest_legacyMetadataWritesChangeOnlyTheVersion(SqsCodecInterceptor configured, String expectedKeys) {
+    @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
+    void modifyRequest_versionOneWritesChangeOnlyTheVersion(SqsCodecInterceptor configured, String expectedKeys) {
         SendMessageRequest current = sent(configured, LEGACY_WRITE_PAYLOAD);
-        SendMessageRequest legacy = sent(configured.withLegacyMetadataWrites(true), LEGACY_WRITE_PAYLOAD);
+        SendMessageRequest legacy = sent(configured.withOutboundMetadataVersion(MetadataVersion.V1), LEGACY_WRITE_PAYLOAD);
 
         String currentMetadata = metadataOf(current);
         assertThat(currentMetadata).startsWith("v=2;" + expectedKeys);
-        assertThat(currentMetadata.contains(";l=" + LEGACY_WRITE_PAYLOAD.length()))
+        assertThat(currentMetadata.contains(";l=" + LEGACY_WRITE_PAYLOAD.getBytes(StandardCharsets.UTF_8).length))
                 .isEqualTo(!expectedKeys.startsWith("c=none"));
         assertThat(metadataOf(legacy)).isEqualTo("v=1;" + currentMetadata.substring("v=2;".length()));
         assertThat(legacy.messageBody()).isEqualTo(current.messageBody());
     }
 
     @Test
-    @SuppressWarnings("deprecation") // exercises the transitional option
-    void modifyRequest_legacyMetadataWritesKeepTheSkipCompressionFallback() {
-        SqsCodecInterceptor zstd = SqsCodecInterceptor.defaultInterceptor()
+    @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
+    void modifyRequest_versionOneWritesKeepTheSkipCompressionFallback() {
+        SqsCodecInterceptor zstd = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
-                .withLegacyMetadataWrites(true);
+                .withOutboundMetadataVersion(MetadataVersion.V1);
         String checksum = ChecksumAlgorithm.MD5.implementation().checksum(PAYLOAD.getBytes(StandardCharsets.UTF_8));
 
         SendMessageRequest withChecksum = sent(zstd, PAYLOAD);
@@ -1669,26 +1669,67 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    @SuppressWarnings("deprecation") // exercises the transitional option
-    void withLegacyMetadataWrites_survivesOtherWithersAndCanBeTurnedOff() {
-        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor()
-                .withLegacyMetadataWrites(true)
+    @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
+    void withOutboundMetadataVersion_survivesOtherWithersAndCanBeSwitchedBack() {
+        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
+                .withOutboundMetadataVersion(MetadataVersion.V1)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withCompressionLevel(CompressionLevel.HIGH)
                 .withMaxDecodedPayloadBytes(1024)
                 .withoutCompressionLevel();
 
         assertThat(metadataOf(sent(legacy, LEGACY_WRITE_PAYLOAD))).startsWith("v=1;c=gzip;");
-        assertThat(metadataOf(sent(legacy.withLegacyMetadataWrites(false), LEGACY_WRITE_PAYLOAD))).startsWith("v=2;c=gzip;");
-        assertThat(metadataOf(sent(SqsCodecInterceptor.defaultInterceptor(), LEGACY_WRITE_PAYLOAD))).startsWith("v=2;");
+        assertThat(metadataOf(sent(legacy.withOutboundMetadataVersion(MetadataVersion.V2), LEGACY_WRITE_PAYLOAD))).startsWith("v=2;c=gzip;");
+        assertThat(metadataOf(sent(SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2), LEGACY_WRITE_PAYLOAD))).startsWith("v=2;");
     }
 
     @Test
-    @SuppressWarnings("deprecation") // exercises the transitional option
-    void modifyRequest_legacyMetadataWritesApplyToEveryFreshBatchEntry() {
-        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor()
+    @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
+    void defaultInterceptor_writesTheVersionItIsGivenAndRefusesNull() {
+        for (MetadataVersion version : MetadataVersion.values()) {
+            SqsCodecInterceptor fromFactory = SqsCodecInterceptor.defaultInterceptor(version)
+                    .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
+            SqsCodecInterceptor switched = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V1)
+                    .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
+                    .withOutboundMetadataVersion(version);
+
+            SendMessageRequest sent = sent(fromFactory, LEGACY_WRITE_PAYLOAD);
+            assertThat(metadataOf(sent)).startsWith("v=" + version.value() + ";c=zstd;");
+            assertThat(metadataOf(sent(switched, LEGACY_WRITE_PAYLOAD))).isEqualTo(metadataOf(sent));
+        }
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("outboundMetadataVersion");
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2).withOutboundMetadataVersion(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("outboundMetadataVersion");
+    }
+
+    @Test
+    void writingVersionTwoSendsPreEncodedMessagesOfEitherVersionUnchanged() {
+        SendMessageRequest versionTwo = SendMessageRequest.builder()
+                .messageBody(compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD))
+                .messageAttributes(Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute(
+                        "v=2;c=zstd;e=base64;h=none;l=" + PAYLOAD.length())))
+                .build();
+        SendMessageRequest versionOne = SendMessageRequest.builder()
+                .messageBody(streamedZstdBody(PAYLOAD, 3))
+                .messageAttributes(Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none")))
+                .build();
+        SqsCodecInterceptor versionTwoWriter = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2);
+
+        assertThat(versionTwoWriter.modifyRequest(new ModifyRequestContext(versionTwo), new ExecutionAttributes()))
+                .isSameAs(versionTwo);
+        assertThat(versionTwoWriter.modifyRequest(new ModifyRequestContext(versionOne), new ExecutionAttributes()))
+                .isSameAs(versionOne);
+    }
+
+    @Test
+    @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
+    void modifyRequest_versionOneWritesApplyToEveryFreshBatchEntry() {
+        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.SNAPPY)
-                .withLegacyMetadataWrites(true);
+                .withOutboundMetadataVersion(MetadataVersion.V1);
         SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
                 .entries(
                         SendMessageBatchRequestEntry.builder().id("1").messageBody(LEGACY_WRITE_PAYLOAD).build(),
@@ -1704,11 +1745,11 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    @SuppressWarnings("deprecation") // exercises the transitional option
-    void modifyResponse_legacyWritesAreReadAndLegacyWritersStillReadVersionTwo() {
-        SqsCodecInterceptor zstd = SqsCodecInterceptor.defaultInterceptor()
+    @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
+    void modifyResponse_eitherWrittenVersionIsReadWhicheverIsWritten() {
+        SqsCodecInterceptor zstd = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
-        List<SqsCodecInterceptor> interceptors = List.of(zstd, zstd.withLegacyMetadataWrites(true));
+        List<SqsCodecInterceptor> interceptors = List.of(zstd, zstd.withOutboundMetadataVersion(MetadataVersion.V1));
 
         for (SqsCodecInterceptor writer : interceptors) {
             SendMessageRequest sent = sent(writer, LEGACY_WRITE_PAYLOAD);
@@ -1722,8 +1763,8 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    @SuppressWarnings("deprecation") // exercises the transitional option
-    void modifyRequest_legacyMetadataWritesRefuseAPreEncodedVersionTwoMessage() {
+    @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
+    void modifyRequest_writingVersionOneRefusesAPreEncodedVersionTwoMessage() {
         Map<String, MessageAttributeValue> attributes = Map.of(
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute(
                         "v=2;c=zstd;e=base64;h=none;l=" + PAYLOAD.length()));
@@ -1734,22 +1775,22 @@ class SqsCodecInterceptorTest {
                         SendMessageBatchRequestEntry.builder().id("fresh").messageBody(PAYLOAD).build(),
                         SendMessageBatchRequestEntry.builder().id("pre").messageBody(body).messageAttributes(attributes).build())
                 .build();
-        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor().withLegacyMetadataWrites(true);
+        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V1);
 
         assertThatThrownBy(() -> legacy.modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
-                .hasMessage("Cannot send pre-encoded codec metadata v=2 while legacy metadata writes are enabled");
+                .hasMessage("Cannot send pre-encoded codec metadata v=2 while writing v=1");
         assertThatThrownBy(() -> legacy.modifyRequest(new ModifyRequestContext(mixedBatch), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
-                .hasMessage("Cannot send pre-encoded codec metadata v=2 while legacy metadata writes are enabled");
-        assertThat(SqsCodecInterceptor.defaultInterceptor()
+                .hasMessage("Cannot send pre-encoded codec metadata v=2 while writing v=1");
+        assertThat(SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
                 .isSameAs(single);
     }
 
     @Test
-    @SuppressWarnings("deprecation") // exercises the transitional option
-    void modifyRequest_legacyMetadataWritesSendAPreEncodedLegacyMessageUnchanged() {
+    @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
+    void modifyRequest_writingVersionOneSendsAPreEncodedVersionOneMessageUnchanged() {
         Map<String, MessageAttributeValue> attributes = Map.of(
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none"));
         SendMessageRequest request = SendMessageRequest.builder()
@@ -1757,15 +1798,15 @@ class SqsCodecInterceptorTest {
                 .messageAttributes(attributes)
                 .build();
 
-        SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor()
-                .withLegacyMetadataWrites(true)
+        SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
+                .withOutboundMetadataVersion(MetadataVersion.V1)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
 
         assertThat(sent).isSameAs(request);
     }
 
     private static Stream<Arguments> legacyWriteCases() {
-        SqsCodecInterceptor defaults = SqsCodecInterceptor.defaultInterceptor();
+        SqsCodecInterceptor defaults = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2);
         return Stream.of(
                 Arguments.of(defaults, "c=none;e=none;h=md5;"),
                 Arguments.of(defaults.withCompressionAlgorithm(CompressionAlgorithm.GZIP), "c=gzip;e=base64;h=md5;"),

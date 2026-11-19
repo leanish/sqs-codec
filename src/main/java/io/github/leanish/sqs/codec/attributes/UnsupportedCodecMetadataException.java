@@ -40,8 +40,8 @@ public class UnsupportedCodecMetadataException extends CodecException {
                 "Unsupported codec version: " + version);
     }
 
-    public static UnsupportedCodecMetadataException preEncodedVersionWithLegacyWrites(int version) {
+    public static UnsupportedCodecMetadataException preEncodedVersionNewerThanOutbound(int version, int outboundVersion) {
         return new UnsupportedCodecMetadataException(
-                "Cannot send pre-encoded codec metadata v=" + version + " while legacy metadata writes are enabled");
+                "Cannot send pre-encoded codec metadata v=" + version + " while writing v=" + outboundVersion);
     }
 }

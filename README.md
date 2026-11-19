@@ -26,10 +26,13 @@ dependencies {
 
 Java:
 
+`defaultInterceptor(...)` takes the codec metadata version that sends write, with no default: `MetadataVersion.V2`,
+unless a consumer of the queues still runs 0.5.x (then `V1`; see "Upgrading from 0.5.x"). Receiving reads both.
+
 Send with defaults (no compression, MD5 checksum); decode/validate based on metadata:
 ```java
 SqsAsyncClient client = SqsAsyncClient.builder()
-        .overrideConfiguration(config -> config.addExecutionInterceptor(SqsCodecInterceptor.defaultInterceptor()))
+        .overrideConfiguration(config -> config.addExecutionInterceptor(SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)))
         .checksumValidationEnabled(false) // handled by SqsCodecInterceptor
         .build();
 ```
@@ -37,7 +40,7 @@ SqsAsyncClient client = SqsAsyncClient.builder()
 Send with explicit Zstd compression + default MD5 checksum; decode/validate based on metadata:
 ```java
 SqsAsyncClient client = SqsAsyncClient.builder()
-        .overrideConfiguration(config -> config.addExecutionInterceptor(SqsCodecInterceptor.defaultInterceptor()
+        .overrideConfiguration(config -> config.addExecutionInterceptor(SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)))
         .checksumValidationEnabled(false) // handled by SqsCodecInterceptor
         .build();
@@ -46,7 +49,7 @@ SqsAsyncClient client = SqsAsyncClient.builder()
 Send with explicit compression and checksum; decode/validate based on metadata:
 ```java
 SqsClient client = SqsClient.builder()
-        .overrideConfiguration(config -> config.addExecutionInterceptor(SqsCodecInterceptor.defaultInterceptor()
+        .overrideConfiguration(config -> config.addExecutionInterceptor(SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withCompressionLevel(CompressionLevel.HIGH)
                 .withChecksumAlgorithm(ChecksumAlgorithm.SHA256)))
@@ -56,7 +59,7 @@ SqsClient client = SqsClient.builder()
 
 Send without compression but with explicit Base64 payload encoding:
 ```java
-SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
         .withCompressionAlgorithm(CompressionAlgorithm.NONE)
         .withEncodingAlgorithm(EncodingAlgorithm.BASE64)
         .withChecksumAlgorithm(ChecksumAlgorithm.NONE);
@@ -64,7 +67,7 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
 
 Send with explicit experimental ASCII85 payload encoding:
 ```java
-SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
         .withEncodingAlgorithm(EncodingAlgorithm.ASCII85);
 ```
 
@@ -82,7 +85,8 @@ Defaults:
 - `MD5` and `SHA256` detect accidental corruption. They're unkeyed, so neither authenticates the producer: whoever can send to the queue can attach a matching checksum to any body, or send `h=none`. Control who can send with the queue's access policy.
 - `skipCompressionWhenLarger`: `true`
 - `maxDecodedPayloadBytes`: `16 MiB` (`SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES`)
-- `legacyMetadataWrites`: `false` (transitional, removed in 0.7.0; see "Upgrading from 0.5.x" below)
+- Outbound metadata version: none; `defaultInterceptor(...)` requires one, and `withOutboundMetadataVersion(...)`
+  changes it.
 - The interceptor rejects a decoded payload over `maxDecodedPayloadBytes` with `DecompressedPayloadTooLargeException`, wherever it decodes one: on receive, and when it validates an already encoded message before sending. Decompression stops as soon as it passes the limit, so a small compressed message can't expand without bound; an encoding-only payload is bounded by its encoded size, and its decoded bytes are checked once decoded. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive. It bounds only what the interceptor decodes, that is compressed or encoded (`e` not `none`) payloads: a checksum-only (`c=none,e=none`) or metadata-free body is returned as received, and a fresh outbound body isn't checked against it. A producer can therefore send a compressed message whose `l` is over a consumer's limit, and that consumer refuses it; keep consumers' limits at least as large as what producers send.
 - Every compressed `v=2` payload declares its raw length (`l`) and must decode to exactly that many bytes, on receive and when an already encoded message is validated before sending. A compressed `v=2` payload without a valid `l` fails with `UnsupportedCodecMetadataException`; an `l` over the limit fails with `DecompressedPayloadTooLargeException` before decompressing; decompression stops with `DecompressedPayloadTooLargeException` as soon as it passes `l`, and a payload that decodes to fewer bytes fails with `CompressionException`. `l` is ignored when `c=none`.
 - A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until a dead-letter queue takes it (once it reaches the queue's
@@ -99,20 +103,20 @@ Defaults:
 
 Disable `skipCompressionWhenLarger` and always use configured compression:
 ```java
-SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
         .withSkipCompressionWhenLarger(false);
 ```
 
 Tune compression effort with a named level:
 ```java
-SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
         .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
         .withCompressionLevel(CompressionLevel.HIGH);
 ```
 
 Clear a configured compression level and go back to the algorithm default:
 ```java
-SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
         .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
         .withCompressionLevel(CompressionLevel.HIGH)
         .withoutCompressionLevel();
@@ -135,8 +139,8 @@ Notes:
 - Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
 - `ascii85` is emitted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks. The decoder refuses framing, whitespace and shorthands, but accepts other spellings of a final partial group that decode to the same bytes ([details](docs/ascii85.md)).
 - Messages built outside this interceptor, `v=1` ones included, must decode to valid UTF-8; 0.5.x accepted ones that don't, and this version refuses them. Before upgrading consumers, correct and replay such retained messages, or drain them with 0.5.x consumers; raising `maxDecodedPayloadBytes` doesn't help.
-- `v` is required, exactly `2` or `1`. Metadata the interceptor writes is `2`, or `1` while legacy metadata writes are
-  enabled (see "Upgrading from 0.5.x" below). Reading accepts `2` and, deprecated
+- `v` is required, exactly `2` or `1`. Metadata the interceptor writes carries the configured `MetadataVersion`: `2`, or
+  `1` while upgrading from 0.5.x (see below). Reading accepts `2` and, deprecated
   until 0.7.0, `1` (what 0.5.x writes):
   a `v=1` payload may lack `l` or carry one that isn't a number (it's then ignored), and its decompression is bounded by
   `maxDecodedPayloadBytes` rather than by `l`, since 0.5.x streamed zstd frames with the level's window; a valid `l` it
@@ -155,34 +159,37 @@ Notes:
   legacy zstd `MAXIMUM` frames with this version, temporarily configure `withMaxDecodedPayloadBytes(128 * 1024 * 1024)`
   before receiving them. This admits their 128 MiB window and also raises the decoded-output allowance, so account for
   consumer memory. Restore the intended limit only after incompatible legacy traffic has stopped and those messages are
-  drained.
+  drained. These prerequisites hold for as long as any 0.5.x client still sends, not only for retained messages: a
+  0.5.x writer still configured for zstd `MAXIMUM`, say, keeps producing frames the default limit refuses.
 
   A 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2") and fails its whole receive, while this version reads
-  both. So a client writes `v=2` only once every consumer of its queues runs this version. Upgrading consumers before
-  producers achieves that only when no client does both: when the same clients send and receive, or services send to
-  each other, no order works on its own. Upgrade in two steps instead:
+  both. The rule is per queue: its writers may write `v=2` once all its consumers run this version. A send-only
+  client whose consumers already run this version uses `MetadataVersion.V2` from the start, and an acyclic pipeline
+  (`A` → `B` → `C`) can upgrade consumer-first (`C`, then `B`, then `A`) with `V2` throughout. When the same clients
+  send and receive, or services send to each other, no order works, so upgrade in two steps:
 
-  1. Deploy this version everywhere with `withLegacyMetadataWrites(true)`. Fresh sends keep writing `v=1` (with the
-     same payload, checksum and `l`), which 0.5.x consumers read, and every upgraded client reads both versions, so
-     clients can be upgraded, or rolled back to 0.5.x, in any order.
-  2. Once every consumer of every queue runs this version, set it to `false` on every running writer, in any order
-     (recreate clients where the setting is read only when they're built). Fresh sends then write `v=2`.
+  1. Deploy this version everywhere with `MetadataVersion.V1`. Fresh sends keep writing `v=1` (with the same payload,
+     checksum and `l` as `v=2`), which 0.5.x consumers read, and every upgraded client reads both versions, so clients
+     can be upgraded, or rolled back to 0.5.x, in any order.
+  2. Once every consumer of every queue runs this version, switch every running writer to `MetadataVersion.V2`, in any
+     order (recreate clients where the setting is read only when they're built). Fresh sends then write `v=2`.
 
-  Pass the setting from your own configuration, so that step 2 can be a configuration change:
+  Pass the version from your own configuration, so that step 2 can be a configuration change:
   ```java
-  SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
-          .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
-          .withLegacyMetadataWrites(config.getBoolean("sqs.codec.legacy-metadata-writes"));
+  SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(
+                  MetadataVersion.valueOf(config.getString("sqs.codec.metadata-version", "V2")))
+          .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
   ```
 
-  While it's enabled, a pre-encoded message whose metadata isn't `v=1` is refused on send with
+  While writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send with
   `UnsupportedCodecMetadataException`, and so is the whole batch it's in: correct that entry before retrying.
 
-  To roll back to 0.5.x after step 2, first enable it again on every writer (or stop the `v=2` writers), then drain
+  To roll back to 0.5.x after step 2, first switch every writer back to `V1` (or stop the `v=2` writers), then drain
   the queued `v=2` messages with consumers of this version, counting delayed and in-flight messages and any
-  dead-letter queue or replay that can bring them back, and only then bring back 0.5.x consumers. 0.7.0 removes the
-  option and stops reading `v=1`: before moving to it, complete step 2, stop or convert any source of pre-encoded `v=1`
-  messages, and drain the retained `v=1` ones the same way.
+  dead-letter queue or replay that can bring them back, and only then bring back 0.5.x consumers. 0.7.0 removes
+  `MetadataVersion.V1` and stops reading `v=1`: before moving to it, complete step 2, remove or update any stored
+  `V1` setting (`valueOf("V1")` fails at runtime once the constant is gone), stop or convert any source of pre-encoded
+  `v=1` messages, and drain the retained `v=1` ones the same way.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.

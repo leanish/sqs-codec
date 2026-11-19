@@ -58,11 +58,17 @@ All notable changes to this project are documented in this file.
   already encoded message is validated before sending: one without a valid `l` fails, and an `l` over the limit fails
   before decompressing. `withIncludeRawPayloadLength` is gone. `l` is still ignored when `c=none`. A message over the
   limit, or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
-- The metadata version is now `v=2`, the format above, written for every newly encoded message. `v=1` messages (0.5.x)
-  are still read, deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds
-  their decompression (a 0.5.x zstd frame whose window is larger than it needs, rounded up to a power of two, is
-  refused). Any other version fails. 0.5.x consumers refuse `v=2`: upgrade consumers before producers, or, when the
-  same clients send and receive, deploy with `withLegacyMetadataWrites(true)` first (see "Added"). Retained `v=1`
+- Breaking: `SqsCodecInterceptor.defaultInterceptor()` is now `defaultInterceptor(MetadataVersion)`, with no default,
+  so upgrading from 0.5.x can't start writing a version its consumers refuse without anyone choosing it.
+  `MetadataVersion.V2` writes the new format, the one to use unless a consumer of the queues still runs 0.5.x;
+  `MetadataVersion.V1` writes the 0.5.x version, with the same payload, checksum and `l`, for the transition, and is
+  deprecated and removed in 0.7.0. `withOutboundMetadataVersion(...)` switches it on an existing interceptor. While
+  writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send.
+- The metadata format is now `v=2`, the one above. `v=1` messages (0.5.x) are still read, deprecated until 0.7.0:
+  their `l` is optional and read leniently, and the configured limit bounds their decompression (a 0.5.x zstd frame
+  whose window is larger than it needs, rounded up to a power of two, is refused). Any other version fails. 0.5.x
+  consumers refuse `v=2`, so a queue's writers move to `V2` once all its consumers run this version; when the same
+  clients send and receive, deploy with `V1` first, as the README's "Upgrading from 0.5.x" describes. Retained `v=1`
   messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames whose window is over
   the configured limit) each fail the whole
   receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.
@@ -76,11 +82,6 @@ All notable changes to this project are documented in this file.
   java-conventions' reusable publishing workflow.
 
 ### Added
-- Added `withLegacyMetadataWrites(boolean)` (default `false`), deprecated and removed in 0.7.0, for upgrading from 0.5.x
-  when the same clients send and receive. While enabled, fresh sends write `v=1` with the same payload, checksum and
-  `l` as `v=2`, which 0.5.x consumers read, and a pre-encoded message that isn't `v=1` is refused on send. Deploy this
-  version everywhere with it enabled, then disable it once every consumer runs this version; the README's "Upgrading
-  from 0.5.x" describes the steps, rollback and the move to 0.7.0.
 - Added the [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain gate as a
   `supply-chain` workflow: it compares each pull request's base and head against one advisory snapshot, and scans
   `main`.

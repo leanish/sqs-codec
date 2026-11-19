@@ -333,7 +333,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     }
 
     /**
-     * A compressed v=1 payload (0.5.x, read until 0.7.0): its raw length is optional, and its zstd frames were streamed
+     * A compressed v=1 payload (0.5.x, read until 0.8.0): its raw length is optional, and its zstd frames were streamed
      * with the level's window, so the configured limit bounds the decompression; a raw length it declares must match.
      */
     private byte[] decodeLegacy(Codec codec, byte[] messageBodyBytes, CodecMetadataAttributeHandler metadata) {

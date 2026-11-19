@@ -18,8 +18,8 @@ public enum MetadataVersion {
      * consumers form a cycle can be upgraded in any order. The payload, checksum and raw length ({@code l}) are the same
      * as with {@link #V2}.
      *
-     * @deprecated removed in 0.7.0, together with reading {@code v=1}; switch to {@link #V2} once every consumer runs
-     *     0.6.x.
+     * @deprecated removed in 0.8.0, together with reading {@code v=1}; switch to {@link #V2} once every consumer of the
+     *     client's queues reads {@code v=2} (0.6.0 or later).
      */
     @Deprecated(since = "0.6.0")
     V1(CodecAttributes.LEGACY_VERSION_VALUE),

@@ -69,15 +69,14 @@ All notable changes to this project are documented in this file.
   so an upgrade can't start writing a version 0.5.x consumers refuse without anyone choosing it; code compiled against
   0.5.x that calls `defaultInterceptor()` fails with `NoSuchMethodError` and must be rebuilt. `MetadataVersion.V2`
   writes the new format; `V1` writes 0.5.x's `v=1`, with the same payload, checksum and `l`, for the upgrade, and is
-  deprecated and removed in 0.7.0, while the argument stays required. `withOutboundMetadataVersion(...)` switches it.
+  deprecated and removed in 0.8.0, while the argument stays required. `withOutboundMetadataVersion(...)` switches it.
   While writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send.
 - The metadata format is now `v=2`, the one above, which 0.5.x consumers refuse. `v=1` messages are still read,
-  deprecated until 0.7.0: their `l` is optional and read leniently, the configured limit bounds their decompression,
+  deprecated until 0.8.0: their `l` is optional and read leniently, the configured limit bounds their decompression,
   and a zstd frame streamed by 0.5.x whose window is larger than that limit needs is refused. Any other version
-  fails, and a message
-  this version refuses fails the whole receive. The README's "Upgrading from 0.5.x" gives the upgrade order (with `V1`
-  first when writers and consumers form a cycle), what to check in retained messages, and the path to 0.7.0, through
-  0.6.x.
+  fails, and a message this version refuses fails the whole receive. The README's "Upgrading from 0.5.x" gives the
+  upgrade order (with `V1` first when writers and consumers form a cycle), what to check in retained messages, and the
+  path to 0.8.0, through 0.6.x or 0.7.x.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
 - Publishing to GitHub Packages now separates building from uploading. The build runs with read access only and stages

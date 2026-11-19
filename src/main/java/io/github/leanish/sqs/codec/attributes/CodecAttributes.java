@@ -30,7 +30,7 @@ public class CodecAttributes {
      */
     public static final int VERSION_VALUE = 2;
     /**
-     * The 0.5.x metadata version, still read (deprecated, removed in 0.7.0): {@code l} is optional and read leniently, and
+     * The 0.5.x metadata version, still read (deprecated, removed in 0.8.0): {@code l} is optional and read leniently, and
      * compressed payloads are bounded by the configured limit alone. Written with {@code MetadataVersion.V1}.
      */
     public static final int LEGACY_VERSION_VALUE = 1;

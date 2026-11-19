@@ -67,32 +67,20 @@ class CodecMetadataAttributeHandlerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"", ";l=", ";l=-1", ";l=abc", ";l=99999999999"})
-    void fromAttributes_legacyVersionReadsAnUnusableRawLengthAsAbsent(String rawLength) {
+    void fromAttributes_readsAnUnusableRawLengthAsAbsent(String rawLength) {
         CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(
                 metadataAttributes("v=1;c=gzip;e=base64;h=none" + rawLength));
 
-        assertThat(metadata.configuration().version()).isEqualTo(CodecAttributes.LEGACY_VERSION_VALUE);
+        assertThat(metadata.configuration().version()).isEqualTo(CodecAttributes.VERSION_VALUE);
         assertThat(metadata.rawLength()).isEmpty();
     }
 
     @Test
-    void fromAttributes_legacyVersionKeepsAValidRawLength() {
+    void fromAttributes_keepsAValidRawLength() {
         CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(
                 metadataAttributes("v=1;c=gzip;e=base64;h=none;l=+5"));
 
         assertThat(metadata.rawLength()).hasValue(5);
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"", ";l=", ";l=-1", ";l=+5", ";l=abc", ";l=99999999999"})
-    void fromAttributes_compressedPayloadRequiresAValidRawLength(String rawLength) {
-        String rawMetadata = "v=2;c=gzip;e=base64;h=none" + rawLength;
-
-        assertThatThrownBy(() -> CodecMetadataAttributeHandler.fromAttributes(metadataAttributes(rawMetadata)))
-                .isInstanceOf(UnsupportedCodecMetadataException.class)
-                .hasMessage(rawLength.isEmpty()
-                        ? "Missing required codec metadata key: l"
-                        : "Unsupported codec metadata: " + rawMetadata);
     }
 
     @ParameterizedTest
@@ -163,7 +151,7 @@ class CodecMetadataAttributeHandlerTest {
                 "payload".getBytes(StandardCharsets.UTF_8));
 
         assertThat(formattedMetadata(metadata))
-                .isEqualTo("v=2;c=none;e=" + encodingAlgorithm.id() + ";h=none");
+                .isEqualTo("v=1;c=none;e=" + encodingAlgorithm.id() + ";h=none");
     }
 
     @Test
@@ -179,7 +167,31 @@ class CodecMetadataAttributeHandlerTest {
                 "payload".getBytes(StandardCharsets.UTF_8));
 
         assertThat(formattedMetadata(metadata))
-                .isEqualTo("v=2;c=gzip;e=ascii85;h=none;l=7");
+                .isEqualTo("v=1;c=gzip;e=ascii85;h=none;l=7");
+    }
+
+    @Test
+    @SuppressWarnings("deprecation") // exercises the overload kept for 0.5.x callers
+    void forOutbound_ignoresTheRawLengthFlagAndAlwaysWritesIt() {
+        byte[] payload = "payload".getBytes(StandardCharsets.UTF_8);
+        CodecConfiguration gzip = new CodecConfiguration(
+                CodecAttributes.VERSION_VALUE, CompressionAlgorithm.GZIP, EncodingAlgorithm.NONE, ChecksumAlgorithm.NONE);
+
+        assertThat(formattedMetadata(CodecMetadataAttributeHandler.forOutbound(gzip, payload, false)))
+                .isEqualTo("v=1;c=gzip;e=base64;h=none;l=7");
+        assertThat(formattedMetadata(CodecMetadataAttributeHandler.forOutbound(gzip, payload, true)))
+                .isEqualTo("v=1;c=gzip;e=base64;h=none;l=7");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 2})
+    void forOutbound_refusesAVersionReadersWouldRefuse(int version) {
+        CodecConfiguration configuration = new CodecConfiguration(
+                version, CompressionAlgorithm.GZIP, EncodingAlgorithm.BASE64, ChecksumAlgorithm.NONE);
+
+        assertThatThrownBy(() -> CodecMetadataAttributeHandler.forOutbound(configuration, "payload".getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Unsupported codec version: " + version);
     }
 
     private static Stream<Arguments> metadataCombinationCases() {
@@ -194,12 +206,12 @@ class CodecMetadataAttributeHandlerTest {
                             EncodingAlgorithm expectedEncoding = compressionAlgorithm == CompressionAlgorithm.NONE
                                     ? EncodingAlgorithm.NONE
                                     : EncodingAlgorithm.BASE64;
-                            String rawMetadata = "v=2;c=" + compressionAlgorithm.id()
+                            String rawMetadata = "v=1;c=" + compressionAlgorithm.id()
                                     + ";e=" + expectedEncoding.id()
                                     + ";h=" + checksumAlgorithm.id()
                                     + (checksumValue == null ? "" : ";s=" + checksumValue)
                                     + ";l=12";
-                            String expectedCanonicalMetadata = "v=2;c=" + compressionAlgorithm.id()
+                            String expectedCanonicalMetadata = "v=1;c=" + compressionAlgorithm.id()
                                     + ";e=" + expectedEncoding.id()
                                     + ";h=" + checksumAlgorithm.id()
                                     + (checksumValue == null ? "" : ";s=" + checksumValue)
@@ -226,127 +238,127 @@ class CodecMetadataAttributeHandlerTest {
                 EncodingAlgorithm.BASE64,
                 ChecksumAlgorithm.NONE);
         return Stream.of(
-                Arguments.of("v=2;c=none;e=none;h=md5;s=abc", md5Configuration, "abc", "v=2;c=none;e=none;h=md5;s=abc"),
-                Arguments.of("v=2;c=none;e=none;h=md5;s=abc;l=", md5Configuration, "abc", "v=2;c=none;e=none;h=md5;s=abc"),
-                Arguments.of("v=2;c=none;e=none;h=md5;s=abc;l=-1", md5Configuration, "abc", "v=2;c=none;e=none;h=md5;s=abc"),
-                Arguments.of("v=2;c=none;e=none;h=md5;s=abc;l=abc", md5Configuration, "abc", "v=2;c=none;e=none;h=md5;s=abc"),
-                Arguments.of("v=2;c=gzip;e=base64;h=none;l=0", gzipConfiguration, null, "v=2;c=gzip;e=base64;h=none;l=0"));
+                Arguments.of("v=1;c=none;e=none;h=md5;s=abc", md5Configuration, "abc", "v=1;c=none;e=none;h=md5;s=abc"),
+                Arguments.of("v=1;c=none;e=none;h=md5;s=abc;l=", md5Configuration, "abc", "v=1;c=none;e=none;h=md5;s=abc"),
+                Arguments.of("v=1;c=none;e=none;h=md5;s=abc;l=-1", md5Configuration, "abc", "v=1;c=none;e=none;h=md5;s=abc"),
+                Arguments.of("v=1;c=none;e=none;h=md5;s=abc;l=abc", md5Configuration, "abc", "v=1;c=none;e=none;h=md5;s=abc"),
+                Arguments.of("v=1;c=gzip;e=base64;h=none;l=0", gzipConfiguration, null, "v=1;c=gzip;e=base64;h=none;l=0"));
     }
 
     private static Stream<Arguments> metadataPermutationCases() {
         return Stream.of(
                 Arguments.of(
-                        "h=md5;s=abc;l=12;e=base64;c=gzip;v=2",
+                        "h=md5;s=abc;l=12;e=base64;c=gzip;v=1",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.GZIP,
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.MD5),
                         "abc",
-                        "v=2;c=gzip;e=base64;h=md5;s=abc;l=12"),
+                        "v=1;c=gzip;e=base64;h=md5;s=abc;l=12"),
                 Arguments.of(
-                        "  V = 2 ; C = ZSTD ; E = BASE64 ; H = SHA256 ; S = q ; L = 5  ",
+                        "  V = 1 ; C = ZSTD ; E = BASE64 ; H = SHA256 ; S = q ; L = 5  ",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.ZSTD,
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.SHA256),
                         "q",
-                        "v=2;c=zstd;e=base64;h=sha256;s=q;l=5"),
+                        "v=1;c=zstd;e=base64;h=sha256;s=q;l=5"),
                 Arguments.of(
-                        "l=9;;;h=none;;;e=base64;;;c=snappy;v=2;;",
+                        "l=9;;;h=none;;;e=base64;;;c=snappy;v=1;;",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.SNAPPY,
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=2;c=snappy;e=base64;h=none;l=9"),
+                        "v=1;c=snappy;e=base64;h=none;l=9"),
                 Arguments.of(
-                        "v=2;e=none;h=md5;s=abc",
+                        "v=1;e=none;h=md5;s=abc",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.NONE,
                                 EncodingAlgorithm.NONE,
                                 ChecksumAlgorithm.MD5),
                         "abc",
-                        "v=2;c=none;e=none;h=md5;s=abc"),
+                        "v=1;c=none;e=none;h=md5;s=abc"),
                 Arguments.of(
-                        "v=2;c=gzip;e=base64;l=11",
+                        "v=1;c=gzip;e=base64;l=11",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.GZIP,
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=2;c=gzip;e=base64;h=none;l=11"),
+                        "v=1;c=gzip;e=base64;h=none;l=11"),
                 Arguments.of(
-                        "v=2;c=none;e=base64;h=none",
+                        "v=1;c=none;e=base64;h=none",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.NONE,
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=2;c=none;e=base64;h=none"),
+                        "v=1;c=none;e=base64;h=none"),
                 Arguments.of(
-                        "v=2;c=none;e=ascii85;h=md5;s=abc",
+                        "v=1;c=none;e=ascii85;h=md5;s=abc",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.NONE,
                                 EncodingAlgorithm.ASCII85,
                                 ChecksumAlgorithm.MD5),
                         "abc",
-                        "v=2;c=none;e=ascii85;h=md5;s=abc"),
+                        "v=1;c=none;e=ascii85;h=md5;s=abc"),
                 Arguments.of(
-                        "v=2;c=zstd;e=base64;h=none;l=5",
+                        "v=1;c=zstd;e=base64;h=none;l=5",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.ZSTD,
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=2;c=zstd;e=base64;h=none;l=5"),
+                        "v=1;c=zstd;e=base64;h=none;l=5"),
                 Arguments.of(
-                        "v=2;c=gzip;e=ascii85;h=none;l=7",
+                        "v=1;c=gzip;e=ascii85;h=none;l=7",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.GZIP,
                                 EncodingAlgorithm.ASCII85,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=2;c=gzip;e=ascii85;h=none;l=7"));
+                        "v=1;c=gzip;e=ascii85;h=none;l=7"));
     }
 
     private static Stream<Arguments> unknownKeyToleranceCases() {
         return Stream.of(
                 Arguments.of(
-                        "v=2;c=gzip;e=base64;x=base64;h=md5;s=abc;l=12;y=ignored;extra=value",
+                        "v=1;c=gzip;e=base64;x=base64;h=md5;s=abc;l=12;y=ignored;extra=value",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.GZIP,
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.MD5),
                         "abc",
-                        "v=2;c=gzip;e=base64;h=md5;s=abc;l=12"),
+                        "v=1;c=gzip;e=base64;h=md5;s=abc;l=12"),
                 Arguments.of(
-                        "v=2;c=none;e=none;h=md5;s=abc;future-flag=true",
+                        "v=1;c=none;e=none;h=md5;s=abc;future-flag=true",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.NONE,
                                 EncodingAlgorithm.NONE,
                                 ChecksumAlgorithm.MD5),
                         "abc",
-                        "v=2;c=none;e=none;h=md5;s=abc"),
+                        "v=1;c=none;e=none;h=md5;s=abc"),
                 Arguments.of(
-                        "v=2;c=gzip;e=base64;h=none;l=3;future-flag=",
+                        "v=1;c=gzip;e=base64;h=none;l=3;future-flag=",
                         new CodecConfiguration(
                                 CodecAttributes.VERSION_VALUE,
                                 CompressionAlgorithm.GZIP,
                                 EncodingAlgorithm.BASE64,
                                 ChecksumAlgorithm.NONE),
                         null,
-                        "v=2;c=gzip;e=base64;h=none;l=3"));
+                        "v=1;c=gzip;e=base64;h=none;l=3"));
     }
 
     private static Stream<Arguments> invalidMetadataCases() {
@@ -356,43 +368,43 @@ class CodecMetadataAttributeHandlerTest {
                         UnsupportedCodecMetadataException.class,
                         "Missing required codec metadata key: v"),
                 Arguments.of(
-                        "v=2",
+                        "v=1",
                         UnsupportedCodecMetadataException.class,
                         "Missing required codec metadata key: e"),
                 Arguments.of(
-                        "v=2;c=none;h=none",
+                        "v=1;c=none;h=none",
                         UnsupportedCodecMetadataException.class,
                         "Missing required codec metadata key: e"),
                 Arguments.of(
-                        "v=2;c=none;h=none;s=abc",
+                        "v=1;c=none;h=none;s=abc",
                         UnsupportedCodecMetadataException.class,
                         "Missing required codec metadata key: e"),
                 Arguments.of(
-                        "v=2;l=12",
+                        "v=1;l=12",
                         UnsupportedCodecMetadataException.class,
                         "Missing required codec metadata key: e"),
                 Arguments.of(
-                        "v=2;h=md5;s=abc",
+                        "v=1;h=md5;s=abc",
                         UnsupportedCodecMetadataException.class,
                         "Missing required codec metadata key: e"),
                 Arguments.of(
-                        "v=2;c=zstd;h=none;l=5",
+                        "v=1;c=zstd;h=none;l=5",
                         UnsupportedCodecMetadataException.class,
                         "Missing required codec metadata key: e"),
                 Arguments.of(
-                        "v=2;c=zstd;e=none;h=none;l=5",
+                        "v=1;c=zstd;e=none;h=none;l=5",
                         UnsupportedCodecMetadataException.class,
-                        "Unsupported codec metadata: v=2;c=zstd;e=none;h=none;l=5"),
+                        "Unsupported codec metadata: v=1;c=zstd;e=none;h=none;l=5"),
                 Arguments.of(
-                        "v=2;c=none;e=base85;h=md5;s=abc",
+                        "v=1;c=none;e=base85;h=md5;s=abc",
                         UnsupportedAlgorithmException.class,
                         "Unsupported payload encoding: base85"),
                 Arguments.of(
-                        "v=2;c=;e=base64;h=none",
+                        "v=1;c=;e=base64;h=none",
                         UnsupportedCodecMetadataException.class,
-                        "Unsupported codec metadata: v=2;c=;e=base64;h=none"),
+                        "Unsupported codec metadata: v=1;c=;e=base64;h=none"),
                 Arguments.of(
-                        "v=2;c=none;e=base64;h=none;s=abc",
+                        "v=1;c=none;e=base64;h=none;s=abc",
                         ChecksumValidationException.class,
                         "Missing required checksum algorithm"));
     }

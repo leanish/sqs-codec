@@ -83,12 +83,13 @@ Defaults:
 - `skipCompressionWhenLarger`: `true`
 - `maxDecodedPayloadBytes`: `16 MiB` (`SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES`)
 - The interceptor rejects a decoded payload over `maxDecodedPayloadBytes` with `DecompressedPayloadTooLargeException`, wherever it decodes one: on receive, and when it validates an already encoded message before sending. Decompression stops as soon as it passes the limit, so a small compressed message can't expand without bound; an encoding-only payload is bounded by its encoded size, and its decoded bytes are checked once decoded. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive. It bounds only what the interceptor decodes, that is compressed or encoded (`e` not `none`) payloads: a checksum-only (`c=none,e=none`) or metadata-free body is returned as received, and a fresh outbound body isn't checked against it. A producer can therefore send a compressed message whose `l` is over a consumer's limit, and that consumer refuses it; keep consumers' limits at least as large as what producers send.
-- Every compressed `v=2` payload declares its raw length (`l`) and must decode to exactly that many bytes, on receive and when an already encoded message is validated before sending. A compressed `v=2` payload without a valid `l` fails with `UnsupportedCodecMetadataException`; an `l` over the limit fails with `DecompressedPayloadTooLargeException` before decompressing; decompression stops with `DecompressedPayloadTooLargeException` as soon as it passes `l`, and a payload that decodes to fewer bytes fails with `CompressionException`. `l` is ignored when `c=none`.
-- A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until a dead-letter queue takes it, if one is configured.
+- A compressed payload's raw length (`l`) is the sender's claim, so it never bounds decompression: `maxDecodedPayloadBytes` does. When `l` is usable (a non-negative integer that fits in a Java `int`), the payload must decode to exactly that many bytes, or it fails with `CompressionException`, on receive and when an already encoded message is validated before sending. 0.6.x still decodes a compressed payload whose `l` is missing or not a usable number, as 0.5.x writers could send; 0.7.0 will refuse it (see [Before 0.7.0](#before-070)). `l` is ignored when `c=none`.
+- A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until its retention period ends or, if the queue has a dead-letter queue, until that takes it
+  (after `maxReceiveCount` receives).
 - The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten.
 - A decoded payload must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException`, on receive and when an already encoded message is validated before sending.
-- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. For `v=2`, the decoder refuses, with `DecompressedPayloadTooLargeException` and before allocating it, a frame whose declared window is larger than `l` needs (rounded up to a power of two, at least 1 KiB). Snappy's declared length is checked against `l` (`maxDecodedPayloadBytes` for `v=1`) before it allocates.
-- `DecompressedPayloadTooLargeException` means the payload was refused against the limit in force (`maxDecodedPayloadBytes` for an encoded, uncompressed payload (`c=none`, `e` not `none`) or an `l` over it, `l` itself for a compressed `v=2` one, `maxDecodedPayloadBytes` for a compressed `v=1` one): decoding produced more than it, a declared length is over it, or a zstd frame's window is larger than it needs. It doesn't establish the payload's actual decoded size.
+- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. The decoder never allocates a window larger than `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window): a frame that declares a larger one, as 0.5.x's streamed frames at the `MAXIMUM` level do (128 MiB), is refused with `DecompressedPayloadTooLargeException`, unless zstd decodes it in a single step straight into its output, which allocates no window; the output stays bounded by the limit either way. Snappy's declared length is checked against `maxDecodedPayloadBytes` before it allocates.
+- `DecompressedPayloadTooLargeException` means the payload was refused against `maxDecodedPayloadBytes`: decoding produced more than it, snappy's declared length is over it, or a zstd frame's window is larger than it needs. It doesn't establish the payload's actual decoded size.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if the compressed and encoded body would be the same size as the original body or larger, the interceptor sends the original body and falls back to `c=none,e=none`.
 - When outbound processing resolves to `c=none`, `e=none` and `h=none`, the interceptor does not add `x-codec-meta`.
 - Compression level is local send-side configuration only; it does not change codec metadata.
@@ -119,7 +120,7 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
 ## Attributes
 
 Codec metadata is stored in a single attribute:
-- `x-codec-meta` (String), for example: `v=2;c=zstd;e=base64;h=md5;s=t2tngCwK9b7C9eqVQunqfg;l=12`
+- `x-codec-meta` (String), for example: `v=1;c=zstd;e=base64;h=md5;s=t2tngCwK9b7C9eqVQunqfg;l=12`
 
 Keys:
 - `v`: codec version
@@ -132,28 +133,10 @@ Keys:
 Notes:
 - Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
 - `ascii85` is emitted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks. The decoder refuses framing, whitespace and shorthands, but accepts other spellings of a final partial group that decode to the same bytes ([details](docs/ascii85.md)).
-- Messages built outside this interceptor, `v=1` ones included, must decode to valid UTF-8; 0.5.x accepted ones that don't, and this version refuses them. Before upgrading consumers, correct and replay such retained messages, or drain them with 0.5.x consumers; raising `maxDecodedPayloadBytes` doesn't help.
-- `v` is required, exactly `2` or `1`. Metadata the interceptor writes is always `2`. Reading accepts `2` and, deprecated
-  until 0.7.0, `1` (what 0.5.x writes):
-  a `v=1` payload may lack `l` or carry one that isn't a number (it's then ignored), and its decompression is bounded by
-  `maxDecodedPayloadBytes` rather than by `l`, since 0.5.x streamed zstd frames with the level's window; a valid `l` it
-  declares must still match. A 0.5.x zstd frame whose window is larger than `maxDecodedPayloadBytes` needs, rounded up
-  to a power of two (at least 1 KiB), is refused: the `MAXIMUM` level's 128 MiB under the 16 MiB default, say. A 3 MiB
-  limit admits a 4 MiB window; the output stays bounded by the limit either way. An already encoded `v=1` message sent through the interceptor is validated the same
-  way and sent unchanged. Any other version fails with `UnsupportedCodecMetadataException`.
-- Upgrading from 0.5.x: before replacing consumers, check that retained compressed `v=1` messages fit the new
-  consumers' decoded-size and zstd-window limits. A numeric, non-negative declared `l` must equal the decoded byte
-  length; 0.5.x ignored mismatches, while this version rejects them. Raising the limit does not bypass that check.
-
-  One incompatible message fails the whole receive (see above), so if retained messages are incompatible, pause
-  producers and drain them with 0.5.x consumers, or arrange their correction and replay before cutover. To consume
-  legacy zstd `MAXIMUM` frames with this version, temporarily configure `withMaxDecodedPayloadBytes(128 * 1024 * 1024)`
-  before receiving them. This admits their 128 MiB window and also raises the decoded-output allowance, so account for
-  consumer memory. Restore the intended limit only after incompatible legacy traffic has stopped and those messages are
-  drained.
-
-  Upgrade consumers before producers: a 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2"), while this
-  version reads both, so producers move to `v=2` only once every consumer of their queues can read it.
+- Messages built outside this interceptor must decode to valid UTF-8 (0.5.x accepted ones that don't; see
+  [Upgrading from 0.5.x](#upgrading-from-05x)).
+- `v` is required and must be exactly `1`, the only version written and read (0.5.x also accepted `01` or `+1`); any
+  other value fails with `UnsupportedCodecMetadataException`.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.
@@ -164,13 +147,18 @@ Notes:
 - `s` must be absent when `h=none`.
 - `s` is emitted as unpadded URL-safe Base64 on send.
 - If checksum values are produced or compared outside this library, use the canonical unpadded form; padded values are not normalized on read.
-- `l` is required for `v=2`, a non-negative byte count, when `c` is not `none`, and ignored when `c=none`; optional for `v=1`.
-- On send, `l` is emitted exactly when compression is actually used (`c!=none` in final metadata).
+- `l`, when `c` is not `none` and usable (a non-negative integer that fits in a Java `int`), is a byte count the
+  decoded payload must match. A missing, blank, negative, non-numeric or overflowing `l` reads as absent, as in 0.5.x,
+  and such a payload decodes under `maxDecodedPayloadBytes` alone; 0.7.0 will refuse a compressed payload without a
+  usable `l`. `l` is ignored when `c=none`.
+- On a fresh send, `l` is emitted exactly when compression is actually used (`c!=none` in final metadata). The deprecated
+  `withIncludeRawPayloadLength(boolean)`, kept for 0.5.x callers, no longer changes that.
 - Unknown keys are ignored for forward compatibility.
 - When `x-codec-meta` is already present on send, the interceptor validates that body and checksum match the declared metadata before skipping re-encoding.
 - If send-side processing (including `skipCompressionWhenLarger`) ends with `c=none`, `e=none` and `h=none`, no metadata attribute is emitted.
 
-Outbound metadata emission matrix (final per-message decision):
+Outbound metadata emission matrix for fresh sends (final per-message decision; an already encoded message is sent
+with its metadata unchanged):
 - `c=none,e=none,h=none`: no `x-codec-meta`
 - `c=none,e=none,h!=none`: `v;c;e;h;s` (no `l`)
 - `c=none,e!=none,h=none`: `v;c;e;h` (no `l`)
@@ -183,41 +171,76 @@ SQS attribute limit:
 - `sqs-codec` adds at most one attribute (`x-codec-meta`) and skips it for no-op messages (`c=none,e=none,h=none`).
 - The interceptor fails fast on send when the final attribute count would exceed the SQS limit.
 
+## Upgrading from 0.5.x
+
+0.6.0 writes the same metadata version as 0.5.x (`v=1`), so no producer has to wait for its consumers: once the
+traffic they read passes the checks below, clients can be upgraded, or rolled back to 0.5.x, in any order, including
+when writers and consumers form a cycle (services that send to each other, or a client that sends to a queue it also
+consumes). Fresh compressed sends always write `l`, a few bytes more than 0.5.x clients that turned it off sent. Code built against 0.5.x links without
+recompiling: the 0.5.x methods that changed are kept, deprecated (`withIncludeRawPayloadLength(boolean)` and the
+three-argument `CodecMetadataAttributeHandler.forOutbound` ignore their flag and always write `l`), and the built-in
+compressors' one-argument `decompress(byte[])` is now bounded like a receive with the 16 MiB default. A class
+implementing `Compressor` itself has to implement the two-argument `decompress` once recompiled.
+
+This version reads metadata more strictly than 0.5.x, and one message it refuses fails the whole receive. Before
+replacing consumers, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:
+- the payload must decode to valid UTF-8 (raising `maxDecodedPayloadBytes` doesn't help);
+- a compressed or encoded payload must decode to at most `maxDecodedPayloadBytes`;
+- a numeric, non-negative `l` must equal the decoded length in bytes (0.5.x ignored mismatches; raising the limit
+  doesn't bypass this);
+- the version, once trimmed, must be exactly `1` (0.5.x also accepted `01` or `+1`; it always wrote `1`, so only
+  metadata built elsewhere is affected);
+- zstd frames must fit the window `maxDecodedPayloadBytes` allows: 0.5.x's `MAXIMUM` level declares 128 MiB, refused
+  under the 16 MiB default. To read such frames, set `withMaxDecodedPayloadBytes(128 * 1024 * 1024)` (which also raises
+  the decoded-output allowance, so account for memory) until that traffic has stopped and been drained.
+
+Pause producers and drain incompatible messages with 0.5.x consumers, or correct and replay them, before cutover.
+
+### Before 0.7.0
+
+0.7.0 will refuse a compressed message without a valid `l`, which 0.5.x and 0.6.x read as optional. Before upgrading
+any consumer to 0.7.0, make sure that:
+- no client sends compressed messages without `l`: 0.5.x clients that call `withIncludeRawPayloadLength(false)` stop
+  doing so or are upgraded to 0.6.0, and code that builds codec metadata itself writes an `l` equal to the raw
+  payload's UTF-8 byte length;
+- relays and other senders that forward already encoded messages don't pass on any without a valid `l`: the
+  interceptor validates such a message and sends it unchanged, so 0.6.x doesn't add a missing `l`;
+- retained compressed messages without a valid `l` are drained, counting delayed and in-flight messages and any
+  dead-letter queue or replay that can bring them back.
+
 ## Error handling
 
-All codec failures extend `CodecException`. You can catch the base type
-to handle any codec error, or specific exceptions when you want targeted
+All codec failures extend `CodecException`, with subtypes for targeted
 responses.
 
-Catch specific decode failures surfaced by the interceptor:
+On receive, the SDK reports a failure in the interceptor as an `SdkClientException` ("Unable to unmarshall
+response"), with the codec exception in its cause chain, so catch that and look for the `CodecException`:
 ```java
 try {
     ReceiveMessageResponse response = client.receiveMessage(request);
     // use decoded payloads
-} catch (InvalidPayloadException e) {
-    // bad payload data, consider DLQ or logging
-} catch (DecompressedPayloadTooLargeException e) {
-    // refused: too much output, a declared length over the limit, or a zstd window too large for it
-} catch (CompressionException e) {
-    // payload decompression failed
-} catch (CodecException e) {
-    // fallback for any other codec issue
-}
-```
-
-Handle attribute/config errors on receive:
-```java
-try {
-    ReceiveMessageResponse response = client.receiveMessage(request);
-    // interceptor validates checksum/attributes during receive
-} catch (ChecksumValidationException e) {
-    // missing algorithm/attribute or checksum mismatch; inspect e.detail()
-} catch (UnsupportedCodecMetadataException e) {
-    // malformed/duplicate/unsupported codec metadata
-} catch (UnsupportedAlgorithmException e) {
-    // unsupported compression/checksum values
-} catch (CodecException e) {
-    // catch-all for other codec errors
+} catch (SdkClientException e) {
+    Throwable cause = e;
+    while (cause != null && !(cause instanceof CodecException)) {
+        cause = cause.getCause();
+    }
+    if (cause instanceof InvalidPayloadException) {
+        // bad payload data, consider DLQ or logging
+    } else if (cause instanceof DecompressedPayloadTooLargeException) {
+        // refused: too much output, a declared length over the limit, or a zstd window too large for it
+    } else if (cause instanceof CompressionException) {
+        // payload decompression failed
+    } else if (cause instanceof ChecksumValidationException checksumFailure) {
+        // missing algorithm/attribute or checksum mismatch; inspect checksumFailure.detail()
+    } else if (cause instanceof UnsupportedCodecMetadataException) {
+        // malformed/duplicate/unsupported codec metadata
+    } else if (cause instanceof UnsupportedAlgorithmException) {
+        // unsupported compression/checksum values
+    } else if (cause instanceof CodecException) {
+        // any other codec issue
+    } else {
+        throw e; // not a codec failure
+    }
 }
 ```
 

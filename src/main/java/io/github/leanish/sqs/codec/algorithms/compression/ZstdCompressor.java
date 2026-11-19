@@ -38,7 +38,7 @@ public class ZstdCompressor implements Compressor {
 
     /**
      * Compresses in one pass, so the frame records its content size and declares a window no larger than the payload,
-     * which lets {@link #decompress} refuse any frame whose window exceeds its limit.
+     * so any limit {@link #decompress} is given that allows the payload also allows its window.
      */
     @Override
     public byte[] compress(byte[] payload) {
@@ -54,7 +54,8 @@ public class ZstdCompressor implements Compressor {
         BoundedReads.requireNonNegative(maxLength);
         try (ByteArrayInputStream compressedStream = new ByteArrayInputStream(payload);
                 ZstdInputStreamNoFinalizer inputStream = new ZstdInputStreamNoFinalizer(compressedStream)) {
-            // The decoder allocates the window a frame declares before producing anything, so it may not exceed the limit.
+            // The decoder allocates the window a frame declares before producing anything, so it may not exceed the limit
+            // (a frame zstd decodes in a single step straight into the output allocates no window, and isn't checked).
             inputStream.setLongMax(windowLogFor(maxLength));
             return BoundedReads.readAtMost(inputStream, maxLength, ALGORITHM);
         } catch (DecompressedPayloadTooLargeException e) {

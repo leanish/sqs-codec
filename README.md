@@ -192,11 +192,12 @@ minor doesn't break it:
 0.6.0 writes the same metadata version as 0.5.x (`v=1`), so no producer has to wait for its consumers: once the
 traffic they read passes the checks below, clients can be upgraded, or rolled back to 0.5.x, in any order, including
 when writers and consumers form a cycle (services that send to each other, or a client that sends to a queue it also
-consumes). Fresh compressed sends always write `l`, a few bytes more than 0.5.x clients that turned it off sent. Code built against 0.5.x links without
-recompiling: the 0.5.x methods that changed are kept, deprecated (`withIncludeRawPayloadLength(boolean)` and the
-three-argument `CodecMetadataAttributeHandler.forOutbound` ignore their flag and always write `l`), and the built-in
-compressors' one-argument `decompress(byte[])` is now bounded like a receive with the 16 MiB default. A class
-implementing `Compressor` itself has to implement the two-argument `decompress` once recompiled.
+consumes). Fresh compressed sends always write `l`, a few bytes more than 0.5.x clients that turned it off sent.
+Code built against 0.5.x links without recompiling: the 0.5.x methods that changed are kept, deprecated
+(`withIncludeRawPayloadLength(boolean)` and the three-argument `CodecMetadataAttributeHandler.forOutbound` ignore
+their flag and always write `l`), and the built-in compressors' one-argument `decompress(byte[])` is now bounded like
+a receive with the 16 MiB default. A class implementing `Compressor` itself has to implement the two-argument
+`decompress` once recompiled.
 
 This version reads metadata more strictly than 0.5.x, and one message it refuses fails the whole receive. Before
 replacing consumers, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:

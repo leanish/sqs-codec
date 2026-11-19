@@ -92,29 +92,35 @@ public class ZstdCompressor implements Compressor {
 
     /**
      * Decodes the whole payload in one step into a buffer of at most {@code maxLength} bytes. zstd then uses the output
-     * as its window and allocates none, whatever window the frames declare. The buffer starts small and grows only while
-     * the output doesn't fit, so a small or malformed payload never makes it allocate the whole limit; each growth decodes
-     * the payload again.
+     * as its window and allocates none, whatever window the frames declare. The buffer starts at 1 MiB (or the limit, if
+     * smaller) and grows only while the output doesn't fit, so a small or malformed payload never makes it allocate the
+     * whole limit; each growth decodes the payload again.
      */
     private static byte[] decompressInOneStep(byte[] payload, int maxLength) {
-        int capacity = Math.min(maxLength, ONE_STEP_INITIAL_CAPACITY);
         try (ZstdDecompressCtx context = new ZstdDecompressCtx()) {
-            while (true) {
-                byte[] output = new byte[capacity];
-                try {
-                    int length = context.decompressByteArray(output, 0, capacity, payload, 0, payload.length);
-                    return length == capacity ? output : Arrays.copyOf(output, length);
-                } catch (ZstdException e) {
-                    if (e.getErrorCode() != Zstd.errDstSizeTooSmall()) {
-                        throw CompressionException.decompress(ALGORITHM, e);
-                    }
-                    if (capacity == maxLength) {
-                        throw DecompressedPayloadTooLargeException.exceeds(ALGORITHM, maxLength);
-                    }
-                    capacity = (int) Math.min(maxLength, (long) capacity * ONE_STEP_GROWTH);
-                } catch (RuntimeException e) {
+            return decompressInOneStep(context, payload, maxLength);
+        } catch (CompressionException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw CompressionException.decompress(ALGORITHM, e);
+        }
+    }
+
+    private static byte[] decompressInOneStep(ZstdDecompressCtx context, byte[] payload, int maxLength) {
+        int capacity = Math.min(maxLength, ONE_STEP_INITIAL_CAPACITY);
+        while (true) {
+            byte[] output = new byte[capacity];
+            try {
+                int length = context.decompressByteArray(output, 0, capacity, payload, 0, payload.length);
+                return length == capacity ? output : Arrays.copyOf(output, length);
+            } catch (ZstdException e) {
+                if (e.getErrorCode() != Zstd.errDstSizeTooSmall()) {
                     throw CompressionException.decompress(ALGORITHM, e);
                 }
+                if (capacity == maxLength) {
+                    throw DecompressedPayloadTooLargeException.exceeds(ALGORITHM, maxLength);
+                }
+                capacity = (int) Math.min(maxLength, (long) capacity * ONE_STEP_GROWTH);
             }
         }
     }

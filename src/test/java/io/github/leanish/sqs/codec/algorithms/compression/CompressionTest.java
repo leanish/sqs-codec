@@ -296,6 +296,27 @@ class CompressionTest {
     }
 
     @Test
+    void decompress_zstdOneStepRefusesOutputThatOutgrowsTheLimitAfterGrowing() throws IOException {
+        // 5 MiB doesn't fit the first 1 MiB buffer, nor the 4 MiB limit it then grows to.
+        byte[] streamed = streamedZstd(TestPayloadBytes.mixed(5 * MIB), Zstd.maxCompressionLevel());
+
+        assertThatThrownBy(() -> new ZstdCompressor().decompress(streamed, 4 * MIB))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Decompressed payload with zstd exceeds " + 4 * MIB + " bytes");
+    }
+
+    @Test
+    void decompress_snappyRefusesAHeaderTheLibraryCantRead() {
+        // A declared length of 2^32 + 5: past snappy's 32-bit varint, which snappy refuses before allocating anything.
+        byte[] payload = {(byte) 0x85, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x10, 0x10, 'h', 'e', 'l', 'l', 'o'};
+
+        assertThatThrownBy(() -> new SnappyCompressor().decompress(payload, MIB))
+                .isInstanceOf(CompressionException.class)
+                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Failed to decompress payload with snappy");
+    }
+
+    @Test
     void decompress_zstdOneStepStopsABombAtTheLimit() throws IOException {
         byte[] bomb = streamedZstd(new byte[64 * MIB], Zstd.maxCompressionLevel());
 
@@ -327,8 +348,9 @@ class CompressionTest {
 
     @Test
     void decompress_zstdOneStepDoesNotAllocateTheWholeLimitUpFront() {
-        // A window (log 32) over what Integer.MAX_VALUE needs: the one-step decoder starts from a small buffer, so a
-        // limit no array can have doesn't fail allocating; zstd refuses the header itself.
+        // A window (log 32) over what Integer.MAX_VALUE needs sends it to the one-step decoder. Allocating the whole limit
+        // up front would fail with OutOfMemoryError (no JVM array is that large); starting from a small buffer, zstd
+        // refuses the header itself.
         byte[] forged = {0x28, (byte) 0xb5, 0x2f, (byte) 0xfd, 0x00, (byte) 0xb0, 0x01, 0x00, 0x00};
 
         assertThatThrownBy(() -> new ZstdCompressor().decompress(forged, Integer.MAX_VALUE))

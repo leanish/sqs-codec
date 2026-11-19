@@ -75,8 +75,8 @@ All notable changes to this project are documented in this file.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few
   bytes); 0.5.x reads them. Until 0.7.0, a frame whose window is larger than the configured limit needs, such as
-  0.5.x's streamed ones, is decoded in one step into a buffer that starts at 1 MiB and grows up to the limit, which
-  allocates no window; 0.7.0 drops this (see the README's "Before 0.7.0").
+  0.5.x's streamed ones, is decoded in one step into a buffer that starts at 1 MiB (or the limit, if smaller) and grows
+  up to the limit, which allocates no window; 0.7.0 drops this (see the README's "Before 0.7.0").
 - Tests and PIT load Mockito at JVM startup (`-javaagent`), avoiding the dynamic-attach warning JDK 21+ prints and
   environments that forbid dynamic attach.
 - Removed the scheduled Dependabot version updates.
@@ -95,8 +95,8 @@ All notable changes to this project are documented in this file.
   release notes, since that refuses what earlier readers accepted) and accepts every minor from that minimum through
   `2147483647`; this version requires none. The README's "Metadata versions" gives the rules.
 - Added a `supply-chain` workflow that runs the pinned
-  [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain check on pull requests
-  and pushes to `main`.
+  [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain check on pull requests,
+  pushes to `main`, a daily schedule and manual runs.
 
 ### Fixed
 - A decoded (compressed or encoded) payload that isn't valid UTF-8 fails with `InvalidPayloadException`, on receive

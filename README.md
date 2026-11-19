@@ -165,8 +165,9 @@ Notes:
   A 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2") and fails its whole receive, while this version reads
   both. The rule is per queue: its writers may write `v=2` once all its consumers run this version. A send-only
   client whose consumers already run this version uses `MetadataVersion.V2` from the start, and an acyclic pipeline
-  (`A` → `B` → `C`) can upgrade consumer-first (`C`, then `B`, then `A`) with `V2` throughout. When the same clients
-  send and receive, or services send to each other, no order works, so upgrade in two steps:
+  (`A` → `B` → `C`) can upgrade consumer-first (`C`, then `B`, then `A`) with `V2` throughout. When writers and
+  consumers form a cycle (services that send to each other, or a client that sends to a queue it also consumes), no
+  order works, so upgrade in two steps:
 
   1. Deploy this version everywhere with `MetadataVersion.V1`. Fresh sends keep writing `v=1` (with the same payload,
      checksum and `l` as `v=2`), which 0.5.x consumers read, and every upgraded client reads both versions, so clients
@@ -174,10 +175,13 @@ Notes:
   2. Once every consumer of every queue runs this version, switch every running writer to `MetadataVersion.V2`, in any
      order (recreate clients where the setting is read only when they're built). Fresh sends then write `v=2`.
 
-  Pass the version from your own configuration, so that step 2 can be a configuration change:
+  Pass the version from your own configuration, so that step 2 can be a configuration change. Make the setting
+  required while 0.5.x consumers may remain: falling back to `V2` when it's missing brings back the silent switch
+  the required argument prevents.
   ```java
+  // config: your application's configuration, failing when the setting is missing
   SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(
-                  MetadataVersion.valueOf(config.getString("sqs.codec.metadata-version", "V2")))
+                  MetadataVersion.valueOf(config.getRequiredString("sqs.codec.metadata-version")))
           .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
   ```
 
@@ -189,7 +193,10 @@ Notes:
   dead-letter queue or replay that can bring them back, and only then bring back 0.5.x consumers. 0.7.0 removes
   `MetadataVersion.V1` and stops reading `v=1`: before moving to it, complete step 2, remove or update any stored
   `V1` setting (`valueOf("V1")` fails at runtime once the constant is gone), stop or convert any source of pre-encoded
-  `v=1` messages, and drain the retained `v=1` ones the same way.
+  `v=1` messages, and drain the retained `v=1` ones the same way. With `V2` the only version left, 0.7.0 is planned to
+  make the argument optional again (`defaultInterceptor()` writing `V2`), while `defaultInterceptor(MetadataVersion.V2)`
+  keeps working. So upgrade from 0.5.x through 0.6.x, never straight to 0.7.0: 0.7.0 neither reads nor writes `v=1`,
+  and code calling `defaultInterceptor()` would compile against it again.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.

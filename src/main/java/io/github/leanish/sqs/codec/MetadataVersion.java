@@ -14,9 +14,9 @@ import io.github.leanish.sqs.codec.attributes.CodecAttributes;
 public enum MetadataVersion {
 
     /**
-     * The 0.5.x version, which 0.5.x consumers read: written while upgrading from 0.5.x, so clients that both send and
-     * receive can be upgraded in any order. The payload, checksum and raw length ({@code l}) are the same as with
-     * {@link #V2}.
+     * The 0.5.x version, which 0.5.x consumers read: written while upgrading from 0.5.x, so clients whose writers and
+     * consumers form a cycle can be upgraded in any order. The payload, checksum and raw length ({@code l}) are the same
+     * as with {@link #V2}.
      *
      * @deprecated removed in 0.7.0, together with reading {@code v=1}; switch to {@link #V2} once every consumer runs
      *     0.6.x.
@@ -24,7 +24,7 @@ public enum MetadataVersion {
     @Deprecated(since = "0.6.0")
     V1(CodecAttributes.LEGACY_VERSION_VALUE),
 
-    /** The current version, the default: 0.5.x consumers refuse it. */
+    /** The current version, which 0.5.x consumers refuse. */
     V2(CodecAttributes.VERSION_VALUE);
 
     private final int value;
@@ -33,7 +33,11 @@ public enum MetadataVersion {
         this.value = value;
     }
 
-    /** The version as written in {@code x-codec-meta}. */
+    /**
+     * The version as written in {@code x-codec-meta}.
+     *
+     * @return the value of the metadata's {@code v} key
+     */
     public int value() {
         return value;
     }

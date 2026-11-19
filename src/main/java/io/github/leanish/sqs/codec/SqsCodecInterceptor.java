@@ -58,6 +58,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private static final int MAX_SQS_MESSAGE_ATTRIBUTES = 10;
     /** The default limit on a decoded payload: 16 MiB. */
     public static final int DEFAULT_MAX_DECODED_PAYLOAD_BYTES = 16 * 1024 * 1024;
+    // The base defaultInterceptor(...) copies; its version is always replaced by the caller's, never returned as is.
     private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
             CompressionAlgorithm.NONE,
             null,

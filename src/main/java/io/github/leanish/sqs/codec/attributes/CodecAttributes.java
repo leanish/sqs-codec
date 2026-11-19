@@ -24,12 +24,16 @@ public class CodecAttributes {
     public static final String META_CHECKSUM_VALUE_KEY = "s";
     /** Metadata key for raw payload length (before compression). */
     public static final String META_RAW_LENGTH_KEY = "l";
-    /** The metadata version written on send by default: compressed payloads always carry their raw length ({@code l}). */
+    /**
+     * The current metadata version, written with {@code MetadataVersion.V2}: compressed payloads always carry their raw
+     * length ({@code l}).
+     */
     public static final int VERSION_VALUE = 2;
     /**
      * The 0.5.x metadata version, still read (deprecated, removed in 0.7.0): {@code l} is optional and read leniently, and
-     * compressed payloads are bounded by the configured limit alone. The interceptor writes it only when configured
-     * to ({@code withOutboundMetadataVersion(MetadataVersion.V1)}); {@link CodecMetadataAttributeHandler#forOutbound}
+     * compressed payloads are bounded by the configured limit alone. The interceptor writes it only with
+     * {@code MetadataVersion.V1} (given to {@code defaultInterceptor} or {@code withOutboundMetadataVersion});
+     * {@link CodecMetadataAttributeHandler#forOutbound}
      * writes whatever version its configuration carries.
      */
     public static final int LEGACY_VERSION_VALUE = 1;

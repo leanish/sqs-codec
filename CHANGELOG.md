@@ -18,13 +18,20 @@ All notable changes to this project are documented in this file.
   [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56). sqs-codec doesn't
   depend on Guava: the published library and its runtime dependencies don't change.
 - Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. `1.1.10.10`, the lowest stable version
-  fixing all seven advisories published on 2026-10-03, including CVE-2026-90559 (out-of-bounds accesses, unbounded
-  allocations, stream recursion and pooled-buffer reuse), was taken before the usual seven-day release cooldown.
-- Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-28`. Two of the steps fix advisories published in
-  zstd-jni's repository, and both were taken before the seven-day release cooldown, on the owner's decision:
-  - `1.5.7-25` fixes three published on 2026-10-28 (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5, GHSA-h5m7-4hv9-cvp3:
-    memory-safety bugs in dictionary training and multi-dictionary decompression, which this library doesn't use);
-  - `1.5.7-28` fixes three published on 2026-11-14 (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx, GHSA-fh94-9rh7-3mwc).
+  fixing all seven advisories published in snappy-java's repository on 2026-10-03, including CVE-2026-90559
+  (out-of-bounds accesses, unbounded allocations, stream recursion and pooled-buffer reuse), was taken before the
+  usual seven-day release cooldown.
+- Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-28`, which fixes seven advisories published in
+  zstd-jni's repository:
+  - three published on 2026-10-28, fixed in `1.5.7-25` (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5,
+    GHSA-h5m7-4hv9-cvp3: memory-safety bugs in dictionary training and multi-dictionary decompression, which this
+    library doesn't use);
+  - one published on 2026-11-08, fixed in `1.5.7-26` (GHSA-8hfr-vm4w-9gfg: an integer underflow in FASTCOVER
+    dictionary training, which this library doesn't use);
+  - three published on 2026-11-14, fixed in `1.5.7-28` (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx,
+    GHSA-fh94-9rh7-3mwc).
+
+  The moves to `1.5.7-25` and `1.5.7-28` were taken before the seven-day release cooldown, on the owner's decision.
 - The workflows use `gradle/actions` `v6.4.1`, which fixes
   [GHSA-chpw-2mqm-95cc](https://github.com/gradle/actions/security/advisories/GHSA-chpw-2mqm-95cc): the dependency
   graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
@@ -59,7 +66,8 @@ All notable changes to this project are documented in this file.
   before decompressing. `withIncludeRawPayloadLength` is gone. `l` is still ignored when `c=none`. A message over the
   limit, or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
 - Breaking: `SqsCodecInterceptor.defaultInterceptor()` is now `defaultInterceptor(MetadataVersion)`, with no default,
-  so upgrading from 0.5.x can't start writing a version its consumers refuse without anyone choosing it.
+  so upgrading from 0.5.x can't start writing a version its consumers refuse without anyone choosing it. Code compiled
+  against 0.5.x that calls `defaultInterceptor()` fails with `NoSuchMethodError` on 0.6.0 and must be rebuilt.
   `MetadataVersion.V2` writes the new format, the one to use unless a consumer of the queues still runs 0.5.x;
   `MetadataVersion.V1` writes the 0.5.x version, with the same payload, checksum and `l`, for the transition, and is
   deprecated and removed in 0.7.0. `withOutboundMetadataVersion(...)` switches it on an existing interceptor. While
@@ -67,8 +75,9 @@ All notable changes to this project are documented in this file.
 - The metadata format is now `v=2`, the one above. `v=1` messages (0.5.x) are still read, deprecated until 0.7.0:
   their `l` is optional and read leniently, and the configured limit bounds their decompression (a 0.5.x zstd frame
   whose window is larger than it needs, rounded up to a power of two, is refused). Any other version fails. 0.5.x
-  consumers refuse `v=2`, so a queue's writers move to `V2` once all its consumers run this version; when the same
-  clients send and receive, deploy with `V1` first, as the README's "Upgrading from 0.5.x" describes. Retained `v=1`
+  consumers refuse `v=2`, so a queue's writers move to `V2` once all its consumers run this version; when writers and
+  consumers form a cycle, deploy everywhere with `V1` first, as the README's "Upgrading from 0.5.x" describes, and
+  upgrade from 0.5.x through 0.6.x rather than straight to 0.7.0. Retained `v=1`
   messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames whose window is over
   the configured limit) each fail the whole
   receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.

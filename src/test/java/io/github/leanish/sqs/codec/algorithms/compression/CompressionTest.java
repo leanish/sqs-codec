@@ -315,10 +315,11 @@ class CompressionTest {
     }
 
     @Test
-    void oneStepBuffer_growsFourfoldUpToAnArrayEveryJvmAllocates() {
+    void oneStepBuffer_growsFourfoldUpToAnAllocatableCeiling() {
         int ceiling = ZstdCompressor.oneStepCeiling(Integer.MAX_VALUE);
 
-        assertThat(ceiling).isEqualTo(Integer.MAX_VALUE - 8);
+        // Under HotSpot's smallest maximum byte[] length, 2^31 - 32 (with 256-byte object alignment).
+        assertThat(ceiling).isEqualTo(Integer.MAX_VALUE - 64);
         assertThat(ZstdCompressor.oneStepCeiling(16 * MIB)).isEqualTo(16 * MIB);
         assertThat(ZstdCompressor.nextCapacity(MIB, 16 * MIB)).isEqualTo(4 * MIB);
         assertThat(ZstdCompressor.nextCapacity(8 * MIB, 16 * MIB)).isEqualTo(16 * MIB);

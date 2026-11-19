@@ -31,8 +31,9 @@ public class ZstdCompressor implements Compressor {
     private static final int MIN_WINDOW_LOG = 10;
     private static final int ONE_STEP_INITIAL_CAPACITY = 1024 * 1024;
     private static final int ONE_STEP_GROWTH = 4;
-    // HotSpot refuses array lengths close to Integer.MAX_VALUE even with heap to spare; this one every JVM allocates.
-    private static final int MAX_ARRAY_LENGTH = Integer.MAX_VALUE - 8;
+    // The one-step buffer's ceiling: HotSpot refuses array lengths close to Integer.MAX_VALUE even with heap to spare
+    // (down to 2^31 - 32 bytes with -XX:ObjectAlignmentInBytes=256), so it stays clear of them.
+    private static final int MAX_ARRAY_LENGTH = Integer.MAX_VALUE - 64;
     private final @Nullable CompressionLevel compressionLevel;
 
     public ZstdCompressor() {
@@ -130,7 +131,8 @@ public class ZstdCompressor implements Compressor {
     }
 
     /**
-     * The largest buffer the one-step decoder may use: the limit, or the largest array length JVMs allocate, if smaller.
+     * The largest buffer the one-step decoder may use: the limit, or a ceiling just under the array lengths HotSpot
+     * refuses, if smaller.
      */
     static int oneStepCeiling(int maxLength) {
         return Math.min(maxLength, MAX_ARRAY_LENGTH);

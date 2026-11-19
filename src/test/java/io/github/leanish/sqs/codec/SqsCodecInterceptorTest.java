@@ -1360,15 +1360,15 @@ class SqsCodecInterceptorTest {
     void modifyResponse_bombStopsAtTheConfiguredLimitWhateverItsRawLength(CompressionAlgorithm compressionAlgorithm) {
         String body = Base64PayloadCodec.instance().encodeToString(
                 compressionAlgorithm.implementation().compress(new byte[8 * 1024 * 1024]));
-        // The raw length is the sender's claim, so it doesn't bound the decompression: the configured limit does.
+        // The raw length is the sender's claim, so it doesn't bound the decompression: the configured limit does. (The
+        // zstd frame's 8 MiB window is over what 1 MiB needs, so it's decoded in one step, bounded the same way.)
         ReceiveMessageResponse response = receivedWith(body, "v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=" + 8 * 1024 * 1024);
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .withMaxDecodedPayloadBytes(1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessageContaining(compressionAlgorithm.id())
-                .hasMessageContaining("1048576");
+                .hasMessage("Decompressed payload with " + compressionAlgorithm.id() + " exceeds 1048576 bytes");
     }
 
     @Test
@@ -1459,14 +1459,16 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    void modifyResponse_refusesAZstdWindowOverTheConfiguredLimit() {
-        // The maximum level streams with a 128 MiB window: over the default 16 MiB limit, even for a few bytes.
-        ReceiveMessageResponse response = receivedWith(streamedZstdBody(PAYLOAD, 22), "v=1;c=zstd;e=base64;h=none");
+    void modifyResponse_readsA05xMaximumLevelFrameAtTheDefaultLimit() {
+        // The maximum level streams with a 128 MiB window, over what the default 16 MiB limit needs, even for a few
+        // bytes: such a frame is decoded in one step, which allocates no window.
+        int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
+        ReceiveMessageResponse response = receivedWith(streamedZstdBody(PAYLOAD, 22), "v=1;c=zstd;e=base64;h=none;l=" + length);
 
-        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
-                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
-                .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Payload with zstd declares a decoding window larger than its 16777216-byte limit allows");
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
     }
 
     @Test

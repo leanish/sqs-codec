@@ -20,8 +20,10 @@ public interface Compressor {
      * @param payload the compressed bytes
      * @param maxLength the most bytes the payload may decompress to
      * @return the decompressed bytes
-     * @throws DecompressedPayloadTooLargeException when the payload would decompress to more than {@code maxLength} bytes
-     * @throws CompressionException when the payload can't be decompressed
+     * @throws DecompressedPayloadTooLargeException when the payload decompresses to more than {@code maxLength} bytes,
+     *         or declares a decoded length over it (snappy checks its declared length before decoding)
+     * @throws CompressionException when the payload can't be decompressed, including a snappy header the library
+     *         refuses itself
      * @throws IllegalArgumentException when {@code maxLength} is negative
      */
     byte[] decompress(byte[] payload, int maxLength);
@@ -32,9 +34,8 @@ public interface Compressor {
      *
      * @param payload the compressed bytes
      * @return the decompressed bytes
-     * @throws DecompressedPayloadTooLargeException when the payload would decompress to more than 16 MiB, or, for
-     *         zstd, would need a larger window than 16 MiB needs (as 0.5.x's streamed frames at the {@code MAXIMUM}
-     *         level do; a frame zstd decodes in a single step allocates no window)
+     * @throws DecompressedPayloadTooLargeException when the payload decompresses to more than 16 MiB, or declares a
+     *         decoded length over it
      * @throws CompressionException when the payload can't be decompressed
      * @deprecated use {@link #decompress(byte[], int)}, which takes the limit
      */

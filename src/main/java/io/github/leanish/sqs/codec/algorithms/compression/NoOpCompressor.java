@@ -26,4 +26,18 @@ public class NoOpCompressor implements Compressor {
         }
         return payload;
     }
+
+    /**
+     * Returns {@code payload}, refusing one over 16 MiB (the interceptor's default limit).
+     *
+     * @param payload the payload bytes
+     * @return the same bytes
+     * @deprecated use {@link #decompress(byte[], int)}, which takes the limit
+     */
+    @Deprecated(since = "0.6.0")
+    @Override
+    // Declared again so code that looks the 0.5.x method up on this class (getDeclaredMethod) still finds it.
+    public byte[] decompress(byte[] payload) {
+        return Compressor.super.decompress(payload);
+    }
 }

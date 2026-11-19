@@ -34,7 +34,8 @@ public class SnappyCompressor implements Compressor {
         BoundedReads.requireNonNegative(maxLength);
         try {
             // Snappy allocates the length a payload declares, so that length is checked before anything is allocated.
-            // A negative one is a declared length past Integer.MAX_VALUE, read back as unsigned for the message.
+            // Snappy itself refuses a header it can't read, or a length implausible for the payload (a CompressionException
+            // here); the negative check only guards against a declared length past Integer.MAX_VALUE getting through.
             int declaredLength = Snappy.uncompressedLength(payload);
             if (declaredLength < 0 || declaredLength > maxLength) {
                 throw DecompressedPayloadTooLargeException.declaredOverLimit(
@@ -46,5 +47,19 @@ public class SnappyCompressor implements Compressor {
         } catch (IOException | RuntimeException | SnappyError e) {
             throw CompressionException.decompress(ALGORITHM, e);
         }
+    }
+
+    /**
+     * Decompresses {@code payload}, producing at most 16 MiB (the interceptor's default limit).
+     *
+     * @param payload the compressed bytes
+     * @return the decompressed bytes
+     * @deprecated use {@link #decompress(byte[], int)}, which takes the limit
+     */
+    @Deprecated(since = "0.6.0")
+    @Override
+    // Declared again so code that looks the 0.5.x method up on this class (getDeclaredMethod) still finds it.
+    public byte[] decompress(byte[] payload) {
+        return Compressor.super.decompress(payload);
     }
 }

@@ -62,7 +62,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private final ChecksumAlgorithm checksumAlgorithm;
     private final boolean skipCompressionWhenLarger;
     // The most bytes a payload may decode to, wherever this interceptor decodes one (received messages, and pre-encoded
-    // messages it validates before sending). A compressed payload that declares its raw length (l) must decode to
+    // messages it validates before sending). A compressed payload that declares a usable raw length (l) must decode to
     // exactly that length.
     private final int maxDecodedPayloadBytes;
 

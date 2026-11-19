@@ -13,7 +13,7 @@ package io.github.leanish.sqs.codec.algorithms;
  * {@link CompressionAlgorithm#NONE} reject explicit levels with {@link UnsupportedAlgorithmException}.
  */
 public enum CompressionLevel {
-    /** Use the minimum supported compression effort. */
+    /** Use the lowest compression effort this codec offers. */
     MINIMUM,
     /** Use low compression effort. */
     LOW,

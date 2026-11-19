@@ -117,6 +117,8 @@ public class CodecMetadataAttributeHandler {
     /**
      * The raw payload length the sender declared ({@code l}): possibly absent for a compressed payload (0.5.x writers
      * could omit it, and a malformed value reads as absent), and always absent without compression.
+     *
+     * @return the declared raw length, or empty
      */
     public OptionalInt rawLength() {
         return rawLength < 0 ? OptionalInt.empty() : OptionalInt.of(rawLength);

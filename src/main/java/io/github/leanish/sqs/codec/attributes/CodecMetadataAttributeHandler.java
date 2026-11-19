@@ -123,9 +123,9 @@ public class CodecMetadataAttributeHandler {
     }
 
     /**
-     * Writes this metadata as {@code x-codec-meta}, in canonical form: metadata read as version {@code 1.y} is written
-     * as {@code v=1}, since the minor isn't kept. (The interceptor sends an already encoded message's attributes as they
-     * are, minor included.)
+     * Writes this metadata as {@code x-codec-meta}, in canonical form: only the keys this version knows, and metadata
+     * read as version {@code 1.y} as {@code v=1}, since neither the minor nor unknown keys are kept. To forward a
+     * message, pass on its attributes as they are, as the interceptor does for an already encoded message.
      *
      * @param attributes the message attributes to write into
      */

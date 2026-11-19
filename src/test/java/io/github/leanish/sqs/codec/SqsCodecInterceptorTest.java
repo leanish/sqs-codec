@@ -1519,7 +1519,7 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    void modifyResponse_readsALaterMinorVersionAsVersionOne() {
+    void modifyResponse_decodesACompressedMessageWithALaterMinorVersion() {
         int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
         ReceiveMessageResponse response = receivedWith(
                 compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD),

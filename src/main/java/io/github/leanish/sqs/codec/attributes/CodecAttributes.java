@@ -24,7 +24,7 @@ public class CodecAttributes {
     public static final String META_CHECKSUM_VALUE_KEY = "s";
     /** Metadata key for raw payload length (before compression). */
     public static final String META_RAW_LENGTH_KEY = "l";
-    /** The metadata version, the only one written and read. */
+    /** The metadata version written; reading accepts it and its minors ({@code 1.<minor>}) as this version. */
     public static final int VERSION_VALUE = 1;
 
     private CodecAttributes() {

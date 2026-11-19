@@ -83,6 +83,14 @@ class CodecMetadataAttributeHandlerTest {
         assertThat(metadata.rawLength()).hasValue(5);
     }
 
+    @Test
+    void fromAttributes_keepsARawLengthOfZero() {
+        CodecMetadataAttributeHandler metadata = CodecMetadataAttributeHandler.fromAttributes(
+                metadataAttributes("v=1;c=gzip;e=base64;h=none;l=0"));
+
+        assertThat(metadata.rawLength()).hasValue(0);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"1", "1.0", "1.1", "1.10", "1.2147483648", "  1.2  "})
     void fromAttributes_readsVersionOneAndItsMinorsAsVersionOne(String version) {
@@ -93,7 +101,8 @@ class CodecMetadataAttributeHandlerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"2", "2.0", "1.", ".1", "1.01", "1.x", "1.-1", "1.+1", "1.1.1", "01", "+1", "1 .1"})
+    @ValueSource(strings = {"2", "2.0", "1.", ".1", "1.00", "1.01", "1.x", "1.-1", "1.+1", "1.1.1", "01", "+1", "1 .1",
+            "1.١", "١"})
     void fromAttributes_refusesAnyOtherVersion(String version) {
         assertThatThrownBy(() -> CodecMetadataAttributeHandler.fromAttributes(
                 metadataAttributes("v=" + version + ";c=gzip;e=base64;h=none;l=7")))

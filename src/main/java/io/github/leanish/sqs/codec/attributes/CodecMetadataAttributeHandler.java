@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.regex.Pattern;
 
 import org.jspecify.annotations.Nullable;
 
@@ -22,6 +23,8 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
  * Parses and writes the single codec metadata attribute for SQS messages.
  */
 public class CodecMetadataAttributeHandler {
+
+    private static final Pattern VERSION_ONE_OR_MINOR = Pattern.compile("1(?:\\.(?:0|[1-9][0-9]*))?");
 
     private final CodecConfiguration configuration;
     @Nullable
@@ -119,6 +122,13 @@ public class CodecMetadataAttributeHandler {
         return rawLength < 0 ? OptionalInt.empty() : OptionalInt.of(rawLength);
     }
 
+    /**
+     * Writes this metadata as {@code x-codec-meta}, in canonical form: metadata read as version {@code 1.y} is written
+     * as {@code v=1}, since the minor isn't kept. (The interceptor sends an already encoded message's attributes as they
+     * are, minor included.)
+     *
+     * @param attributes the message attributes to write into
+     */
     public void applyTo(Map<String, MessageAttributeValue> attributes) {
         attributes.put(CodecAttributes.META, MessageAttributeUtils.stringAttribute(formatMetadataValue()));
     }
@@ -173,8 +183,9 @@ public class CodecMetadataAttributeHandler {
         if (versionValue == null) {
             throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_VERSION_KEY);
         }
-        // Exactly as written: "01" or "+1" isn't the version.
-        if (versionValue.equals(String.valueOf(CodecAttributes.VERSION_VALUE))) {
+        // "1" or "1.<minor>", exactly as written ("01", "+1" or "1.01" aren't). A minor only adds what an earlier minor's
+        // reader can ignore, so every 1.y reads as 1; the minor is matched as text, never parsed, so no value overflows.
+        if (VERSION_ONE_OR_MINOR.matcher(versionValue).matches()) {
             return CodecAttributes.VERSION_VALUE;
         }
         throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);

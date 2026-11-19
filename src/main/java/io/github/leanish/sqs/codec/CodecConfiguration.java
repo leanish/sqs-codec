@@ -11,6 +11,11 @@ import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 
 /**
  * Immutable configuration for codec version, compression, encoding and checksum settings.
+ *
+ * @param version the metadata's major version: metadata read as {@code 1.y} has version {@code 1}
+ * @param compressionAlgorithm the compression applied to the payload
+ * @param encodingAlgorithm the encoding applied after compression
+ * @param checksumAlgorithm the checksum computed over the raw payload
  */
 public record CodecConfiguration(
         int version,

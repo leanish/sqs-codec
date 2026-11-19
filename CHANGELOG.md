@@ -67,7 +67,8 @@ All notable changes to this project are documented in this file.
 - A compressed payload that carries a usable `l` (a non-negative integer that fits in a Java `int`) must decode to
   exactly that length, on receive and when an already encoded message is validated before sending (0.5.x ignored a
   mismatch); a missing, blank, negative, non-numeric or overflowing `l` still reads as absent, and
-  `l` is still ignored when `c=none`. The version must be exactly `1` (0.5.x also accepted `01` or `+1`). A message
+  `l` is still ignored when `c=none`. The version must be `1` or `1.<minor>` (see Added), spelled exactly (0.5.x also
+  accepted `01` or `+1`). A message
   this version refuses fails the whole receive, as any decoding error already did. The README's "Upgrading from
   0.5.x" says what to check in retained messages, and "Before 0.7.0" what has to happen before `l` becomes required.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
@@ -84,6 +85,9 @@ All notable changes to this project are documented in this file.
   java-conventions' reusable publishing workflow.
 
 ### Added
+- Minor metadata versions: `v=1.<minor>` (`1.0`, `1.1`, ...) is read as `v=1`, so a later minor that only adds what
+  earlier readers can ignore doesn't break 0.6.0 and later. The interceptor still writes `1`; writing a minor needs
+  every consumer on 0.6.0 or later, since 0.5.x refuses it. The README's "Metadata versions" gives the rules.
 - Added the [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain gate as a
   `supply-chain` workflow: it compares each pull request's base and head against one advisory snapshot, and scans
   `main`.

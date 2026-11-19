@@ -37,7 +37,8 @@ All notable changes to this project are documented in this file.
 - The repository's copy of an early java-conventions pre-commit hook (`scripts/git-hooks/pre-commit`) is removed, so
   `installGitHooks` (run by `./gradlew build`) installs the conventions' current hook instead. Besides running Spotless
   and Checkstyle, it refuses a commit when a staged file differs from its working copy after formatting, including a
-  partially staged file. An installed copy of the old hook is replaced on the next build.
+  partially staged file. With Git's default hooks path, the next build replaces an unmodified copy of the old hook
+  installed by an earlier version.
 - The repository's own Checkstyle files (`config/checkstyle/`) are removed, so Checkstyle uses the conventions'
   configuration. The removed one was the conventions' configuration without the Jackson 2 import rule, and its
   suppressions matched nothing here. Without it, Spotless also orders imports like Checkstyle's `ImportOrder`; no file

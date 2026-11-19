@@ -70,14 +70,15 @@ All notable changes to this project are documented in this file.
   against 0.5.x that calls `defaultInterceptor()` fails with `NoSuchMethodError` on 0.6.0 and must be rebuilt.
   `MetadataVersion.V2` writes the new format, the one to use unless a consumer of the queues still runs 0.5.x;
   `MetadataVersion.V1` writes the 0.5.x version, with the same payload, checksum and `l`, for the transition, and is
-  deprecated and removed in 0.7.0. `withOutboundMetadataVersion(...)` switches it on an existing interceptor. While
+  deprecated and removed in 0.7.0; the argument itself stays required. `withOutboundMetadataVersion(...)` switches it
+  on an existing interceptor. While
   writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send.
 - The metadata format is now `v=2`, the one above. `v=1` messages (0.5.x) are still read, deprecated until 0.7.0:
   their `l` is optional and read leniently, and the configured limit bounds their decompression (a 0.5.x zstd frame
   whose window is larger than it needs, rounded up to a power of two, is refused). Any other version fails. 0.5.x
   consumers refuse `v=2`, so a queue's writers move to `V2` once all its consumers run this version; when writers and
   consumers form a cycle, deploy everywhere with `V1` first, as the README's "Upgrading from 0.5.x" describes, and
-  upgrade from 0.5.x through 0.6.x rather than straight to 0.7.0. Retained `v=1`
+  upgrade from 0.5.x through 0.6.x rather than straight to 0.7.0, which drops `v=1`. Retained `v=1`
   messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames whose window is over
   the configured limit) each fail the whole
   receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.

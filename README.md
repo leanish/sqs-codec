@@ -193,10 +193,10 @@ Notes:
   dead-letter queue or replay that can bring them back, and only then bring back 0.5.x consumers. 0.7.0 removes
   `MetadataVersion.V1` and stops reading `v=1`: before moving to it, complete step 2, remove or update any stored
   `V1` setting (`valueOf("V1")` fails at runtime once the constant is gone), stop or convert any source of pre-encoded
-  `v=1` messages, and drain the retained `v=1` ones the same way. With `V2` the only version left, 0.7.0 is planned to
-  make the argument optional again (`defaultInterceptor()` writing `V2`), while `defaultInterceptor(MetadataVersion.V2)`
-  keeps working. So upgrade from 0.5.x through 0.6.x, never straight to 0.7.0: 0.7.0 neither reads nor writes `v=1`,
-  and code calling `defaultInterceptor()` would compile against it again.
+  `v=1` messages, and drain the retained `v=1` ones the same way. The version argument stays required in 0.7.0 and
+  later, so `defaultInterceptor(MetadataVersion.V2)` keeps working, and a future version is added without changing
+  callers that pass `V2`. Upgrade from 0.5.x through 0.6.x, never straight to 0.7.0, which neither reads nor writes
+  `v=1`.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.

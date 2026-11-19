@@ -9,24 +9,22 @@ All notable changes to this project are documented in this file.
   zstd and 1 MB with gzip) and exhaust a consumer's memory on receive. Decoding now stops with
   `DecompressedPayloadTooLargeException` as soon as it passes `maxDecodedPayloadBytes` (default 16 MiB, set with
   `withMaxDecodedPayloadBytes(...)`) or the payload's raw length, on receive and when validating already encoded
-  outbound messages. Snappy's declared length is checked before it allocates, and zstd's decoder refuses, before allocating it,
-  a window larger than the raw length (`v=2`) or the configured limit (`v=1`) needs, rounded up to a power of two
-  (at least 1 KiB).
+  outbound messages. Snappy's declared length is checked before it allocates, and zstd's decoder never allocates a
+  window larger than the raw length (`v=2`) or the configured limit (`v=1`) needs, rounded up to a power of two (at
+  least 1 KiB): a frame that declares a larger one is refused, unless zstd decodes it in a single step straight into
+  its output, which allocates no window.
 - The build tools no longer use a Guava affected by
   [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) or
-  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56), so the exception for
-  the second one is removed. sqs-codec doesn't depend on Guava: the published library and its runtime dependencies
-  don't change.
-- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10`, the lowest stable version fixing all seven
-  advisories published on 2026-10-03, including CVE-2026-90559 (out-of-bounds accesses, unbounded allocations,
-  stream recursion and pooled-buffer reuse). This security fix skips the usual seven-day release cooldown.
-- Upgraded `com.github.luben:zstd-jni` from `1.5.7-24` to `1.5.7-25`, fixing three advisories published on 2026-10-28
-  in zstd-jni's repository (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5, GHSA-h5m7-4hv9-cvp3: memory-safety bugs in
-  dictionary training and multi-dictionary decompression, which this library doesn't use). Taken before the seven-day
-  release cooldown, on the owner's decision.
-- Upgraded `com.github.luben:zstd-jni` from `1.5.7-26` to `1.5.7-28`, fixing three advisories published on 2026-11-14
-  in zstd-jni's repository (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx, GHSA-fh94-9rh7-3mwc). Taken before the seven-day
-  release cooldown, on the owner's decision.
+  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56). sqs-codec doesn't
+  depend on Guava: the published library and its runtime dependencies don't change.
+- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. `1.1.10.10`, the lowest stable version
+  fixing all seven advisories published on 2026-10-03, including CVE-2026-90559 (out-of-bounds accesses, unbounded
+  allocations, stream recursion and pooled-buffer reuse), was taken before the usual seven-day release cooldown.
+- Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-28`. Two of the steps fix advisories published in
+  zstd-jni's repository, and both were taken before the seven-day release cooldown, on the owner's decision:
+  - `1.5.7-25` fixes three published on 2026-10-28 (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5, GHSA-h5m7-4hv9-cvp3:
+    memory-safety bugs in dictionary training and multi-dictionary decompression, which this library doesn't use);
+  - `1.5.7-28` fixes three published on 2026-11-14 (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx, GHSA-fh94-9rh7-3mwc).
 - The workflows use `gradle/actions` `v6.4.1`, which fixes
   [GHSA-chpw-2mqm-95cc](https://github.com/gradle/actions/security/advisories/GHSA-chpw-2mqm-95cc): the dependency
   graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
@@ -43,9 +41,9 @@ All notable changes to this project are documented in this file.
   configuration. The removed one was the conventions' configuration without the Jackson 2 import rule, and its
   suppressions matched nothing here. Without it, Spotless also orders imports like Checkstyle's `ImportOrder`; no file
   needed changes.
-- The build no longer declares the Checkstyle tool itself (the conventions declare the same dependency) or configures
-  `JavaExec` tasks, which this library doesn't have.
-- Upgraded `com.github.luben:zstd-jni` from `1.5.7-25` to `1.5.7-26`.
+- The build no longer configures `JavaExec` tasks, which this library doesn't have.
+- Upgraded the Gradle wrapper from `9.8.0` to `9.9.1`, and `software.amazon.awssdk:bom` (compile-only and tests) from
+  `2.55.10` to `2.57.13`.
 - Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
 - Breaking: `CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes, includeRawPayloadLength)` is now
@@ -54,7 +52,8 @@ All notable changes to this project are documented in this file.
   keeps the inlined `1` until it's recompiled.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few bytes).
-  For `v=2`, a frame whose window is larger than its `l` needs is refused.
+  For `v=2`, a frame is never given a window larger than its `l` needs: one that declares a larger window is refused,
+  unless zstd decodes it in a single step, which allocates none.
 - Every compressed `v=2` payload carries its raw length (`l`), and must decode to exactly that length, on receive and when an
   already encoded message is validated before sending: one without a valid `l` fails, and an `l` over the limit fails
   before decompressing. `withIncludeRawPayloadLength` is gone. `l` is still ignored when `c=none`. A message over the

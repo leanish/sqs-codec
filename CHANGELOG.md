@@ -73,7 +73,8 @@ All notable changes to this project are documented in this file.
   While writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send.
 - The metadata format is now `v=2`, the one above, which 0.5.x consumers refuse. `v=1` messages are still read,
   deprecated until 0.7.0: their `l` is optional and read leniently, the configured limit bounds their decompression,
-  and a zstd frame whose window is larger than that limit needs is refused. Any other version fails, and a message
+  and a zstd frame streamed by 0.5.x whose window is larger than that limit needs is refused. Any other version
+  fails, and a message
   this version refuses fails the whole receive. The README's "Upgrading from 0.5.x" gives the upgrade order (with `V1`
   first when writers and consumers form a cycle), what to check in retained messages, and the path to 0.7.0, through
   0.6.x.

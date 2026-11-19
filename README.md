@@ -144,8 +144,8 @@ Notes:
 - `v` is required, exactly `2` or `1`. The interceptor writes the configured `MetadataVersion` and reads both: `1`
   (what 0.5.x writes) is deprecated until 0.7.0. A `v=1` payload may lack `l` or carry one that isn't a number (it's
   then ignored), but a valid `l` must match. Its decompression is bounded by `maxDecodedPayloadBytes`, since 0.5.x
-  streamed zstd frames with the level's window: a frame whose window is larger than that limit needs (rounded up to a
-  power of two, at least 1 KiB) is refused, so a 3 MiB limit admits a 4 MiB window. An already encoded `v=1` message
+  streamed zstd frames with the level's window: such a frame whose window is larger than that limit needs (rounded up
+  to a power of two, at least 1 KiB) is refused, so a 3 MiB limit admits a 4 MiB window. An already encoded `v=1` message
   sent through the interceptor is validated the same way and sent unchanged. Any other version fails with
   `UnsupportedCodecMetadataException`.
 - Missing `c` or `h` defaults to `none` on read.
@@ -203,7 +203,9 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(
 This version reads `v=1` more strictly than 0.5.x, and one message it refuses fails the whole receive. Before
 replacing consumers, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:
 - the payload must decode to valid UTF-8;
-- a numeric, non-negative `l` must equal the decoded length (raising the limit doesn't bypass this);
+- a compressed or encoded payload must decode to at most `maxDecodedPayloadBytes`;
+- a numeric, non-negative `l` must equal the decoded length in bytes (0.5.x ignored mismatches; raising the limit
+  doesn't bypass this);
 - the version, once trimmed, must be exactly `1` (0.5.x also accepted `01` or `+1`; it always wrote `1`, so only
   metadata built elsewhere is affected);
 - zstd frames must fit the window `maxDecodedPayloadBytes` allows: 0.5.x's `MAXIMUM` level declares 128 MiB, refused
@@ -221,7 +223,8 @@ can bring them back, and only then bring back 0.5.x consumers.
 
 0.7.0 drops `MetadataVersion.V1` and reading `v=1`, so upgrade from 0.5.x through 0.6.x, never straight to 0.7.0.
 Before moving to it, complete step 2, remove or update any stored `V1` setting (`valueOf("V1")` fails at runtime once
-the constant is gone), stop or convert any source of pre-encoded `v=1` messages, and drain the retained `v=1` ones.
+the constant is gone), stop or convert any source of pre-encoded `v=1` messages, and drain the retained `v=1` ones,
+counting delayed and in-flight messages and any dead-letter queue or replay that can bring them back.
 The version argument stays required, so `defaultInterceptor(MetadataVersion.V2)` keeps working, and a later version
 is added without changing calls that pass `V2`.
 

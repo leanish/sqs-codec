@@ -26,8 +26,8 @@ public class CodecMetadataAttributeHandler {
     private final CodecConfiguration configuration;
     @Nullable
     private final String checksumValue;
-    // The raw payload length (l), -1 when absent: written, and required on read (v=2), exactly when the payload is
-    // compressed; a v=1 payload may lack it.
+    // The raw payload length (l), -1 when absent: written exactly when the payload is compressed; on read, a compressed
+    // payload may lack it (0.5.x writers could omit it), and it's ignored without compression.
     private final int rawLength;
 
     private CodecMetadataAttributeHandler(
@@ -43,7 +43,19 @@ public class CodecMetadataAttributeHandler {
         return attributes.containsKey(CodecAttributes.META);
     }
 
+    /**
+     * The metadata for a fresh send: {@code l} is written exactly when the payload is compressed.
+     *
+     * @param configuration the codec configuration the payload is sent with
+     * @param payloadBytes the raw payload, before compression and encoding
+     * @return the metadata to apply to the message
+     * @throws UnsupportedCodecMetadataException when the configuration's version isn't
+     *         {@value CodecAttributes#VERSION_VALUE}, which readers would refuse, or it enables nothing
+     */
     public static CodecMetadataAttributeHandler forOutbound(CodecConfiguration configuration, byte[] payloadBytes) {
+        if (configuration.version() != CodecAttributes.VERSION_VALUE) {
+            throw UnsupportedCodecMetadataException.unsupportedVersion(String.valueOf(configuration.version()));
+        }
         CodecConfiguration effectiveConfiguration = effectiveConfiguration(configuration);
         validateNonNoOpMetadata(
                 effectiveConfiguration.compressionAlgorithm(),
@@ -55,6 +67,27 @@ public class CodecMetadataAttributeHandler {
                 effectiveConfiguration,
                 checksumValue,
                 rawLength);
+    }
+
+    /**
+     * {@link #forOutbound(CodecConfiguration, byte[])}, kept so code built against 0.5.x keeps working:
+     * {@code includeRawPayloadLength} is ignored, and {@code l} is always written when compressed, which 0.7.0 will
+     * require. In 0.5.x, {@code false} omitted it.
+     *
+     * @param configuration the codec configuration the payload is sent with
+     * @param payloadBytes the raw payload, before compression and encoding
+     * @param includeRawPayloadLength ignored
+     * @return the metadata to apply to the message
+     * @deprecated {@code l} is always written; use {@link #forOutbound(CodecConfiguration, byte[])}
+     */
+    @Deprecated(since = "0.6.0")
+    // Not @InlineMe: inlining would drop the evaluation of the caller's flag expression.
+    @SuppressWarnings("InlineMeSuggester")
+    public static CodecMetadataAttributeHandler forOutbound(
+            CodecConfiguration configuration,
+            byte[] payloadBytes,
+            boolean includeRawPayloadLength) {
+        return forOutbound(configuration, payloadBytes);
     }
 
     public static CodecMetadataAttributeHandler fromAttributes(Map<String, MessageAttributeValue> attributes) {
@@ -79,8 +112,8 @@ public class CodecMetadataAttributeHandler {
     }
 
     /**
-     * The raw payload length the sender declared ({@code l}): present for every compressed v=2 payload, possibly absent for
-     * a v=1 one, and absent without compression.
+     * The raw payload length the sender declared ({@code l}): possibly absent for a compressed payload (0.5.x writers
+     * could omit it, and a malformed value reads as absent), and always absent without compression.
      */
     public OptionalInt rawLength() {
         return rawLength < 0 ? OptionalInt.empty() : OptionalInt.of(rawLength);
@@ -122,14 +155,7 @@ public class CodecMetadataAttributeHandler {
 
         validateCompressionEncoding(metadataValue, compressionAlgorithm, encodingAlgorithm);
         validateNonNoOpMetadata(compressionAlgorithm, encodingAlgorithm, checksumAlgorithm);
-        int rawLength;
-        if (compressionAlgorithm == CompressionAlgorithm.NONE) {
-            rawLength = -1;
-        } else if (version == CodecAttributes.LEGACY_VERSION_VALUE) {
-            rawLength = parseLegacyRawLength(values);
-        } else {
-            rawLength = parseRawLength(metadataValue, values);
-        }
+        int rawLength = compressionAlgorithm == CompressionAlgorithm.NONE ? -1 : parseRawLength(values);
         String checksumValue = parseChecksumValue(values, checksumAlgorithm);
         CodecConfiguration configuration = new CodecConfiguration(
                 version,
@@ -147,34 +173,15 @@ public class CodecMetadataAttributeHandler {
         if (versionValue == null) {
             throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_VERSION_KEY);
         }
-        // Exactly as written: "01" or "+1" isn't the legacy version.
+        // Exactly as written: "01" or "+1" isn't the version.
         if (versionValue.equals(String.valueOf(CodecAttributes.VERSION_VALUE))) {
             return CodecAttributes.VERSION_VALUE;
-        }
-        if (versionValue.equals(String.valueOf(CodecAttributes.LEGACY_VERSION_VALUE))) {
-            return CodecAttributes.LEGACY_VERSION_VALUE;
         }
         throw UnsupportedCodecMetadataException.unsupportedVersion(versionValue);
     }
 
-    private static int parseRawLength(String metadataValue, Map<String, String> values) {
-        String rawLengthValue = values.get(CodecAttributes.META_RAW_LENGTH_KEY);
-        if (rawLengthValue == null) {
-            throw UnsupportedCodecMetadataException.missingKey(CodecAttributes.META_RAW_LENGTH_KEY);
-        }
-        // Digits only: no sign, so "-5" and "+5" are refused alike.
-        if (!rawLengthValue.matches("[0-9]+")) {
-            throw UnsupportedCodecMetadataException.malformed(metadataValue);
-        }
-        try {
-            return Integer.parseInt(rawLengthValue);
-        } catch (NumberFormatException e) {
-            throw UnsupportedCodecMetadataException.malformed(metadataValue);
-        }
-    }
-
-    /** v=1's raw length, as 0.5.x read it: missing, blank, negative or unparseable is absent. */
-    private static int parseLegacyRawLength(Map<String, String> values) {
+    /** The raw length, as 0.5.x read it: missing, blank, negative or unparseable is absent. */
+    private static int parseRawLength(Map<String, String> values) {
         String rawLengthValue = values.get(CodecAttributes.META_RAW_LENGTH_KEY);
         if (rawLengthValue == null || rawLengthValue.isBlank()) {
             return -1;
@@ -278,7 +285,7 @@ public class CodecMetadataAttributeHandler {
         return isKnownKey(key)
                 && value.isEmpty()
                 && !CodecAttributes.META_CHECKSUM_VALUE_KEY.equals(key)
-                // Ignored without compression; required and parsed strictly with it.
+                // Ignored without compression, and read as absent with it.
                 && !CodecAttributes.META_RAW_LENGTH_KEY.equals(key);
     }
 

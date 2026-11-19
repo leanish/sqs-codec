@@ -24,7 +24,6 @@ import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.compression.CompressionException;
-import io.github.leanish.sqs.codec.algorithms.compression.DecompressedPayloadTooLargeException;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
@@ -56,13 +55,6 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private static final int MAX_SQS_MESSAGE_ATTRIBUTES = 10;
     /** The default limit on a decoded payload: 16 MiB. */
     public static final int DEFAULT_MAX_DECODED_PAYLOAD_BYTES = 16 * 1024 * 1024;
-    private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
-            CompressionAlgorithm.NONE,
-            null,
-            EncodingAlgorithm.NONE,
-            ChecksumAlgorithm.MD5,
-            /* skipCompressionWhenLarger= */ true,
-            DEFAULT_MAX_DECODED_PAYLOAD_BYTES);
 
     private final CompressionAlgorithm compressionAlgorithm;
     private final @Nullable CompressionLevel compressionLevel;
@@ -70,8 +62,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private final ChecksumAlgorithm checksumAlgorithm;
     private final boolean skipCompressionWhenLarger;
     // The most bytes a payload may decode to, wherever this interceptor decodes one (received messages, and pre-encoded
-    // messages it validates before sending). A compressed payload must decode to exactly its declared raw length (l),
-    // which may not exceed this limit.
+    // messages it validates before sending). A compressed payload that declares its raw length (l) must decode to
+    // exactly that length.
     private final int maxDecodedPayloadBytes;
 
     private SqsCodecInterceptor(
@@ -93,8 +85,20 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         this.compressionAlgorithm.validateCompressionLevel(compressionLevel);
     }
 
+    /**
+     * An interceptor with the default settings: no compression, no encoding, MD5 checksum, and a
+     * {@value #DEFAULT_MAX_DECODED_PAYLOAD_BYTES}-byte limit on decoded payloads.
+     *
+     * @return the default interceptor
+     */
     public static SqsCodecInterceptor defaultInterceptor() {
-        return DEFAULT;
+        return new SqsCodecInterceptor(
+                CompressionAlgorithm.NONE,
+                null,
+                EncodingAlgorithm.NONE,
+                ChecksumAlgorithm.MD5,
+                /* skipCompressionWhenLarger= */ true,
+                DEFAULT_MAX_DECODED_PAYLOAD_BYTES);
     }
 
     /**
@@ -103,6 +107,21 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
      */
     public SqsCodecInterceptor withoutCompressionLevel() {
         return withCompressionLevel(null);
+    }
+
+    /**
+     * Has no effect: fresh sends that compress always write the raw payload length ({@code l}), which 0.7.0 will
+     * require. Kept so code built against 0.5.x keeps working; in 0.5.x, {@code false} omitted {@code l}.
+     *
+     * @param includeRawPayloadLength ignored
+     * @return this interceptor, unchanged
+     * @deprecated {@code l} is always written; remove the call
+     */
+    @Deprecated(since = "0.6.0")
+    // Not @InlineMe: inlining to "this" would drop the evaluation of the caller's argument expression.
+    @SuppressWarnings("InlineMeSuggester")
+    public SqsCodecInterceptor withIncludeRawPayloadLength(boolean includeRawPayloadLength) {
+        return this;
     }
 
     @Override
@@ -271,37 +290,13 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
         Codec codec = new Codec(
                 configuration.compressionAlgorithm(),
                 configuration.encodingAlgorithm());
-        CompressionAlgorithm compression = configuration.compressionAlgorithm();
-        if (compression == CompressionAlgorithm.NONE) {
-            return codec.decode(messageBodyBytes, maxDecodedPayloadBytes);
-        }
-        if (configuration.version() == CodecAttributes.LEGACY_VERSION_VALUE) {
-            return decodeLegacy(codec, messageBodyBytes, metadata);
-        }
-        // A compressed v=2 payload decodes to exactly its declared raw length, so that length bounds the decompression.
-        int expectedLength = metadata.rawLength()
-                .orElseThrow(() -> new IllegalStateException("A compressed v=2 payload always declares its raw length"));
-        if (expectedLength > maxDecodedPayloadBytes) {
-            throw DecompressedPayloadTooLargeException.declaredOverLimit(
-                    compression.id(), expectedLength, maxDecodedPayloadBytes);
-        }
-        byte[] decoded = codec.decode(messageBodyBytes, expectedLength);
-        if (decoded.length != expectedLength) {
-            throw CompressionException.lengthMismatch(compression.id(), expectedLength, decoded.length);
-        }
-        return decoded;
-    }
-
-    /**
-     * A compressed v=1 payload (0.5.x, read until 0.7.0): its raw length is optional, and its zstd frames were streamed
-     * with the level's window, so the configured limit bounds the decompression; a raw length it declares must match.
-     */
-    private byte[] decodeLegacy(Codec codec, byte[] messageBodyBytes, CodecMetadataAttributeHandler metadata) {
+        // The raw length (l) is sender-controlled, and 0.5.x writers may omit it, so the configured limit, not l, bounds
+        // the decompression (and zstd's window: 0.5.x streamed frames with the level's window).
         byte[] decoded = codec.decode(messageBodyBytes, maxDecodedPayloadBytes);
         OptionalInt declaredLength = metadata.rawLength();
         if (declaredLength.isPresent() && decoded.length != declaredLength.getAsInt()) {
             throw CompressionException.lengthMismatch(
-                    metadata.configuration().compressionAlgorithm().id(), declaredLength.getAsInt(), decoded.length);
+                    configuration.compressionAlgorithm().id(), declaredLength.getAsInt(), decoded.length);
         }
         return decoded;
     }
@@ -352,7 +347,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             byte[] payloadBytes) {
         Map<String, MessageAttributeValue> attributes = new HashMap<>(originalAttributes);
         if (shouldWriteMetadata(configuration)) {
-            CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes).applyTo(attributes);
+            CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes)
+                    .applyTo(attributes);
         }
         validateOutboundAttributeCount(attributes);
         return attributes;

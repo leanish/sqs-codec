@@ -8,25 +8,30 @@ All notable changes to this project are documented in this file.
 - Decompression is bounded. A small gzip or zstd payload could decode to gigabytes (1 GiB of zeros is about 33 KB with
   zstd and 1 MB with gzip) and exhaust a consumer's memory on receive. Decoding now stops with
   `DecompressedPayloadTooLargeException` as soon as it passes `maxDecodedPayloadBytes` (default 16 MiB, set with
-  `withMaxDecodedPayloadBytes(...)`) or the payload's raw length, on receive and when validating already encoded
-  outbound messages. Snappy's declared length is checked before it allocates, and zstd's decoder refuses, before allocating it,
-  a window larger than the raw length (`v=2`) or the configured limit (`v=1`) needs, rounded up to a power of two
-  (at least 1 KiB).
+  `withMaxDecodedPayloadBytes(...)`), on receive and when validating already encoded outbound messages; the payload's
+  raw length (`l`), which the sender controls, doesn't bound it. Snappy's declared length is checked before it
+  allocates, and zstd's decoder never allocates a window larger than the configured limit needs, rounded up to a power
+  of two (at least 1 KiB): a frame that declares a larger one is refused, unless zstd decodes it in a single step
+  straight into its output, which allocates no window.
 - The build tools no longer use a Guava affected by
   [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) or
-  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56), so the exception for
-  the second one is removed. sqs-codec doesn't depend on Guava: the published library and its runtime dependencies
-  don't change.
-- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.10`, the lowest stable version fixing all seven
-  advisories published on 2026-10-03, including CVE-2026-90559 (out-of-bounds accesses, unbounded allocations,
-  stream recursion and pooled-buffer reuse). This security fix skips the usual seven-day release cooldown.
-- Upgraded `com.github.luben:zstd-jni` from `1.5.7-24` to `1.5.7-25`, fixing three advisories published on 2026-10-28
-  in zstd-jni's repository (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5, GHSA-h5m7-4hv9-cvp3: memory-safety bugs in
-  dictionary training and multi-dictionary decompression, which this library doesn't use). Taken before the seven-day
-  release cooldown, on the owner's decision.
-- Upgraded `com.github.luben:zstd-jni` from `1.5.7-26` to `1.5.7-28`, fixing three advisories published on 2026-11-14
-  in zstd-jni's repository (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx, GHSA-fh94-9rh7-3mwc). Taken before the seven-day
-  release cooldown, on the owner's decision.
+  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56). sqs-codec doesn't
+  depend on Guava: the published library and its runtime dependencies don't change.
+- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. `1.1.10.10`, the lowest stable version
+  fixing all seven advisories published in snappy-java's repository on 2026-10-03, including CVE-2026-90559
+  (out-of-bounds accesses, unbounded allocations, stream recursion and pooled-buffer reuse), was taken before the
+  usual seven-day release cooldown.
+- Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-28`, which fixes seven advisories published in
+  zstd-jni's repository:
+  - three published on 2026-10-28, fixed in `1.5.7-25` (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5,
+    GHSA-h5m7-4hv9-cvp3: memory-safety bugs in dictionary training and multi-dictionary decompression, which this
+    library doesn't use);
+  - one published on 2026-11-08, fixed in `1.5.7-26` (GHSA-8hfr-vm4w-9gfg: an integer underflow in FASTCOVER
+    dictionary training, which this library doesn't use);
+  - three published on 2026-11-14, fixed in `1.5.7-28` (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx,
+    GHSA-fh94-9rh7-3mwc).
+
+  The moves to `1.5.7-25` and `1.5.7-28` were taken before the seven-day release cooldown, on the owner's decision.
 - The workflows use `gradle/actions` `v6.4.1`, which fixes
   [GHSA-chpw-2mqm-95cc](https://github.com/gradle/actions/security/advisories/GHSA-chpw-2mqm-95cc): the dependency
   graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
@@ -43,29 +48,32 @@ All notable changes to this project are documented in this file.
   configuration. The removed one was the conventions' configuration without the Jackson 2 import rule, and its
   suppressions matched nothing here. Without it, Spotless also orders imports like Checkstyle's `ImportOrder`; no file
   needed changes.
-- The build no longer declares the Checkstyle tool itself (the conventions declare the same dependency) or configures
-  `JavaExec` tasks, which this library doesn't have.
-- Upgraded `com.github.luben:zstd-jni` from `1.5.7-25` to `1.5.7-26`.
-- Breaking: `Compressor.decompress(byte[])` is now
-  `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.
-- Breaking: `CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes, includeRawPayloadLength)` is now
-  `forOutbound(configuration, payloadBytes)`, which writes `l` exactly when the configuration compresses.
-  `CodecAttributes.VERSION_VALUE` is now `2`, and `LEGACY_VERSION_VALUE` (`1`) is new; code compiled against 0.5.x
-  keeps the inlined `1` until it's recompiled.
+- The build no longer configures `JavaExec` tasks, which this library doesn't have.
+- Upgraded the Gradle wrapper from `9.8.0` to `9.9.1`, and `software.amazon.awssdk:bom` (compile-only and tests) from
+  `2.55.10` to `2.57.13`.
+- `Compressor.decompress(byte[] payload, int maxLength)` is new, so no decompression path is unbounded; a class that
+  implements `Compressor` itself has to implement it. The one-argument `decompress(byte[])` is kept, deprecated, as a
+  default method, so code built against 0.5.x still links; for the built-in compressors, it's now bounded like a
+  receive with the 16 MiB default (failing with `DecompressedPayloadTooLargeException` past 16 MiB, or when zstd
+  would have to allocate a window larger than 16 MiB needs), where 0.5.x had no limit.
+- Fresh compressed sends always write the raw payload length (`l`), which 0.7.0 will require on compressed messages.
+  `withIncludeRawPayloadLength(boolean)` is kept, deprecated, with no effect: `false` no longer omits `l`, so such
+  clients send a few bytes more per compressed message. The metadata version stays `v=1`, so no producer has to wait
+  for its consumers: once retained and incoming traffic passes the README's checks, clients can be upgraded from
+  0.5.x, or rolled back to it, in any order.
+- `CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes)` is new and writes `l` exactly when the
+  configuration compresses; it refuses a configuration whose version isn't `1`, which readers would refuse. The
+  three-argument form is kept, deprecated, and ignores `includeRawPayloadLength`.
+- A compressed payload that carries a usable `l` (a non-negative integer that fits in a Java `int`) must decode to
+  exactly that length, on receive and when an already encoded message is validated before sending (0.5.x ignored a
+  mismatch); a missing, blank, negative, non-numeric or overflowing `l` still reads as absent, and
+  `l` is still ignored when `c=none`. The version must be exactly `1` (0.5.x also accepted `01` or `+1`). A message
+  this version refuses fails the whole receive, as any decoding error already did. The README's "Upgrading from
+  0.5.x" says what to check in retained messages, and "Before 0.7.0" what has to happen before `l` becomes required.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
-  than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few bytes).
-  For `v=2`, a frame whose window is larger than its `l` needs is refused.
-- Every compressed `v=2` payload carries its raw length (`l`), and must decode to exactly that length, on receive and when an
-  already encoded message is validated before sending: one without a valid `l` fails, and an `l` over the limit fails
-  before decompressing. `withIncludeRawPayloadLength` is gone. `l` is still ignored when `c=none`. A message over the
-  limit, or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
-- The metadata version is now `v=2`, the format above, written for every newly encoded message. `v=1` messages (0.5.x)
-  are still read, deprecated until 0.7.0: their `l` is optional and read leniently, and the configured limit bounds
-  their decompression (a 0.5.x zstd frame whose window is larger than it needs, rounded up to a power of two, is
-  refused). Any other version fails. Upgrade consumers before producers; 0.5.x consumers refuse `v=2`. Retained `v=1`
-  messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames whose window is over
-  the configured limit) each fail the whole
-  receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.
+  than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few
+  bytes); 0.5.x reads them. A streamed frame whose window is larger than the configured limit needs is refused, as
+  above.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
 - Publishing to GitHub Packages now separates building from uploading. The build runs with read access only and stages
@@ -85,7 +93,7 @@ All notable changes to this project are documented in this file.
   message is validated before sending. It used to be delivered with the invalid bytes replaced by U+FFFD, after its
   checksum had passed on the original bytes. Bodies the interceptor encodes are always valid UTF-8, so only messages
   built elsewhere are affected; like any decoding error, such a message fails the whole receive.
-- Upgrading: retained messages built outside the interceptor, `v=1` ones included, that don't decode to valid UTF-8
+- Upgrading: retained messages built outside the interceptor that don't decode to valid UTF-8
   must be corrected and replayed, or drained with 0.5.x consumers, before consumers move to this version; raising
   `maxDecodedPayloadBytes` doesn't help.
 

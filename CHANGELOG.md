@@ -32,8 +32,19 @@ All notable changes to this project are documented in this file.
   graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
 
 ### Changed
-- The build moved to java-conventions `0.6.5`, for the Guava fix above and newer build checks; no code changes were
+- The build moved to java-conventions `0.7.0`, for the Guava fix above and newer build checks; no code changes were
   needed.
+- The repository's copy of an early java-conventions pre-commit hook (`scripts/git-hooks/pre-commit`) is removed, so
+  `installGitHooks` (run by `./gradlew build`) installs the conventions' current hook instead. Besides running Spotless
+  and Checkstyle, it refuses a commit when a staged file differs from its working copy after formatting, including a
+  partially staged file. With Git's default hooks path, the next build replaces an unmodified copy of the old hook
+  installed by an earlier version, when no checksum record says otherwise.
+- The repository's own Checkstyle files (`config/checkstyle/`) are removed, so Checkstyle uses the conventions'
+  configuration. The removed one was the conventions' configuration without the Jackson 2 import rule, and its
+  suppressions matched nothing here. Without it, Spotless also orders imports like Checkstyle's `ImportOrder`; no file
+  needed changes.
+- The build no longer declares the Checkstyle tool itself (the conventions declare the same dependency) or configures
+  `JavaExec` tasks, which this library doesn't have.
 - Upgraded `com.github.luben:zstd-jni` from `1.5.7-25` to `1.5.7-26`.
 - Breaking: `Compressor.decompress(byte[])` is now
   `decompress(byte[] payload, int maxLength)`, so no decompression path is unbounded.

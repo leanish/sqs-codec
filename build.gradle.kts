@@ -1,5 +1,3 @@
-import org.gradle.api.plugins.quality.CheckstyleExtension
-
 plugins {
     `java-library`
     id("io.github.leanish.java-conventions")
@@ -9,8 +7,6 @@ group = "io.github.leanish"
 version = "0.6.0-SNAPSHOT"
 description = "AWS SQS payload interceptor for automatic compression and encoding."
 
-val checkstyleExtension = extensions.getByType<CheckstyleExtension>()
-
 // Mockito loads as a JVM agent instead of attaching itself at runtime, which JDK 21+ warns about and sandboxes forbid.
 val mockitoAgent = configurations.create("mockitoAgent")
 
@@ -18,9 +14,6 @@ val targetJavaVersion = 17
 val defaultTestRuntimeJavaVersion = 25
 
 dependencies {
-    // An explicit Checkstyle dependency replaces the conventions' default tool artifact.
-    checkstyle(providers.provider { "com.puppycrawl.tools:checkstyle:${checkstyleExtension.toolVersion}" })
-
     // BOMs
     compileOnly(platform("software.amazon.awssdk:bom:2.57.13"))
     testImplementation(platform("software.amazon.awssdk:bom:2.57.13"))
@@ -56,13 +49,6 @@ val testRuntimeJavaVersion = providers.gradleProperty("sqsCodec.testRuntimeJdkVe
     .orElse(defaultTestRuntimeJavaVersion)
 val testRuntimeLauncher = project.extensions.getByType<JavaToolchainService>().launcherFor {
     languageVersion.set(testRuntimeJavaVersion.map(JavaLanguageVersion::of))
-}
-
-tasks.withType<JavaExec>().configureEach {
-    // Keep test runtime aligned with the workflow matrix.
-    javaLauncher.set(testRuntimeLauncher)
-    // Required for zstd-jni native access on JDK 21+ to avoid future hard failures.
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
 tasks.withType<Test>().configureEach {

@@ -27,7 +27,8 @@ dependencies {
 Java:
 
 `defaultInterceptor(...)` takes the codec metadata version that sends write, with no default: `MetadataVersion.V2`,
-unless a consumer of the queues still runs 0.5.x (then `V1`; see "Upgrading from 0.5.x"). Receiving reads both.
+unless a consumer of the queues still runs 0.5.x (then `V1`; see [Upgrading from 0.5.x](#upgrading-from-05x)).
+Receiving reads both.
 
 Send with defaults (no compression, MD5 checksum); decode/validate based on metadata:
 ```java
@@ -138,65 +139,15 @@ Keys:
 Notes:
 - Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
 - `ascii85` is emitted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks. The decoder refuses framing, whitespace and shorthands, but accepts other spellings of a final partial group that decode to the same bytes ([details](docs/ascii85.md)).
-- Messages built outside this interceptor, `v=1` ones included, must decode to valid UTF-8; 0.5.x accepted ones that don't, and this version refuses them. Before upgrading consumers, correct and replay such retained messages, or drain them with 0.5.x consumers; raising `maxDecodedPayloadBytes` doesn't help.
-- `v` is required, exactly `2` or `1`. Metadata the interceptor writes carries the configured `MetadataVersion`: `2`, or
-  `1` while upgrading from 0.5.x (see below). Reading accepts `2` and, deprecated
-  until 0.7.0, `1` (what 0.5.x writes):
-  a `v=1` payload may lack `l` or carry one that isn't a number (it's then ignored), and its decompression is bounded by
-  `maxDecodedPayloadBytes` rather than by `l`, since 0.5.x streamed zstd frames with the level's window; a valid `l` it
-  declares must still match. A 0.5.x zstd frame whose window is larger than `maxDecodedPayloadBytes` needs, rounded up
-  to a power of two (at least 1 KiB), is refused: the `MAXIMUM` level's 128 MiB under the 16 MiB default, say. A 3 MiB
-  limit admits a 4 MiB window; the output stays bounded by the limit either way. An already encoded `v=1` message sent through the interceptor is validated the same
-  way and sent unchanged. Any other version fails with `UnsupportedCodecMetadataException`.
-- Upgrading from 0.5.x: before replacing consumers, check that retained compressed `v=1` messages fit the new
-  consumers' decoded-size and zstd-window limits. A numeric, non-negative declared `l` must equal the decoded byte
-  length; 0.5.x ignored mismatches, while this version rejects them. Raising the limit does not bypass that check. The
-  version, once trimmed, must be exactly `1`: 0.5.x also accepted spellings such as `01` or `+1`, which this version
-  refuses. 0.5.x itself always wrote `1`, so only metadata built elsewhere is affected.
-
-  One incompatible message fails the whole receive (see above), so if retained messages are incompatible, pause
-  producers and drain them with 0.5.x consumers, or arrange their correction and replay before cutover. To consume
-  legacy zstd `MAXIMUM` frames with this version, temporarily configure `withMaxDecodedPayloadBytes(128 * 1024 * 1024)`
-  before receiving them. This admits their 128 MiB window and also raises the decoded-output allowance, so account for
-  consumer memory. Restore the intended limit only after incompatible legacy traffic has stopped and those messages are
-  drained. These prerequisites hold for as long as any 0.5.x client still sends, not only for retained messages: a
-  0.5.x writer still configured for zstd `MAXIMUM`, say, keeps producing frames the default limit refuses.
-
-  A 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2") and fails its whole receive, while this version reads
-  both. The rule is per queue: its writers may write `v=2` once all its consumers run this version. A send-only
-  client whose consumers already run this version uses `MetadataVersion.V2` from the start, and an acyclic pipeline
-  (`A` → `B` → `C`) can upgrade consumer-first (`C`, then `B`, then `A`) with `V2` throughout. When writers and
-  consumers form a cycle (services that send to each other, or a client that sends to a queue it also consumes), no
-  order works, so upgrade in two steps:
-
-  1. Deploy this version everywhere with `MetadataVersion.V1`. Fresh sends keep writing `v=1` (with the same payload,
-     checksum and `l` as `v=2`), which 0.5.x consumers read, and every upgraded client reads both versions, so clients
-     can be upgraded, or rolled back to 0.5.x, in any order.
-  2. Once every consumer of every queue runs this version, switch every running writer to `MetadataVersion.V2`, in any
-     order (recreate clients where the setting is read only when they're built). Fresh sends then write `v=2`.
-
-  Pass the version from your own configuration, so that step 2 can be a configuration change. Make the setting
-  required while 0.5.x consumers may remain: falling back to `V2` when it's missing brings back the silent switch
-  the required argument prevents.
-  ```java
-  // config: your application's configuration, failing when the setting is missing
-  SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(
-                  MetadataVersion.valueOf(config.getRequiredString("sqs.codec.metadata-version")))
-          .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
-  ```
-
-  While writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send with
-  `UnsupportedCodecMetadataException`, and so is the whole batch it's in: correct that entry before retrying.
-
-  To roll back to 0.5.x after step 2, first switch every writer back to `V1` (or stop the `v=2` writers), then drain
-  the queued `v=2` messages with consumers of this version, counting delayed and in-flight messages and any
-  dead-letter queue or replay that can bring them back, and only then bring back 0.5.x consumers. 0.7.0 removes
-  `MetadataVersion.V1` and stops reading `v=1`: before moving to it, complete step 2, remove or update any stored
-  `V1` setting (`valueOf("V1")` fails at runtime once the constant is gone), stop or convert any source of pre-encoded
-  `v=1` messages, and drain the retained `v=1` ones the same way. The version argument stays required in 0.7.0 and
-  later, so `defaultInterceptor(MetadataVersion.V2)` keeps working, and a future version is added without changing
-  callers that pass `V2`. Upgrade from 0.5.x through 0.6.x, never straight to 0.7.0, which neither reads nor writes
-  `v=1`.
+- Messages built outside this interceptor, `v=1` ones included, must decode to valid UTF-8 (0.5.x accepted ones that
+  don't; see [Upgrading from 0.5.x](#upgrading-from-05x)).
+- `v` is required, exactly `2` or `1`. The interceptor writes the configured `MetadataVersion` and reads both: `1`
+  (what 0.5.x writes) is deprecated until 0.7.0. A `v=1` payload may lack `l` or carry one that isn't a number (it's
+  then ignored), but a valid `l` must match. Its decompression is bounded by `maxDecodedPayloadBytes`, since 0.5.x
+  streamed zstd frames with the level's window: a frame whose window is larger than that limit needs (rounded up to a
+  power of two, at least 1 KiB) is refused, so a 3 MiB limit admits a 4 MiB window. An already encoded `v=1` message
+  sent through the interceptor is validated the same way and sent unchanged. Any other version fails with
+  `UnsupportedCodecMetadataException`.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.
@@ -225,6 +176,54 @@ SQS attribute limit:
 - SQS supports at most 10 message attributes per message.
 - `sqs-codec` adds at most one attribute (`x-codec-meta`) and skips it for no-op messages (`c=none,e=none,h=none`).
 - The interceptor fails fast on send when the final attribute count would exceed the SQS limit.
+
+## Upgrading from 0.5.x
+
+A 0.5.x consumer refuses `v=2` ("Unsupported codec version: 2") and fails its whole receive; this version reads both
+`v=1` and `v=2`. So a queue's writers may write `MetadataVersion.V2` once all its consumers run this version:
+
+- Without cycles, upgrade consumers first, with `V2` throughout: in a pipeline `A` → `B` → `C`, upgrade `C`, then `B`,
+  then `A`. A send-only client whose consumers already run this version uses `V2` from the start.
+- When writers and consumers form a cycle (services that send to each other, or a client that sends to a queue it
+  also consumes), no order works, so upgrade in two steps:
+  1. Deploy this version everywhere with `MetadataVersion.V1`. It writes `v=1` with the same payload, checksum and `l`
+     as `v=2`, which 0.5.x consumers read, so clients can be upgraded, or rolled back to 0.5.x, in any order.
+  2. Once every consumer of every queue runs this version, switch every writer to `V2`, in any order (recreating
+     clients that read the setting only when they're built).
+
+Read the version from a setting that's required, so step 2 can be a configuration change; falling back to `V2` when
+it's missing would bring back the silent switch the required argument prevents:
+```java
+// config: your application's configuration, failing when the setting is missing
+SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(
+                MetadataVersion.valueOf(config.getRequiredString("sqs.codec.metadata-version")))
+        .withCompressionAlgorithm(CompressionAlgorithm.ZSTD);
+```
+
+This version reads `v=1` more strictly than 0.5.x, and one message it refuses fails the whole receive. Before
+replacing consumers, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:
+- the payload must decode to valid UTF-8;
+- a numeric, non-negative `l` must equal the decoded length (raising the limit doesn't bypass this);
+- the version, once trimmed, must be exactly `1` (0.5.x also accepted `01` or `+1`; it always wrote `1`, so only
+  metadata built elsewhere is affected);
+- zstd frames must fit the window `maxDecodedPayloadBytes` allows: 0.5.x's `MAXIMUM` level declares 128 MiB, refused
+  under the 16 MiB default. To read such frames, set `withMaxDecodedPayloadBytes(128 * 1024 * 1024)` (which also raises
+  the decoded-output allowance, so account for memory) until that traffic has stopped and been drained.
+
+Pause producers and drain incompatible messages with 0.5.x consumers, or correct and replay them, before cutover.
+
+While writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send with
+`UnsupportedCodecMetadataException`, and so is the whole batch it's in: correct that entry before retrying.
+
+To roll back to 0.5.x after step 2, switch every writer back to `V1` (or stop the `v=2` writers), drain the queued
+`v=2` messages with this version, counting delayed and in-flight messages and any dead-letter queue or replay that
+can bring them back, and only then bring back 0.5.x consumers.
+
+0.7.0 drops `MetadataVersion.V1` and reading `v=1`, so upgrade from 0.5.x through 0.6.x, never straight to 0.7.0.
+Before moving to it, complete step 2, remove or update any stored `V1` setting (`valueOf("V1")` fails at runtime once
+the constant is gone), stop or convert any source of pre-encoded `v=1` messages, and drain the retained `v=1` ones.
+The version argument stays required, so `defaultInterceptor(MetadataVersion.V2)` keeps working, and a later version
+is added without changing calls that pass `V2`.
 
 ## Error handling
 

@@ -104,8 +104,9 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     /**
      * An interceptor with the default settings (no compression, no encoding, MD5 checksum) that writes the given
-     * metadata version. There's no default version: {@link MetadataVersion#V1} while any consumer of the client's queues
-     * still runs 0.5.x, {@link MetadataVersion#V2} otherwise (see the README's "Upgrading from 0.5.x").
+     * metadata version, which has no default: {@link MetadataVersion#V2}, or {@link MetadataVersion#V1} while a
+     * consumer of the client's queues still runs 0.5.x (see the README's "Upgrading from 0.5.x"). Receiving reads every
+     * supported version either way.
      *
      * @param outboundMetadataVersion the version fresh sends write
      * @return the default interceptor writing that version
@@ -123,13 +124,9 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     }
 
     /**
-     * The metadata version fresh sends write, as chosen in {@link #defaultInterceptor(MetadataVersion)}; this switches it
-     * on an existing interceptor. {@link MetadataVersion#V1} is for upgrading from 0.5.x while any consumer of the
-     * client's queues still runs it; the README's "Upgrading from 0.5.x" describes the order. Receiving is unaffected:
-     * every supported version is read either way.
-     *
-     * <p>A pre-encoded message, sent unchanged, is refused with {@link UnsupportedCodecMetadataException} when its
-     * otherwise valid metadata carries a newer version than this one, and so is the whole batch it's in.
+     * Switches the metadata version fresh sends write (see {@link #defaultInterceptor(MetadataVersion)}). A pre-encoded
+     * message whose otherwise valid metadata carries a newer version than this one is refused on send with
+     * {@link UnsupportedCodecMetadataException}, and so is the whole batch it's in.
      *
      * @param outboundMetadataVersion the version to write
      * @return a copy of this interceptor writing that version

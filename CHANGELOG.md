@@ -66,22 +66,17 @@ All notable changes to this project are documented in this file.
   before decompressing. `withIncludeRawPayloadLength` is gone. `l` is still ignored when `c=none`. A message over the
   limit, or whose `l` doesn't match, fails the whole receive, as any decoding error already did.
 - Breaking: `SqsCodecInterceptor.defaultInterceptor()` is now `defaultInterceptor(MetadataVersion)`, with no default,
-  so upgrading from 0.5.x can't start writing a version its consumers refuse without anyone choosing it. Code compiled
-  against 0.5.x that calls `defaultInterceptor()` fails with `NoSuchMethodError` on 0.6.0 and must be rebuilt.
-  `MetadataVersion.V2` writes the new format, the one to use unless a consumer of the queues still runs 0.5.x;
-  `MetadataVersion.V1` writes the 0.5.x version, with the same payload, checksum and `l`, for the transition, and is
-  deprecated and removed in 0.7.0; the argument itself stays required. `withOutboundMetadataVersion(...)` switches it
-  on an existing interceptor. While
-  writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send.
-- The metadata format is now `v=2`, the one above. `v=1` messages (0.5.x) are still read, deprecated until 0.7.0:
-  their `l` is optional and read leniently, and the configured limit bounds their decompression (a 0.5.x zstd frame
-  whose window is larger than it needs, rounded up to a power of two, is refused). Any other version fails. 0.5.x
-  consumers refuse `v=2`, so a queue's writers move to `V2` once all its consumers run this version; when writers and
-  consumers form a cycle, deploy everywhere with `V1` first, as the README's "Upgrading from 0.5.x" describes, and
-  upgrade from 0.5.x through 0.6.x rather than straight to 0.7.0, which drops `v=1`. Retained `v=1`
-  messages this version refuses (a mismatched `l`, over the decode limits, zstd `MAXIMUM` frames whose window is over
-  the configured limit) each fail the whole
-  receive: check them before replacing consumers, as the README's "Upgrading from 0.5.x" describes.
+  so an upgrade can't start writing a version 0.5.x consumers refuse without anyone choosing it; code compiled against
+  0.5.x that calls `defaultInterceptor()` fails with `NoSuchMethodError` and must be rebuilt. `MetadataVersion.V2`
+  writes the new format; `V1` writes 0.5.x's `v=1`, with the same payload, checksum and `l`, for the upgrade, and is
+  deprecated and removed in 0.7.0, while the argument stays required. `withOutboundMetadataVersion(...)` switches it.
+  While writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send.
+- The metadata format is now `v=2`, the one above, which 0.5.x consumers refuse. `v=1` messages are still read,
+  deprecated until 0.7.0: their `l` is optional and read leniently, the configured limit bounds their decompression,
+  and a zstd frame whose window is larger than that limit needs is refused. Any other version fails, and a message
+  this version refuses fails the whole receive. The README's "Upgrading from 0.5.x" gives the upgrade order (with `V1`
+  first when writers and consumers form a cycle), what to check in retained messages, and the path to 0.7.0, through
+  0.6.x.
 - Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
   and sandboxed environments refuse.
 - Publishing to GitHub Packages now separates building from uploading. The build runs with read access only and stages

@@ -68,7 +68,7 @@ class SqsCodecInterceptorTest {
 
     private static final String PAYLOAD = "{\"value\":42}";
     /** Compressible enough that no algorithm falls back to {@code c=none}. */
-    private static final String LEGACY_WRITE_PAYLOAD = PAYLOAD.repeat(50);
+    private static final String COMPRESSIBLE_PAYLOAD = PAYLOAD.repeat(50);
 
     @Test
     void modifyRequest_happyCase() {
@@ -1637,18 +1637,18 @@ class SqsCodecInterceptorTest {
     }
 
     @ParameterizedTest
-    @MethodSource("legacyWriteCases")
+    @MethodSource("versionOneWriteCases")
     @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
     void modifyRequest_versionOneWritesChangeOnlyTheVersion(SqsCodecInterceptor configured, String expectedKeys) {
-        SendMessageRequest current = sent(configured, LEGACY_WRITE_PAYLOAD);
-        SendMessageRequest legacy = sent(configured.withOutboundMetadataVersion(MetadataVersion.V1), LEGACY_WRITE_PAYLOAD);
+        SendMessageRequest current = sent(configured, COMPRESSIBLE_PAYLOAD);
+        SendMessageRequest versionOne = sent(configured.withOutboundMetadataVersion(MetadataVersion.V1), COMPRESSIBLE_PAYLOAD);
 
         String currentMetadata = metadataOf(current);
         assertThat(currentMetadata).startsWith("v=2;" + expectedKeys);
-        assertThat(currentMetadata.contains(";l=" + LEGACY_WRITE_PAYLOAD.getBytes(StandardCharsets.UTF_8).length))
+        assertThat(currentMetadata.contains(";l=" + COMPRESSIBLE_PAYLOAD.getBytes(StandardCharsets.UTF_8).length))
                 .isEqualTo(!expectedKeys.startsWith("c=none"));
-        assertThat(metadataOf(legacy)).isEqualTo("v=1;" + currentMetadata.substring("v=2;".length()));
-        assertThat(legacy.messageBody()).isEqualTo(current.messageBody());
+        assertThat(metadataOf(versionOne)).isEqualTo("v=1;" + currentMetadata.substring("v=2;".length()));
+        assertThat(versionOne.messageBody()).isEqualTo(current.messageBody());
     }
 
     @Test
@@ -1671,16 +1671,15 @@ class SqsCodecInterceptorTest {
     @Test
     @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
     void withOutboundMetadataVersion_survivesOtherWithersAndCanBeSwitchedBack() {
-        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
-                .withOutboundMetadataVersion(MetadataVersion.V1)
+        SqsCodecInterceptor versionOne = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V1)
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
                 .withCompressionLevel(CompressionLevel.HIGH)
                 .withMaxDecodedPayloadBytes(1024)
                 .withoutCompressionLevel();
 
-        assertThat(metadataOf(sent(legacy, LEGACY_WRITE_PAYLOAD))).startsWith("v=1;c=gzip;");
-        assertThat(metadataOf(sent(legacy.withOutboundMetadataVersion(MetadataVersion.V2), LEGACY_WRITE_PAYLOAD))).startsWith("v=2;c=gzip;");
-        assertThat(metadataOf(sent(SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2), LEGACY_WRITE_PAYLOAD))).startsWith("v=2;");
+        assertThat(metadataOf(sent(versionOne, COMPRESSIBLE_PAYLOAD))).startsWith("v=1;c=gzip;");
+        assertThat(metadataOf(sent(versionOne.withOutboundMetadataVersion(MetadataVersion.V2), COMPRESSIBLE_PAYLOAD)))
+                .startsWith("v=2;c=gzip;");
     }
 
     @Test
@@ -1693,9 +1692,9 @@ class SqsCodecInterceptorTest {
                     .withCompressionAlgorithm(CompressionAlgorithm.ZSTD)
                     .withOutboundMetadataVersion(version);
 
-            SendMessageRequest sent = sent(fromFactory, LEGACY_WRITE_PAYLOAD);
+            SendMessageRequest sent = sent(fromFactory, COMPRESSIBLE_PAYLOAD);
             assertThat(metadataOf(sent)).startsWith("v=" + version.value() + ";c=zstd;");
-            assertThat(metadataOf(sent(switched, LEGACY_WRITE_PAYLOAD))).isEqualTo(metadataOf(sent));
+            assertThat(metadataOf(sent(switched, COMPRESSIBLE_PAYLOAD))).isEqualTo(metadataOf(sent));
         }
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor(null))
                 .isInstanceOf(NullPointerException.class)
@@ -1706,37 +1705,17 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    void writingVersionTwoSendsPreEncodedMessagesOfEitherVersionUnchanged() {
-        SendMessageRequest versionTwo = SendMessageRequest.builder()
-                .messageBody(compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD))
-                .messageAttributes(Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute(
-                        "v=2;c=zstd;e=base64;h=none;l=" + PAYLOAD.length())))
-                .build();
-        SendMessageRequest versionOne = SendMessageRequest.builder()
-                .messageBody(streamedZstdBody(PAYLOAD, 3))
-                .messageAttributes(Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none")))
-                .build();
-        SqsCodecInterceptor versionTwoWriter = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2);
-
-        assertThat(versionTwoWriter.modifyRequest(new ModifyRequestContext(versionTwo), new ExecutionAttributes()))
-                .isSameAs(versionTwo);
-        assertThat(versionTwoWriter.modifyRequest(new ModifyRequestContext(versionOne), new ExecutionAttributes()))
-                .isSameAs(versionOne);
-    }
-
-    @Test
     @SuppressWarnings("deprecation") // exercises MetadataVersion.V1
     void modifyRequest_versionOneWritesApplyToEveryFreshBatchEntry() {
-        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
-                .withCompressionAlgorithm(CompressionAlgorithm.SNAPPY)
-                .withOutboundMetadataVersion(MetadataVersion.V1);
+        SqsCodecInterceptor versionOne = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V1)
+                .withCompressionAlgorithm(CompressionAlgorithm.SNAPPY);
         SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
                 .entries(
-                        SendMessageBatchRequestEntry.builder().id("1").messageBody(LEGACY_WRITE_PAYLOAD).build(),
-                        SendMessageBatchRequestEntry.builder().id("2").messageBody(LEGACY_WRITE_PAYLOAD + "!").build())
+                        SendMessageBatchRequestEntry.builder().id("1").messageBody(COMPRESSIBLE_PAYLOAD).build(),
+                        SendMessageBatchRequestEntry.builder().id("2").messageBody(COMPRESSIBLE_PAYLOAD + "!").build())
                 .build();
 
-        SendMessageBatchRequest encoded = (SendMessageBatchRequest) legacy
+        SendMessageBatchRequest encoded = (SendMessageBatchRequest) versionOne
                 .modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes());
 
         assertThat(encoded.entries())
@@ -1752,12 +1731,12 @@ class SqsCodecInterceptorTest {
         List<SqsCodecInterceptor> interceptors = List.of(zstd, zstd.withOutboundMetadataVersion(MetadataVersion.V1));
 
         for (SqsCodecInterceptor writer : interceptors) {
-            SendMessageRequest sent = sent(writer, LEGACY_WRITE_PAYLOAD);
+            SendMessageRequest sent = sent(writer, COMPRESSIBLE_PAYLOAD);
             for (SqsCodecInterceptor reader : interceptors) {
                 ReceiveMessageResponse decoded = (ReceiveMessageResponse) reader.modifyResponse(
                         new ModifyResponseContext(receivedWith(sent.messageBody(), metadataOf(sent))),
                         new ExecutionAttributes());
-                assertThat(decoded.messages().get(0).body()).as(metadataOf(sent)).isEqualTo(LEGACY_WRITE_PAYLOAD);
+                assertThat(decoded.messages().get(0).body()).as(metadataOf(sent)).isEqualTo(COMPRESSIBLE_PAYLOAD);
             }
         }
     }
@@ -1775,12 +1754,12 @@ class SqsCodecInterceptorTest {
                         SendMessageBatchRequestEntry.builder().id("fresh").messageBody(PAYLOAD).build(),
                         SendMessageBatchRequestEntry.builder().id("pre").messageBody(body).messageAttributes(attributes).build())
                 .build();
-        SqsCodecInterceptor legacy = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V1);
+        SqsCodecInterceptor versionOne = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V1);
 
-        assertThatThrownBy(() -> legacy.modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
+        assertThatThrownBy(() -> versionOne.modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Cannot send pre-encoded codec metadata v=2 while writing v=1");
-        assertThatThrownBy(() -> legacy.modifyRequest(new ModifyRequestContext(mixedBatch), new ExecutionAttributes()))
+        assertThatThrownBy(() -> versionOne.modifyRequest(new ModifyRequestContext(mixedBatch), new ExecutionAttributes()))
                 .isInstanceOf(UnsupportedCodecMetadataException.class)
                 .hasMessage("Cannot send pre-encoded codec metadata v=2 while writing v=1");
         assertThat(SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2)
@@ -1805,7 +1784,7 @@ class SqsCodecInterceptorTest {
         assertThat(sent).isSameAs(request);
     }
 
-    private static Stream<Arguments> legacyWriteCases() {
+    private static Stream<Arguments> versionOneWriteCases() {
         SqsCodecInterceptor defaults = SqsCodecInterceptor.defaultInterceptor(MetadataVersion.V2);
         return Stream.of(
                 Arguments.of(defaults, "c=none;e=none;h=md5;"),

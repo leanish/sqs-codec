@@ -32,7 +32,7 @@ All notable changes to this project are documented in this file.
   graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
 
 ### Changed
-- The build moved to java-conventions `0.6.5`, for the Guava fix above and newer build checks; no code changes were
+- The build moved to java-conventions `0.7.0`, for the Guava fix above and newer build checks; no code changes were
   needed.
 - Upgraded `com.github.luben:zstd-jni` from `1.5.7-25` to `1.5.7-26`.
 - Breaking: `Compressor.decompress(byte[])` is now

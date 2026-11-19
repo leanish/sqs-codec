@@ -31,6 +31,8 @@ public class ZstdCompressor implements Compressor {
     private static final int MIN_WINDOW_LOG = 10;
     private static final int ONE_STEP_INITIAL_CAPACITY = 1024 * 1024;
     private static final int ONE_STEP_GROWTH = 4;
+    // HotSpot refuses array lengths close to Integer.MAX_VALUE even with heap to spare; this one every JVM allocates.
+    private static final int MAX_ARRAY_LENGTH = Integer.MAX_VALUE - 8;
     private final @Nullable CompressionLevel compressionLevel;
 
     public ZstdCompressor() {
@@ -91,10 +93,11 @@ public class ZstdCompressor implements Compressor {
     }
 
     /**
-     * Decodes the whole payload in one step into a buffer of at most {@code maxLength} bytes. zstd then uses the output
-     * as its window and allocates none, whatever window the frames declare. The buffer starts at 1 MiB (or the limit, if
-     * smaller) and grows only while the output doesn't fit, so a small or malformed payload never makes it allocate the
-     * whole limit; each growth decodes the payload again.
+     * Decodes the whole payload in one step into a buffer of at most {@code maxLength} bytes, after streaming refused a
+     * frame's window. zstd then uses the output as its window and allocates none, whatever window the frames declare. The
+     * buffer starts at 1 MiB (or the limit, if smaller) and grows only while the output doesn't fit, so a small payload
+     * doesn't make it allocate the whole limit (a malformed one may, before zstd finds the error); each growth decodes the
+     * payload again.
      */
     private static byte[] decompressInOneStep(byte[] payload, int maxLength) {
         try (ZstdDecompressCtx context = new ZstdDecompressCtx()) {
@@ -107,7 +110,8 @@ public class ZstdCompressor implements Compressor {
     }
 
     private static byte[] decompressInOneStep(ZstdDecompressCtx context, byte[] payload, int maxLength) {
-        int capacity = Math.min(maxLength, ONE_STEP_INITIAL_CAPACITY);
+        int ceiling = oneStepCeiling(maxLength);
+        int capacity = Math.min(ceiling, ONE_STEP_INITIAL_CAPACITY);
         while (true) {
             byte[] output = new byte[capacity];
             try {
@@ -117,12 +121,26 @@ public class ZstdCompressor implements Compressor {
                 if (e.getErrorCode() != Zstd.errDstSizeTooSmall()) {
                     throw CompressionException.decompress(ALGORITHM, e);
                 }
-                if (capacity == maxLength) {
-                    throw DecompressedPayloadTooLargeException.exceeds(ALGORITHM, maxLength);
+                if (capacity == ceiling) {
+                    throw DecompressedPayloadTooLargeException.exceeds(ALGORITHM, ceiling);
                 }
-                capacity = (int) Math.min(maxLength, (long) capacity * ONE_STEP_GROWTH);
+                capacity = nextCapacity(capacity, ceiling);
             }
         }
+    }
+
+    /**
+     * The largest buffer the one-step decoder may use: the limit, or the largest array length JVMs allocate, if smaller.
+     */
+    static int oneStepCeiling(int maxLength) {
+        return Math.min(maxLength, MAX_ARRAY_LENGTH);
+    }
+
+    /**
+     * The next buffer size after {@code capacity} didn't fit: four times larger, at most {@code ceiling}.
+     */
+    static int nextCapacity(int capacity, int ceiling) {
+        return (int) Math.min(ceiling, (long) capacity * ONE_STEP_GROWTH);
     }
 
     /**

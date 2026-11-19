@@ -32,6 +32,14 @@ public class CompressionException extends CodecException {
                 cause);
     }
 
+    /**
+     * The payload decoded to a length other than the raw length ({@code l}) its metadata declares.
+     *
+     * @param algorithm the compression algorithm's id
+     * @param expectedLength the declared raw length
+     * @param actualLength the decoded length
+     * @return the exception to throw
+     */
     public static CompressionException lengthMismatch(String algorithm, int expectedLength, int actualLength) {
         return new CompressionException(
                 "Decompressed payload with " + algorithm + " has " + actualLength

@@ -306,6 +306,27 @@ class CompressionTest {
     }
 
     @Test
+    void decompress_zstdOneStepReadsASmallLegacyFrameUnderALargeLimit() throws IOException {
+        // A 64 MiB limit admits a 64 MiB window, under the frame's 128 MiB, so it's read in one step from a small buffer.
+        byte[] payload = TestPayloadBytes.mixed(10_000);
+
+        assertThat(new ZstdCompressor().decompress(streamedZstd(payload, Zstd.maxCompressionLevel()), 64 * MIB))
+                .isEqualTo(payload);
+    }
+
+    @Test
+    void oneStepBuffer_growsFourfoldUpToAnArrayEveryJvmAllocates() {
+        int ceiling = ZstdCompressor.oneStepCeiling(Integer.MAX_VALUE);
+
+        assertThat(ceiling).isEqualTo(Integer.MAX_VALUE - 8);
+        assertThat(ZstdCompressor.oneStepCeiling(16 * MIB)).isEqualTo(16 * MIB);
+        assertThat(ZstdCompressor.nextCapacity(MIB, 16 * MIB)).isEqualTo(4 * MIB);
+        assertThat(ZstdCompressor.nextCapacity(8 * MIB, 16 * MIB)).isEqualTo(16 * MIB);
+        // From 1 GiB, four times as much would overflow an int: it stops at the ceiling instead.
+        assertThat(ZstdCompressor.nextCapacity(1024 * MIB, ceiling)).isEqualTo(ceiling);
+    }
+
+    @Test
     void decompress_snappyRefusesAHeaderTheLibraryCantRead() {
         // A declared length of 2^32 + 5: past snappy's 32-bit varint, which snappy refuses before allocating anything.
         byte[] payload = {(byte) 0x85, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x10, 0x10, 'h', 'e', 'l', 'l', 'o'};

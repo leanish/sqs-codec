@@ -115,7 +115,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
      *
      * @param includeRawPayloadLength ignored
      * @return this interceptor, unchanged
-     * @deprecated {@code l} is always written; remove the call
+     * @deprecated {@code l} is written whenever a send compresses; remove the call
      */
     @Deprecated(since = "0.6.0")
     // Not @InlineMe: inlining to "this" would drop the evaluation of the caller's argument expression.

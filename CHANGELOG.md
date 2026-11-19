@@ -10,17 +10,17 @@ All notable changes to this project are documented in this file.
   passes `maxDecodedPayloadBytes` (default 16 MiB, set with `withMaxDecodedPayloadBytes(...)`), on receive and when
   validating already encoded outbound messages; the payload's raw length (`l`), which the sender controls, doesn't
   bound it. Snappy's declared length is checked before it allocates. zstd's streaming decoder accepts a window up to
-  what the limit needs, rounded up to a power of two (at least 1 KiB); until 0.7.0, a frame that declares a larger one
-  (as 0.5.x's streamed frames do) is decoded in one step into a buffer of at most the limit, which allocates no
-  window.
-- The build tools no longer use a Guava affected by
-  [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) or
-  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56). The published
-  library doesn't depend on Guava, so this changes none of its dependencies.
-- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. The seven advisories published in
-  snappy-java's repository on 2026-10-03 (out-of-bounds accesses, unbounded allocations, stream recursion and
-  pooled-buffer reuse; one of them is CVE-2026-90559) are all fixed from `1.1.10.10`, released that day, which the
-  project adopted on 2026-10-07, before the usual seven-day release cooldown.
+  what the limit needs, rounded up to a power of two (at least 1 KiB); until 0.7.0, when it refuses a frame's window
+  (as for 0.5.x's streamed frames, which can declare a larger one), the payload is decoded again in one step into a
+  buffer of at most the limit, which allocates no window.
+- The build moved to java-conventions `0.7.0` for its fix of
+  [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) and
+  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56) in the Guava its
+  build tooling used. The published library doesn't depend on Guava.
+- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. `1.1.10.10`, released on 2026-10-03 and
+  adopted on 2026-10-07, is the first version with fixes for all seven advisories published in snappy-java's
+  repository that day (out-of-bounds accesses, unbounded allocations, stream recursion and pooled-buffer reuse);
+  CVE-2026-90559, one of them, was fixed in `1.1.10.9`.
 - Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-28`, for advisories published in zstd-jni's
   repository:
   - three published on 2026-10-28, fixed in `1.5.7-25` (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5,
@@ -74,9 +74,11 @@ All notable changes to this project are documented in this file.
   what has to happen before `l` becomes required.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few
-  bytes); 0.5.x reads them. Until 0.7.0, a frame whose window is larger than the configured limit needs, such as
-  0.5.x's streamed ones, is decoded in one step into a buffer that starts at 1 MiB (or the limit, if smaller) and grows
-  up to the limit, which allocates no window; 0.7.0 drops this (see the README's "Before 0.7.0").
+  bytes); 0.5.x reads them. Until 0.7.0, when streaming refuses a frame's window as larger than the configured limit
+  needs, as for such 0.5.x frames, the payload is decoded again in one step into a buffer that starts at 1 MiB (or the
+  limit, if smaller) and grows up to the limit, which allocates no window; 0.7.0 drops this retry (see the README's
+  "Before 0.7.0"). 0.5.x `MAXIMUM` messages whose decoded payload fits the limit are therefore read with the default
+  configuration.
 - Tests and PIT load Mockito at JVM startup (`-javaagent`), avoiding the dynamic-attach warning JDK 21+ prints and
   environments that forbid dynamic attach.
 - Removed the scheduled Dependabot version updates.

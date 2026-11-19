@@ -91,7 +91,7 @@ Defaults:
   redrive policy, it moves to the dead-letter queue (after `maxReceiveCount` receives).
 - The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten.
 - A decoded payload (compressed or encoded) must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException`, on receive and when an already encoded message is validated before sending. A checksum-only or metadata-free body isn't decoded, so it isn't checked.
-- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. The streaming decoder accepts a window up to what `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window). Until 0.7.0, a frame that declares a larger one, as 0.5.x's streamed frames do whatever their size (128 MiB at the `MAXIMUM` level), is decoded again in one step into a buffer that starts at 1 MiB (or the limit, if smaller) and grows, decoding again, up to the limit: zstd then uses that output as its window and allocates none. The output stays bounded by the limit either way. Snappy refuses a header it can't read itself (`CompressionException`); a declared length over `maxDecodedPayloadBytes` is refused before it allocates.
+- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. The streaming decoder accepts a window up to what `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window). Until 0.7.0, when streaming refuses a frame's window as larger, as with 0.5.x's streamed frames, which can declare 128 MiB (at the `MAXIMUM` level) whatever their size, the payload is decoded again in one step into a buffer that starts at 1 MiB (or the limit, if smaller) and grows, decoding again, up to the limit: zstd then uses that output as its window and allocates none. The output stays bounded by the limit either way. Snappy refuses a header it can't read itself (`CompressionException`); a declared length over `maxDecodedPayloadBytes` is refused before it allocates.
 - `DecompressedPayloadTooLargeException` means the payload was refused against `maxDecodedPayloadBytes`: decoding produced more than it, or snappy's declared length is over it. It doesn't establish the payload's actual decoded size.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if the compressed and encoded body would be the same size as the original body or larger, the interceptor sends the original body and falls back to `c=none,e=none`.
 - When outbound processing resolves to `c=none`, `e=none` and `h=none`, the interceptor does not add `x-codec-meta`.
@@ -130,11 +130,11 @@ Keys:
 - `c`: compression (`zstd`, `gzip`, `snappy`, `none`)
 - `e`: payload encoding (`base64`, `ascii85`, `none`)
 - `h`: checksum (`md5`, `sha256`, `none`)
-- `s`: checksum value (present only when `h` is not `none`; always unpadded URL-safe Base64)
+- `s`: checksum value (present only when `h` is not `none`; written as unpadded URL-safe Base64)
 - `l`: raw payload byte length (before compression); written only when `c` is not `none`
 
 Notes:
-- Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is always an unpadded URL-safe Base64 string and is independent of `e`.
+- Order does not matter; metadata keys and algorithm ids are case-insensitive. Checksum value `s` is written as an unpadded URL-safe Base64 string and is independent of `e`.
 - `ascii85` is emitted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks. The decoder refuses framing, whitespace and shorthands, but accepts other spellings of a final partial group that decode to the same bytes ([details](docs/ascii85.md)).
 - Compressed or encoded messages built outside this interceptor must decode to valid UTF-8 (0.5.x accepted ones that don't; see
   [Upgrading from 0.5.x](#upgrading-from-05x)).
@@ -219,7 +219,9 @@ Calls from code built against 0.5.x to the methods it used still link without re
 changed are kept, deprecated (`withIncludeRawPayloadLength(boolean)` and the three-argument
 `CodecMetadataAttributeHandler.forOutbound` ignore their flag and write `l` whenever they compress), and the built-in
 compressors still declare the one-argument `decompress(byte[])`, now bounded like a receive with the 16 MiB default.
-A class implementing `Compressor` itself has to implement the two-argument `decompress` once recompiled.
+A class implementing `Compressor` itself has to implement the two-argument `decompress` once recompiled; one built
+against 0.5.x and not recompiled throws `AbstractMethodError` if that method is called on it (the interceptor never
+calls it: it uses only the built-in compressors).
 
 This version reads metadata more strictly than 0.5.x in the ways below (it also accepts minor versions, which 0.5.x
 refused), and one message it refuses fails the whole receive. Before
@@ -240,8 +242,8 @@ forwarded by a relay. Look for them in the raw `x-codec-meta`, since `CodecConfi
 
 ### Before 0.7.0
 
-0.7.0 will refuse a compressed message without a valid `l`, which 0.5.x and 0.6.x read as optional, and will stop
-decoding in one step the zstd frames whose window is larger than its limit needs. Before upgrading any consumer to
+0.7.0 will refuse a compressed message without a valid `l`, which 0.5.x and 0.6.x read as optional, and will drop the
+one-step retry for zstd frames whose window streaming refuses, so such frames will be refused. Before upgrading any consumer to
 0.7.0, make sure that:
 - no client sends compressed messages without `l`: 0.5.x clients that call `withIncludeRawPayloadLength(false)` stop
   doing so or are upgraded to 0.6.0, and code that builds codec metadata itself writes an `l` equal to the raw
@@ -251,7 +253,7 @@ decoding in one step the zstd frames whose window is larger than its limit needs
 - retained compressed messages without a valid `l` are drained, counting delayed and in-flight messages and any
   dead-letter queue or replay that can bring them back;
 - no zstd frame whose window is larger than the consumer's limit needs can still reach it, valid `l` or not: such frames
-  come from 0.5.x writers (128 MiB at the `MAXIMUM` level, whatever the message's size) and from encoders outside this
+  come from 0.5.x writers (which can declare 128 MiB at the `MAXIMUM` level, whatever the message's size) and from encoders outside this
   library, so those writers stop or upgrade, and retained, forwarded and replayed ones are drained as above.
 
 ## Error handling

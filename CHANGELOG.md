@@ -86,7 +86,7 @@ All notable changes to this project are documented in this file.
   java-conventions' reusable publishing workflow.
 
 ### Added
-- Minor metadata versions: `v=1.<minor>` (`1.0`, `1.1`, ...; the minor is `0` or a number without a leading zero) is
+- Minor metadata versions: `v=1.<minor>` (`1.0`, `1.1`, ...; the minor is `0` or `[1-9][0-9]*`, ASCII digits only) is
   read as `v=1`, so that a later minor, which may only add what earlier readers can ignore, is meant not to break 0.6.0
   and later. Fresh sends still write `1`, and an already encoded message's version is sent unchanged; sending a minor
   needs every consumer on 0.6.0 or later, since 0.5.x refuses it. The README's "Metadata versions" gives the rules.

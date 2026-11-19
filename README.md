@@ -187,8 +187,9 @@ a later minor is meant not to break it:
   interceptor sends unchanged. 0.5.x refuses every dotted version.
 - `CodecConfiguration.version()` is the major: metadata read as `1.y` reports `1`. To find messages with a minor, look
   at the raw `x-codec-meta`. `CodecMetadataAttributeHandler.applyTo` writes only the keys this version knows and
-  writes the version as `v=1`, so copying metadata through it drops a minor and anything a minor added; forward a
-  message's attributes as they are instead, as the interceptor does.
+  writes the version as `v=1`, so copying metadata through it drops a minor and any key this version doesn't know
+  (a usable `l` is kept); to forward a message, keep its encoded body and its attributes as they are, as the
+  interceptor does.
 
 ## Upgrading from 0.5.x
 

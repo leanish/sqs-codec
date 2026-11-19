@@ -135,8 +135,9 @@ Notes:
 - `ascii85` is emitted only in its canonical form: unframed ASCII85, no whitespace, and no `z`/`y` shorthand blocks. The decoder refuses framing, whitespace and shorthands, but accepts other spellings of a final partial group that decode to the same bytes ([details](docs/ascii85.md)).
 - Messages built outside this interceptor must decode to valid UTF-8 (0.5.x accepted ones that don't; see
   [Upgrading from 0.5.x](#upgrading-from-05x)).
-- `v` is required and must be exactly `1`, the only version written and read (0.5.x also accepted `01` or `+1`); any
-  other value fails with `UnsupportedCodecMetadataException`.
+- `v` is required: `1`, which is what the interceptor writes, or a minor of it, `1.<minor>` (`1.0`, `1.1`, ...),
+  read as `1` (see [Metadata versions](#metadata-versions)). It's matched exactly as written once trimmed: `01`, `+1`
+  (other spellings of `1` that 0.5.x accepted), `1.01` or `2` fail with `UnsupportedCodecMetadataException`.
 - Missing `c` or `h` defaults to `none` on read.
 - `e` is required.
 - Explicit `e=none` is valid only when `c=none`.
@@ -171,10 +172,39 @@ SQS attribute limit:
 - `sqs-codec` adds at most one attribute (`x-codec-meta`) and skips it for no-op messages (`c=none,e=none,h=none`).
 - The interceptor fails fast on send when the final attribute count would exceed the SQS limit.
 
+### Metadata versions
+
+`v` is `<major>` or `<major>.<minor>`, where the minor is `0` or an ASCII number without a leading zero (`1.0`, `1.1`,
+`1.10`; not `1.01`, `1.+1` or `1.`). This version writes `1` and reads `1` and every such `1.<minor>` as `1`, so that
+a later minor is meant not to break it:
+- A minor may only add what a reader of an earlier `1.x` can ignore: that reader must still accept the message,
+  recover the same payload, and validate it with the rules it already knows. A guarantee from the writer, such as
+  always carrying a valid `l`, fits; a new compression or checksum id, or a reader that refuses what earlier ones
+  accepted (such as a missing `l`), doesn't fit a minor, and its release notes say what the upgrade needs. While
+  sqs-codec is 0.x, the project handles such changes that way rather than by moving to a new major.
+- A reader may require a minimum minor of its major, once it relies on what that minor guarantees; a bare `1` counts as
+  `1.0`. Its version check then accepts every minor from that minimum through `2147483647`, and the message is still
+  validated as usual. No writer writes a minor above `2147483647`, so a reader that compares minors as numbers may
+  refuse a larger one; this version accepts it. Requiring a minimum refuses messages earlier readers accepted (a
+  minimum of `1.1` would refuse the `v=1` that 0.6.0 sends), so its release notes say so, as above, and a consumer
+  gets it only once every message it can receive, through a relay or redrive included, meets it. This version requires
+  none, and neither does the change planned for 0.7.0 (see [Before 0.7.0](#before-070)), which requires a valid `l`
+  instead.
+- A minor only reaches readers that accept it, so sending `1.<minor>` needs every consumer of the queue on 0.6.0 or
+  later, whoever sends it: a writer, or a relay or redrive that forwards an already encoded message, which the
+  interceptor sends unchanged. 0.5.x refuses every dotted version.
+- `CodecConfiguration.version()` is the major: metadata read as `1.y` reports `1`. To find messages with a minor, look
+  at the raw `x-codec-meta`. `CodecMetadataAttributeHandler.applyTo` writes only the keys this version knows and
+  writes the version as `v=1`, so copying metadata through it drops a minor and any key this version doesn't know
+  (a usable `l` is kept); to forward a message, keep its encoded body and its attributes as they are, as the
+  interceptor does.
+
 ## Upgrading from 0.5.x
 
-0.6.0 writes the same metadata version as 0.5.x (`v=1`), so no producer has to wait for its consumers: once the
-traffic they read passes the checks below, clients can be upgraded, or rolled back to 0.5.x, in any order, including
+0.6.0's fresh sends write the same metadata version as 0.5.x (`v=1`), so no producer has to wait for its consumers
+(a relay forwarding an already encoded message sends its version unchanged; see
+[Metadata versions](#metadata-versions)): once the traffic they read passes the checks below, clients can be
+upgraded, or rolled back to 0.5.x, in any order, including
 when writers and consumers form a cycle (services that send to each other, or a client that sends to a queue it also
 consumes). Fresh compressed sends always write `l`, a few bytes more than 0.5.x clients that turned it off sent.
 Code built against 0.5.x links without recompiling: the 0.5.x methods that changed are kept, deprecated
@@ -183,19 +213,25 @@ their flag and always write `l`), and the built-in compressors' one-argument `de
 a receive with the 16 MiB default. A class implementing `Compressor` itself has to implement the two-argument
 `decompress` once recompiled.
 
-This version reads metadata more strictly than 0.5.x, and one message it refuses fails the whole receive. Before
+This version reads metadata more strictly than 0.5.x in the ways below (it also accepts minor versions, which 0.5.x
+refused), and one message it refuses fails the whole receive. Before
 replacing consumers, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:
 - the payload must decode to valid UTF-8 (raising `maxDecodedPayloadBytes` doesn't help);
 - a compressed or encoded payload must decode to at most `maxDecodedPayloadBytes`;
 - a numeric, non-negative `l` must equal the decoded length in bytes (0.5.x ignored mismatches; raising the limit
   doesn't bypass this);
-- the version, once trimmed, must be exactly `1` (0.5.x also accepted `01` or `+1`; it always wrote `1`, so only
-  metadata built elsewhere is affected);
+- the version, once trimmed, must be `1` or `1.<minor>`, spelled exactly (0.5.x also accepted other spellings of `1`,
+  such as `01`, `+1` or non-ASCII digits; it always wrote `1`, so only metadata built elsewhere is affected);
 - zstd frames must fit the window `maxDecodedPayloadBytes` allows: 0.5.x's `MAXIMUM` level declares 128 MiB, refused
   under the 16 MiB default. To read such frames, set `withMaxDecodedPayloadBytes(128 * 1024 * 1024)` (which also raises
   the decoded-output allowance, so account for memory) until that traffic has stopped and been drained.
 
 Pause producers and drain incompatible messages with 0.5.x consumers, or correct and replay them, before cutover.
+
+Rolling back a consumer to 0.5.x also needs that no message with a minor version (`v=1.<minor>`) can still reach it,
+counting retained, delayed and in-flight messages, dead-letter queues and replay: 0.5.x refuses them. 0.6.x's fresh
+sends write only `1`, so such messages come only from a later writer or from metadata built elsewhere, possibly
+forwarded by a relay. Look for them in the raw `x-codec-meta`, since `CodecConfiguration.version()` reports `1`.
 
 ### Before 0.7.0
 

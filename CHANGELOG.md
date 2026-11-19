@@ -60,16 +60,18 @@ All notable changes to this project are documented in this file.
   `withIncludeRawPayloadLength(boolean)` is kept, deprecated, with no effect: `false` no longer omits `l`, so such
   clients send a few bytes more per compressed message. The metadata version stays `v=1`, so no producer has to wait
   for its consumers: once retained and incoming traffic passes the README's checks, clients can be upgraded from
-  0.5.x, or rolled back to it, in any order.
+  0.5.x, or rolled back to it, in any order (rolling back also needs that no minor-version message, see Added, can
+  reach a 0.5.x consumer).
 - `CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes)` is new and writes `l` exactly when the
   configuration compresses; it refuses a configuration whose version isn't `1`, which readers would refuse. The
   three-argument form is kept, deprecated, and ignores `includeRawPayloadLength`.
 - A compressed payload that carries a usable `l` (a non-negative integer that fits in a Java `int`) must decode to
   exactly that length, on receive and when an already encoded message is validated before sending (0.5.x ignored a
-  mismatch); a missing, blank, negative, non-numeric or overflowing `l` still reads as absent, and
-  `l` is still ignored when `c=none`. The version must be exactly `1` (0.5.x also accepted `01` or `+1`). A message
-  this version refuses fails the whole receive, as any decoding error already did. The README's "Upgrading from
-  0.5.x" says what to check in retained messages, and "Before 0.7.0" what has to happen before `l` becomes required.
+  mismatch); a missing, blank, negative, non-numeric or overflowing `l` still reads as absent, and `l` is still
+  ignored when `c=none`. The version must be `1` or `1.<minor>` (see Added), spelled exactly (0.5.x also accepted other
+  spellings of `1`, such as `01` or `+1`). A message this version refuses fails the whole receive, as any decoding
+  error already did. The README's "Upgrading from 0.5.x" says what to check in retained messages, and "Before 0.7.0"
+  what has to happen before `l` becomes required.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few
   bytes); 0.5.x reads them. A streamed frame whose window is larger than the configured limit needs is refused, as
@@ -84,6 +86,12 @@ All notable changes to this project are documented in this file.
   java-conventions' reusable publishing workflow.
 
 ### Added
+- Minor metadata versions: `v=1.<minor>` (`1.0`, `1.1`, ...; the minor is `0` or `[1-9][0-9]*`, ASCII digits only) is
+  read as `v=1`, so that a later minor, which may only add what earlier readers can ignore, is meant not to break 0.6.0
+  and later. Fresh sends still write `1`, and an already encoded message's version is sent unchanged; sending a minor
+  needs every consumer on 0.6.0 or later, since 0.5.x refuses it. A later reader may require a minimum minor (with
+  release notes, since that refuses what earlier readers accepted) and accepts every minor from that minimum through
+  `2147483647`; this version requires none. The README's "Metadata versions" gives the rules.
 - Added the [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain gate as a
   `supply-chain` workflow: it compares each pull request's base and head against one advisory snapshot, and scans
   `main`.

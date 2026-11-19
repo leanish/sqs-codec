@@ -1495,8 +1495,8 @@ class SqsCodecInterceptorTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"0", "01", "+1", "2", "02", "3"})
-    void modifyResponse_refusesAVersionThatIsNotExactlyOne(String version) {
+    @ValueSource(strings = {"0", "01", "+1", "2", "02", "3", "2.0", "1.", "1.01", "1.x", "1.1.1"})
+    void modifyResponse_refusesAVersionOtherThanOneOrOneOfItsMinors(String version) {
         ReceiveMessageResponse response = receivedWith(compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD), "v=" + version + ";c=zstd;e=base64;h=none;l=12");
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
@@ -1511,6 +1511,35 @@ class SqsCodecInterceptorTest {
         Map<String, MessageAttributeValue> attributes = Map.of(
                 CodecAttributes.META, MessageAttributeUtils.stringAttribute("v=1;c=zstd;e=base64;h=none"));
         SendMessageRequest request = SendMessageRequest.builder().messageBody(body).messageAttributes(attributes).build();
+
+        SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(sent).isSameAs(request);
+    }
+
+    @Test
+    void modifyResponse_decodesACompressedMessageWithALaterMinorVersion() {
+        int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
+        ReceiveMessageResponse response = receivedWith(
+                compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD),
+                "v=1.3;c=zstd;e=base64;h=none;l=" + length);
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes());
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(PAYLOAD);
+    }
+
+    @Test
+    void modifyRequest_preEncodedLaterMinorVersionIsSentWithItsMetadataUnchanged() {
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META, MessageAttributeUtils.stringAttribute(
+                        "v=1.3;c=zstd;e=base64;h=none;l=" + PAYLOAD.getBytes(StandardCharsets.UTF_8).length));
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(compressedBody(CompressionAlgorithm.ZSTD, PAYLOAD))
+                .messageAttributes(attributes)
+                .build();
 
         SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor()
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());

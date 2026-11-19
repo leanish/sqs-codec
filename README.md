@@ -182,6 +182,14 @@ a later minor is meant not to break it:
   always carrying a valid `l`, fits; a new compression or checksum id, or a reader that refuses what earlier ones
   accepted (such as a missing `l`), doesn't fit a minor, and its release notes say what the upgrade needs. While
   sqs-codec is 0.x, the project handles such changes that way rather than by moving to a new major.
+- A reader may require a minimum minor of its major, once it relies on what that minor guarantees; a bare `1` counts as
+  `1.0`. Its version check then accepts every minor from that minimum through `2147483647`, and the message is still
+  validated as usual. No writer writes a minor above `2147483647`, so a reader that compares minors as numbers may
+  refuse a larger one; this version accepts it. Requiring a minimum refuses messages earlier readers accepted (a
+  minimum of `1.1` would refuse the `v=1` that 0.6.0 sends), so its release notes say so, as above, and a consumer
+  gets it only once every message it can receive, through a relay or redrive included, meets it. This version requires
+  none, and neither does the change planned for 0.7.0 (see [Before 0.7.0](#before-070)), which requires a valid `l`
+  instead.
 - A minor only reaches readers that accept it, so sending `1.<minor>` needs every consumer of the queue on 0.6.0 or
   later, whoever sends it: a writer, or a relay or redrive that forwards an already encoded message, which the
   interceptor sends unchanged. 0.5.x refuses every dotted version.

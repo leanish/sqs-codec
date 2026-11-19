@@ -90,8 +90,8 @@ Defaults:
   changes it.
 - The interceptor rejects a decoded payload over `maxDecodedPayloadBytes` with `DecompressedPayloadTooLargeException`, wherever it decodes one: on receive, and when it validates an already encoded message before sending. Decompression stops as soon as it passes the limit, so a small compressed message can't expand without bound; an encoding-only payload is bounded by its encoded size, and its decoded bytes are checked once decoded. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive. It bounds only what the interceptor decodes, that is compressed or encoded (`e` not `none`) payloads: a checksum-only (`c=none,e=none`) or metadata-free body is returned as received, and a fresh outbound body isn't checked against it. A producer can therefore send a compressed message whose `l` is over a consumer's limit, and that consumer refuses it; keep consumers' limits at least as large as what producers send.
 - Every compressed `v=2` payload declares its raw length (`l`) and must decode to exactly that many bytes, on receive and when an already encoded message is validated before sending. A compressed `v=2` payload without a valid `l` fails with `UnsupportedCodecMetadataException`; an `l` over the limit fails with `DecompressedPayloadTooLargeException` before decompressing; decompression stops with `DecompressedPayloadTooLargeException` as soon as it passes `l`, and a payload that decodes to fewer bytes fails with `CompressionException`. `l` is ignored when `c=none`.
-- A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until a dead-letter queue takes it (once it reaches the queue's
-  `maxReceiveCount`) or its retention period ends.
+- A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so SQS redelivers it until its retention period ends or, if the queue has a dead-letter queue, until that takes it
+  (after `maxReceiveCount` receives).
 - The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten.
 - A decoded payload must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException`, on receive and when an already encoded message is validated before sending.
 - Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. For `v=2`, the decoder never allocates a window larger than `l` needs (rounded up to a power of two, at least 1 KiB): a frame that declares a larger one is refused with `DecompressedPayloadTooLargeException`, unless zstd decodes it in a single step straight into its output, which allocates no window; the output stays bounded by `l` either way. Snappy's declared length is checked against `l` (`maxDecodedPayloadBytes` for `v=1`) before it allocates.
@@ -202,7 +202,7 @@ SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor(
 
 This version reads `v=1` more strictly than 0.5.x, and one message it refuses fails the whole receive. Before
 replacing consumers, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:
-- the payload must decode to valid UTF-8;
+- the payload must decode to valid UTF-8 (raising `maxDecodedPayloadBytes` doesn't help);
 - a compressed or encoded payload must decode to at most `maxDecodedPayloadBytes`;
 - a numeric, non-negative `l` must equal the decoded length in bytes (0.5.x ignored mismatches; raising the limit
   doesn't bypass this);

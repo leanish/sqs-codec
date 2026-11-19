@@ -68,7 +68,7 @@ All notable changes to this project are documented in this file.
 - Breaking: `SqsCodecInterceptor.defaultInterceptor()` is now `defaultInterceptor(MetadataVersion)`, with no default,
   so an upgrade can't start writing a version 0.5.x consumers refuse without anyone choosing it; code compiled against
   0.5.x that calls `defaultInterceptor()` fails with `NoSuchMethodError` and must be rebuilt. `MetadataVersion.V2`
-  writes the new format; `V1` writes 0.5.x's `v=1`, with the same payload, checksum and `l`, for the upgrade, and is
+  writes the new format; `V1` writes 0.5.x's `v=1`, with the same payload, checksum and `l` as `V2`, for the upgrade, and is
   deprecated and removed in 0.8.0, while the argument stays required. `withOutboundMetadataVersion(...)` switches it.
   While writing `v=1`, a pre-encoded message whose otherwise valid metadata is `v=2` is refused on send.
 - The metadata format is now `v=2`, the one above, which 0.5.x consumers refuse. `v=1` messages are still read,

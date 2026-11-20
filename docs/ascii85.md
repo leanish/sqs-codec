@@ -70,9 +70,9 @@ the transport format stable between `sqs-codec` endpoints.
 
 ### Size trade-off
 
-`ASCII85` is smaller than Base64 in theory, but the practical size win is
-modest. The feature exists as an optional transport trade-off, not as a new
-default encoding for every payload.
+`ASCII85` encodes four bytes as five characters, where Base64 encodes three as
+four, so it's somewhat smaller. The feature exists as an optional transport
+trade-off, not as a new default encoding for every payload.
 
 ## Non-decisions
 

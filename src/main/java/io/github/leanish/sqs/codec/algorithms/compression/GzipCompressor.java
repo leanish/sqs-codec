@@ -66,6 +66,20 @@ public class GzipCompressor implements Compressor {
     }
 
     /**
+     * Decompresses {@code payload}, producing at most 16 MiB (the interceptor's default limit).
+     *
+     * @param payload the compressed bytes
+     * @return the decompressed bytes
+     * @deprecated use {@link #decompress(byte[], int)}, which takes the limit
+     */
+    @Deprecated(since = "0.6.0")
+    @Override
+    // Declared again so code that looks the 0.5.x method up on this class (getDeclaredMethod) still finds it.
+    public byte[] decompress(byte[] payload) {
+        return Compressor.super.decompress(payload);
+    }
+
+    /**
      * Maps relative levels onto gzip's deflater scale: 1, 3, default(6), 8, 9.
      */
     static int deflaterLevel(CompressionLevel compressionLevel) {

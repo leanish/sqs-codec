@@ -81,7 +81,8 @@ public class CodecMetadataAttributeHandler {
      * @param payloadBytes the raw payload, before compression and encoding
      * @param includeRawPayloadLength ignored
      * @return the metadata to apply to the message
-     * @deprecated {@code l} is always written; use {@link #forOutbound(CodecConfiguration, byte[])}
+     * @deprecated {@code l} is written whenever the configuration compresses; use
+     *             {@link #forOutbound(CodecConfiguration, byte[])}
      */
     @Deprecated(since = "0.6.0")
     // Not @InlineMe: inlining would drop the evaluation of the caller's flag expression.
@@ -117,14 +118,17 @@ public class CodecMetadataAttributeHandler {
     /**
      * The raw payload length the sender declared ({@code l}): possibly absent for a compressed payload (0.5.x writers
      * could omit it, and a malformed value reads as absent), and always absent without compression.
+     *
+     * @return the declared raw length, or empty
      */
     public OptionalInt rawLength() {
         return rawLength < 0 ? OptionalInt.empty() : OptionalInt.of(rawLength);
     }
 
     /**
-     * Writes this metadata as {@code x-codec-meta}, in canonical form: only the keys this version knows, and metadata
-     * read as version {@code 1.y} as {@code v=1}, since neither the minor nor unknown keys are kept. To forward a
+     * Writes this metadata as {@code x-codec-meta}: only the keys this version knows, in its key order, and metadata read
+     * as version {@code 1.y} as {@code v=1}, since neither the minor nor unknown keys are kept; the checksum value is
+     * written as it was parsed. To forward a
      * message, pass on its attributes as they are, as the interceptor does for an already encoded message.
      *
      * @param attributes the message attributes to write into

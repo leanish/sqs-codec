@@ -5,33 +5,33 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Security
-- Decompression is bounded. A small gzip or zstd payload could decode to gigabytes (1 GiB of zeros is about 33 KB with
-  zstd and 1 MB with gzip) and exhaust a consumer's memory on receive. Decoding now stops with
-  `DecompressedPayloadTooLargeException` as soon as it passes `maxDecodedPayloadBytes` (default 16 MiB, set with
-  `withMaxDecodedPayloadBytes(...)`), on receive and when validating already encoded outbound messages; the payload's
-  raw length (`l`), which the sender controls, doesn't bound it. Snappy's declared length is checked before it
-  allocates, and zstd's decoder never allocates a window larger than the configured limit needs, rounded up to a power
-  of two (at least 1 KiB): a frame that declares a larger one is refused, unless zstd decodes it in a single step
-  straight into its output, which allocates no window.
-- The build tools no longer use a Guava affected by
-  [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) or
-  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56). sqs-codec doesn't
-  depend on Guava: the published library and its runtime dependencies don't change.
-- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. `1.1.10.10`, the lowest stable version
-  fixing all seven advisories published in snappy-java's repository on 2026-10-03, including CVE-2026-90559
-  (out-of-bounds accesses, unbounded allocations, stream recursion and pooled-buffer reuse), was taken before the
-  usual seven-day release cooldown.
-- Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-28`, which fixes seven advisories published in
-  zstd-jni's repository:
+- Decompression is bounded. A small gzip or zstd payload could decode to gigabytes and exhaust a consumer's memory on
+  receive, since decoding had no byte limit. Decoding now fails with `DecompressedPayloadTooLargeException` once it
+  passes `maxDecodedPayloadBytes` (default 16 MiB, set with `withMaxDecodedPayloadBytes(...)`), on receive and when
+  validating already encoded outbound messages; the payload's raw length (`l`), which the sender controls, doesn't
+  bound it. Snappy's declared length is checked before it allocates. zstd's streaming decoder accepts a window up to
+  what the limit needs, rounded up to a power of two (at least 1 KiB); until 0.7.0, when it refuses a frame's window
+  (as for 0.5.x's streamed frames, which can declare a larger one), the payload is decoded again in one step into a
+  buffer of at most the limit, which allocates no window.
+- The build moved to java-conventions `0.7.0` for its fix of
+  [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) and
+  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56) in the Guava its
+  build tooling used. The published library doesn't depend on Guava.
+- Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. `1.1.10.10`, released on 2026-10-03 and
+  adopted on 2026-10-07, is the first version with fixes for all seven advisories published in snappy-java's
+  repository that day (out-of-bounds accesses, unbounded allocations, stream recursion and pooled-buffer reuse);
+  CVE-2026-90559, one of them, was fixed in `1.1.10.9`.
+- Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-28`, for advisories published in zstd-jni's
+  repository:
   - three published on 2026-10-28, fixed in `1.5.7-25` (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5,
     GHSA-h5m7-4hv9-cvp3: memory-safety bugs in dictionary training and multi-dictionary decompression, which this
     library doesn't use);
   - one published on 2026-11-08, fixed in `1.5.7-26` (GHSA-8hfr-vm4w-9gfg: an integer underflow in FASTCOVER
     dictionary training, which this library doesn't use);
-  - three published on 2026-11-14, fixed in `1.5.7-28` (GHSA-779h-x4xj-2f4f, GHSA-c62c-wjcx-gjxx,
-    GHSA-fh94-9rh7-3mwc).
+  - three published on 2026-11-14 (GHSA-779h-x4xj-2f4f; GHSA-c62c-wjcx-gjxx, a follow-up to the October
+    multi-dictionary fix; GHSA-fh94-9rh7-3mwc), which the project moved to `1.5.7-28` for.
 
-  The moves to `1.5.7-25` and `1.5.7-28` were taken before the seven-day release cooldown, on the owner's decision.
+  The moves to `1.5.7-25` and `1.5.7-28` were taken before the seven-day release cooldown.
 - The workflows use `gradle/actions` `v6.4.1`, which fixes
   [GHSA-chpw-2mqm-95cc](https://github.com/gradle/actions/security/advisories/GHSA-chpw-2mqm-95cc): the dependency
   graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
@@ -40,25 +40,25 @@ All notable changes to this project are documented in this file.
 - The build moved to java-conventions `0.7.0`, for the Guava fix above and newer build checks; no code changes were
   needed.
 - The repository's copy of an early java-conventions pre-commit hook (`scripts/git-hooks/pre-commit`) is removed, so
-  `installGitHooks` (run by `./gradlew build`) installs the conventions' current hook instead. Besides running Spotless
-  and Checkstyle, it refuses a commit when a staged file differs from its working copy after formatting, including a
-  partially staged file. With Git's default hooks path, the next build replaces an unmodified copy of the old hook
-  installed by an earlier version, when no checksum record says otherwise.
+  `installGitHooks` (run by `./gradlew build`) installs the conventions' current hook instead; java-conventions
+  documents what it checks and when it replaces an earlier copy.
 - The repository's own Checkstyle files (`config/checkstyle/`) are removed, so Checkstyle uses the conventions'
-  configuration. The removed one was the conventions' configuration without the Jackson 2 import rule, and its
-  suppressions matched nothing here. Without it, Spotless also orders imports like Checkstyle's `ImportOrder`; no file
-  needed changes.
+  configuration, which adds a Jackson 2 import rule to the removed one; Checkstyle passes without the removed
+  suppressions. Without it, Spotless also orders imports like Checkstyle's `ImportOrder`; no file needed changes.
 - The build no longer configures `JavaExec` tasks, which this library doesn't have.
 - Upgraded the Gradle wrapper from `9.8.0` to `9.9.1`, and `software.amazon.awssdk:bom` (compile-only and tests) from
   `2.55.10` to `2.57.13`.
-- `Compressor.decompress(byte[] payload, int maxLength)` is new, so no decompression path is unbounded; a class that
-  implements `Compressor` itself has to implement it. The one-argument `decompress(byte[])` is kept, deprecated, as a
-  default method, so code built against 0.5.x still links; for the built-in compressors, it's now bounded like a
-  receive with the 16 MiB default (failing with `DecompressedPayloadTooLargeException` past 16 MiB, or when zstd
-  would have to allocate a window larger than 16 MiB needs), where 0.5.x had no limit.
+- `Compressor.decompress(byte[] payload, int maxLength)` is new, and the built-in compressors bound every decompression
+  with it; a class that implements `Compressor` itself has to implement it. The one-argument `decompress(byte[])` is
+  kept, deprecated, as a default method that the built-in compressors still declare, so code built against 0.5.x
+  still links; for them, it's now bounded like a receive with the 16 MiB default (failing with
+  `DecompressedPayloadTooLargeException` past 16 MiB), where 0.5.x had no limit.
+- `SqsCodecInterceptor.defaultInterceptor()` returns a new (immutable) interceptor on each call, instead of one shared
+  instance.
 - Fresh compressed sends always write the raw payload length (`l`), which 0.7.0 will require on compressed messages.
   `withIncludeRawPayloadLength(boolean)` is kept, deprecated, with no effect: `false` no longer omits `l`, so such
-  clients send a few bytes more per compressed message. The metadata version stays `v=1`, so no producer has to wait
+  clients send a few bytes more per compressed message, which can take a message that filled SQS's size limit over
+  it. The metadata version stays `v=1`, so no producer has to wait
   for its consumers: once retained and incoming traffic passes the README's checks, clients can be upgraded from
   0.5.x, or rolled back to it, in any order (rolling back also needs that no minor-version message, see Added, can
   reach a 0.5.x consumer).
@@ -74,16 +74,20 @@ All notable changes to this project are documented in this file.
   what has to happen before `l` becomes required.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (streamed frames declared the level's default window, 128 MiB at `MAXIMUM`, even for a few
-  bytes); 0.5.x reads them. A streamed frame whose window is larger than the configured limit needs is refused, as
-  above.
-- Tests and PIT load Mockito as a `-javaagent` instead of letting it attach itself at runtime, which JDK 21+ warns about
-  and sandboxed environments refuse.
-- Publishing to GitHub Packages now separates building from uploading. The build runs with read access only and stages
-  sqs-codec's publication; a separate job holds the package write token and runs none of the repository's code. The
-  upload job restricts publication paths to the configured coordinates and the expected files for the build's version,
-  and rejects files it finds already published with different bytes. Publication still relies on the build's output and
-  version information. Dispatch releases from their matching `vX.Y.Z` tag and SNAPSHOTs from `main`. Both jobs come from
-  java-conventions' reusable publishing workflow.
+  bytes); 0.5.x reads them. Until 0.7.0, when streaming refuses a frame's window as larger than the configured limit
+  needs, as for such 0.5.x frames, the payload is decoded again in one step into a buffer that starts at 1 MiB (or the
+  limit, if smaller) and grows up to the limit, which allocates no window; 0.7.0 drops this retry (see the README's
+  "Before 0.7.0"). 0.5.x `MAXIMUM` messages whose decoded payload fits the limit are therefore read with the default
+  configuration.
+- Tests and PIT load Mockito at JVM startup (`-javaagent`), avoiding the dynamic-attach warning JDK 21+ prints and
+  environments that forbid dynamic attach.
+- Removed the scheduled Dependabot version updates.
+- Resolved dependency graph submission moved to its own workflow (`dependency-graph.yml`): one job builds the graph with
+  read access only, and a separate job submits it, skipped for pull requests from forks.
+- Publishing to GitHub Packages delegates to java-conventions' reusable publishing workflow, after `Build` and the
+  legacy-JDK tests: it stages sqs-codec's publication in a read-only build and uploads it from a separate job that holds
+  the package write token (java-conventions documents its checks). Dispatch releases from their matching `vX.Y.Z` tag
+  and SNAPSHOTs from `main`.
 
 ### Added
 - Minor metadata versions: `v=1.<minor>` (`1.0`, `1.1`, ...; the minor is `0` or `[1-9][0-9]*`, ASCII digits only) is
@@ -92,13 +96,13 @@ All notable changes to this project are documented in this file.
   needs every consumer on 0.6.0 or later, since 0.5.x refuses it. A later reader may require a minimum minor (with
   release notes, since that refuses what earlier readers accepted) and accepts every minor from that minimum through
   `2147483647`; this version requires none. The README's "Metadata versions" gives the rules.
-- Added the [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain gate as a
-  `supply-chain` workflow: it compares each pull request's base and head against one advisory snapshot, and scans
-  `main`.
+- Added a `supply-chain` workflow that runs the pinned
+  [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain check on pull requests,
+  pushes to `main`, a daily schedule and manual runs.
 
 ### Fixed
-- A decoded payload that isn't valid UTF-8 fails with `InvalidPayloadException`, on receive and when an already encoded
-  message is validated before sending. It used to be delivered with the invalid bytes replaced by U+FFFD, after its
+- A decoded (compressed or encoded) payload that isn't valid UTF-8 fails with `InvalidPayloadException`, on receive
+  and when an already encoded message is validated before sending. It used to be delivered with the invalid bytes replaced by U+FFFD, after its
   checksum had passed on the original bytes. Bodies the interceptor encodes are always valid UTF-8, so only messages
   built elsewhere are affected; like any decoding error, such a message fails the whole receive.
 - Upgrading: retained messages built outside the interceptor that don't decode to valid UTF-8
@@ -109,6 +113,9 @@ All notable changes to this project are documented in this file.
 - `docs/ascii85.md` and the README said the experimental ASCII85 decoder accepts only the canonical form it writes. It
   also accepts other spellings of a final partial group that decode to the same bytes (`!"` for the byte `00`, whose
   form is `!!`); the docs now say so.
+- The README's client examples say why the SDK's MD5 check has to be disabled (it would check SQS's MD5 of the encoded
+  body against the decoded one) instead of calling it handled by the interceptor, the error-handling section covers
+  `SqsAsyncClient`, and the note on refused messages follows SQS's visibility timeout and redrive policy.
 
 ## 0.5.1 - 2026-10-03
 

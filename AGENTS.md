@@ -28,4 +28,4 @@ Always run `./gradlew check` after each code change.
 ## Versions and releases
 - Between releases, `main` carries the next version with `-SNAPSHOT`; other PRs never change `version`.
 - A release PR only drops `-SNAPSHOT` (plus the dated `CHANGELOG.md` heading); the `vX.Y.Z` tag goes on its merge commit, and `publishing-github.yml` is dispatched from that tag (`gh workflow run publishing-github.yml --ref vX.Y.Z`).
-- Right after publishing, a PR that only starts the next development version (`X.Y.(Z+1)-SNAPSHOT`); the release can still pick a higher number if a feature or breaking change lands first.
+- Right after publishing, a PR that only starts the next development version (`X.Y.(Z+1)-SNAPSHOT`); if a feature or breaking change needs a higher number, a separate version-only PR moves the SNAPSHOT before the release PR.

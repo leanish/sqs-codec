@@ -5,12 +5,19 @@
  */
 package io.github.leanish.sqs.codec.algorithms.compression;
 
+import java.io.Serial;
+
 import io.github.leanish.sqs.codec.CodecException;
 
 /**
  * Thrown when payload compression or decompression fails.
  */
 public class CompressionException extends CodecException {
+
+    // 0.5.x's computed value: the members added in 0.6.0 would change it, and an instance serialized by 0.5.x would no
+    // longer deserialize.
+    @Serial
+    private static final long serialVersionUID = -8112723582884947926L;
 
     protected CompressionException(String message) {
         super(message);

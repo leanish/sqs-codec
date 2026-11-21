@@ -79,13 +79,14 @@ Defaults:
 - Encoding: `NONE`
 - Checksum: `MD5`
 - When compression is enabled and encoding remains `NONE`, the effective payload encoding is `BASE64`.
-- `ASCII85` is experimental; it's written in a canonical dialect without `<~ ~>` framing, whitespace, or `z`/`y` shorthands, which the decoder also refuses.
+- `ASCII85` is experimental; it's written in a canonical dialect without `<~ ~>` framing, whitespace, or `z`/`y` shorthands, which the decoder also refuses (it does accept other spellings of a final partial group that decode to the same bytes; see [docs/ascii85.md](docs/ascii85.md)).
 - `ASCII85` is intentionally transport-focused between `sqs-codec` endpoints rather than interoperability-focused with third-party ASCII85 tools.
 - `ASCII85` encodes four bytes as five characters, where Base64 encodes three as four, so it's somewhat smaller for full groups (some short inputs tie); treat it as a niche transport option rather than a new default.
 - `MD5` and `SHA256` detect accidental corruption. They're unkeyed, so neither authenticates the producer: whoever can send to the queue can attach a matching checksum to any body, or send `h=none`. Control who can send with the queue's access policy.
 - `skipCompressionWhenLarger`: `true`
 - `maxDecodedPayloadBytes`: `16 MiB` (`SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES`)
-- The interceptor rejects a decoded payload over `maxDecodedPayloadBytes` with `DecompressedPayloadTooLargeException`, wherever it decodes one: on receive, and when it validates an already encoded message before sending. The streaming decoders check the output after each read (of up to 8 KiB) and refuse a read that would pass the limit, so a small compressed message can't expand without bound; an encoding-only payload is bounded by its encoded size, and its decoded bytes are checked once decoded. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive. It bounds only what the interceptor decodes, that is compressed or encoded (`e` not `none`) payloads: a checksum-only (`c=none,e=none`) or metadata-free body is returned as received, and a fresh outbound body isn't checked against it. A producer can therefore send a compressed message whose payload is larger than a consumer's limit, and that consumer refuses it once decoding passes the limit; keep consumers' limits at least as large as what producers send.
+- The interceptor rejects a decoded payload over `maxDecodedPayloadBytes` with `DecompressedPayloadTooLargeException`, wherever it decodes one: on receive, and when it validates an already encoded message before sending. The streaming decoders check the output after each read (of up to 8 KiB) and refuse a read that would pass the limit, so a small compressed message can't expand without bound; an encoding-only payload is bounded by its encoded size, and its decoded bytes are checked once decoded. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive. It bounds only what the interceptor decodes, that is compressed or encoded (`e` not `none`) payloads: a checksum-only (`c=none,e=none`) or metadata-free body is returned as received.
+- On a fresh send, a payload the interceptor is configured to compress or encode is refused with `DecompressedPayloadTooLargeException` when its UTF-8 bytes exceed `maxDecodedPayloadBytes`, before it's compressed or encoded, since receivers with that limit would refuse it once compressed or encoded. The configured algorithms decide, not the final metadata: such a payload is refused even when `skipCompressionWhenLarger` would have sent it as is. The interceptor fails the request before SQS sees it, so for a batch send the whole batch fails, not only that entry (unlike the per-entry failures SQS itself can report for a batch it received). A checksum-only send isn't checked. A consumer whose limit is smaller than the producer's still refuses what's over its own; keep consumers' limits at least as large as producers'.
 - A compressed payload's raw length (`l`) is the sender's claim, so it never bounds decompression: `maxDecodedPayloadBytes` does. When `l` is usable (a non-negative integer that fits in a Java `int`), the payload must decode to exactly that many bytes, or it fails with `CompressionException`, on receive and when an already encoded message is validated before sending. 0.6.x still decodes a compressed payload whose `l` is missing or not a usable number, as 0.5.x writers could send; 0.7.0 will refuse it (see [Before 0.7.0](#before-070)). `l` is ignored when `c=none`.
 - A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so it can be
   received again once its visibility timeout ends, until the queue's retention period expires it or, if the queue has a
@@ -93,10 +94,10 @@ Defaults:
 - The limit bounds each payload's decoded bytes, not memory: a receive returns up to ten messages, so its decoded payloads together can reach ten times the limit, before counting their `String` bodies, the encoded bodies, temporary buffers, native memory and concurrent receives.
 - A decoded payload (compressed or encoded) must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException`, checked only after the `l` check and any checksum have passed (a checksum mismatch is reported first, as `ChecksumValidationException`), on receive and when an already encoded message is validated before sending. A checksum-only or metadata-free body isn't decoded, so it isn't checked.
 - Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. Compressing holds an output buffer about the size of the raw payload besides the payload itself, even when the result is small.
-- On receive, zstd's buffered streaming decoder may hold a window up to what `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window; a limit above 128 MiB lets it buffer a larger window than 0.5.x's default did); the frame decides what it actually allocates. Until 0.7.0, when streaming refuses a frame's window as larger, as with streamed frames from 0.5.x's `MAXIMUM` level, which declare a 128 MiB window whatever their size, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if smaller) and grows fourfold, decoding again, up to the limit or a conservative Java array ceiling (`Integer.MAX_VALUE - 64`), whichever is lower: zstd uses that output as its history and allocates no separate window buffer. The decoded output stays bounded by the limit either way.
+- On receive, zstd's buffered streaming decoder may hold a window up to what `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window; a limit above 128 MiB lets it buffer a larger window than 0.5.x's default did), where the loaded native build supports the required window log; the frame decides what it actually allocates. Until 0.7.0, when streaming refuses a frame's window as larger, as with streamed frames from 0.5.x's `MAXIMUM` level, which can declare a 128 MiB window even for a few bytes of input, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if smaller) and grows fourfold, decoding again, up to the limit or a conservative Java array ceiling (`Integer.MAX_VALUE - 64`), whichever is lower: zstd uses that output as its history and allocates no separate window buffer. The decoded output stays bounded by the limit either way.
 - Snappy parses and checks the declared length itself, refusing a header it can't read (`CompressionException`); the codec then refuses a declared length over `maxDecodedPayloadBytes` before allocating the decoded output array.
-- `DecompressedPayloadTooLargeException` means the payload was refused against `maxDecodedPayloadBytes`: decoding produced more than it (or than zstd's one-step array ceiling, for a limit within 64 bytes of `Integer.MAX_VALUE`), or snappy's declared length is over it. It doesn't establish the payload's actual decoded size.
-- When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if the compressed and encoded body would be the same size as the original body or larger, the interceptor sends the original body and falls back to `c=none,e=none`.
+- `DecompressedPayloadTooLargeException` means the payload was refused against `maxDecodedPayloadBytes`: decoding (decompressing, or decoding an encoding-only payload) passed it, zstd's one-step retry couldn't fit the output in its largest permitted array (the limit, or the array ceiling for a limit within 64 bytes of `Integer.MAX_VALUE`), or snappy's declared length is over it; on a fresh send, the payload to compress or encode is over it. On decode, it doesn't establish the payload's actual decoded size.
+- When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, for a fresh send within the limit, if the compressed and encoded body would be the same size as the original body or larger, the interceptor sends the original body and falls back to `c=none,e=none`.
 - When outbound processing resolves to `c=none`, `e=none` and `h=none`, the interceptor does not add `x-codec-meta`.
 - Compression level is local send-side configuration only; it does not change codec metadata.
 - When unset, each compression algorithm uses its own built-in default.
@@ -219,20 +220,24 @@ upgraded, or rolled back to 0.5.x, in any order, including
 when writers and consumers form a cycle (services that send to each other, or a client that sends to a queue it also
 consumes). Fresh compressed sends always write `l`: `;l=` and its digits count toward SQS's message-size limit, which
 covers the body and the attributes together (and batch sends have a total limit too), so a message from a 0.5.x client
-that turned `l` off and filled the limit can now go over it, and the send fails; the one-pass zstd writer can also
-change the compressed body's size.
-Every public 0.5.x method is still there, so code built against 0.5.x links without recompiling: the 0.5.x methods that changed are kept, deprecated
+that turned `l` off and filled the limit can now go over it: SQS rejects the message, or an oversized batch (check
+the per-entry results of batch sends too); the one-pass zstd writer can also change the compressed body's size.
+Every public 0.5.x method of the library's API is still there, so external code built against 0.5.x links without recompiling: the 0.5.x methods that changed are kept, deprecated
 (`withIncludeRawPayloadLength(boolean)` and the three-argument `CodecMetadataAttributeHandler.forOutbound` ignore their
 flag and write `l` whenever they compress, and the latter refuses a version other than `1`, as the two-argument form
 does), and the one-argument `decompress(byte[])` is still declared by the built-in compressors, and by `Compressor` as
 a default method, now bounded like a receive with the 16 MiB default.
+A producer configured to compress or encode now refuses, before sending, a payload whose UTF-8 bytes exceed its
+`maxDecodedPayloadBytes` (16 MiB by default), which 0.5.x sent; raise the limit on producers and consumers together if
+such payloads are expected.
 A class implementing `Compressor` itself has to implement the two-argument `decompress` once recompiled; one built
 against 0.5.x and not recompiled throws `AbstractMethodError` if that method is called on it (the interceptor never
 calls it: it uses only the built-in compressors).
 
 This version reads metadata more strictly than 0.5.x in the ways below (it also accepts minor versions, which 0.5.x
-refused), and one message it refuses fails the whole receive. Before
-replacing consumers, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:
+refused), and one message it refuses fails the whole receive. A relay that forwards already encoded messages validates
+them with the same checks before sending, so an upgraded relay's send fails where 0.5.x forwarded the message. Before
+replacing consumers or relays, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:
 - a compressed or encoded payload must decode to valid UTF-8 (raising `maxDecodedPayloadBytes` doesn't help);
 - a compressed or encoded payload must decode to at most `maxDecodedPayloadBytes`;
 - on a compressed message, an `l` that parses as a non-negative Java `int` must equal the decoded length in bytes
@@ -248,8 +253,10 @@ delayed and in-flight messages, dead-letter queues and replay, and what was sent
 - no message with a minor version (`v=1.<minor>`), which 0.5.x refuses. 0.6.x's fresh sends write only `1`, so such
   messages come only from a later writer or from metadata built elsewhere, possibly forwarded by a relay. Look for
   them in the raw `x-codec-meta`, since `CodecConfiguration.version()` reports `1`;
-- no zstd frame from an encoder outside this library that 0.6.x reads only through its one-step retry: 0.5.x's
-  streaming decoder can refuse its window.
+- no zstd frame, from an encoder outside this library, that the target 0.5.x reader can't decode: check retained and
+  incoming external frames against it, in particular any that 0.6.x reads only through its one-step retry (0.5.x's
+  streaming decoder can refuse their window; one within its 128 MiB default can pass that check, but verify decoding
+  with that reader).
 
 ### Before 0.7.0
 
@@ -264,7 +271,7 @@ one-step retry for zstd frames whose window streaming refuses, so such frames wi
 - retained compressed messages without a valid `l` are drained, counting delayed and in-flight messages and any
   dead-letter queue or replay that can bring them back;
 - no zstd frame whose window is larger than the consumer's limit needs can still reach it, valid `l` or not: such frames
-  come from 0.5.x writers (which can declare 128 MiB at the `MAXIMUM` level, whatever the message's size) and from encoders outside this
+  come from 0.5.x writers (which can declare 128 MiB at the `MAXIMUM` level, even for a few bytes of input) and from encoders outside this
   library, so those writers stop or upgrade, and retained, forwarded and replayed ones are drained as above. This is
   a conservative check: zstd can still decode some such frames in a single pass, but which ones depends on the frame.
 
@@ -275,10 +282,11 @@ responses. Invalid configuration fails when it's set (a non-positive limit with 
 algorithm with `NullPointerException`; a null compression level is how `withoutCompressionLevel()` clears it), and JVM errors such as `OutOfMemoryError` aren't
 translated.
 
-On receive, a codec rejection reaches the caller with the codec exception in its cause chain. With `SqsClient`, the
-SDK (as observed with 2.57.13) throws an `SdkClientException` ("Unable to unmarshall response"); with `SqsAsyncClient`, the
-returned future completes exceptionally, so `join()` throws a `CompletionException` and `get()` an
-`ExecutionException`. Either way, look for the `CodecException` among the causes:
+On receive, a codec rejection reaches the caller with the codec exception in its cause chain. With AWS SDK for Java v2
+`2.57.13`, the sync response handler wraps it: `SqsClient` throws an `SdkClientException` ("Unable to unmarshall
+response"). With `SqsAsyncClient`, the returned future completes exceptionally, so `join()` throws a
+`CompletionException` and `get()` an `ExecutionException`; inspect its cause chain. Either way, look for the
+`CodecException` among the causes:
 ```java
 try {
     ReceiveMessageResponse response = client.receiveMessage(request);
@@ -307,6 +315,10 @@ try {
     }
 }
 ```
+
+On send, a codec rejection (such as a fresh payload over `maxDecodedPayloadBytes`, or an invalid already encoded
+message) fails the request before it reaches SQS. With `2.57.13`, `SqsClient` throws the codec exception itself,
+not wrapped; with `SqsAsyncClient`, the future completes exceptionally with it as the cause.
 
 ## Development
 

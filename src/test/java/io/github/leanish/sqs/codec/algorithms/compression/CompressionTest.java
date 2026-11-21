@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectStreamClass;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -30,6 +31,13 @@ import com.github.luben.zstd.ZstdOutputStreamNoFinalizer;
 import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 
 class CompressionTest {
+
+    @Test
+    void compressionException_keepsTheSerialVersionUidOf05x() {
+        // serialver of the 0.5.1 jar, so instances serialized by 0.5.x still deserialize.
+        assertThat(ObjectStreamClass.lookup(CompressionException.class).getSerialVersionUID())
+                .isEqualTo(-8112723582884947926L);
+    }
 
     @ParameterizedTest
     @MethodSource("compressorCases")

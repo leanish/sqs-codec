@@ -20,8 +20,10 @@ public interface Compressor {
      * @param payload the compressed bytes
      * @param maxLength the most bytes the payload may decompress to
      * @return the decompressed bytes
-     * @throws DecompressedPayloadTooLargeException when the payload decompresses to more than {@code maxLength} bytes,
-     *         or declares a decoded length over it (snappy checks its declared length before decoding)
+     * @throws DecompressedPayloadTooLargeException when decompressing passes {@code maxLength} bytes, when zstd's
+     *         one-step retry can't fit the output in its largest permitted array ({@code maxLength}, or a ceiling just
+     *         under {@code Integer.MAX_VALUE} if lower), or when the payload declares a decoded length over it (snappy
+     *         checks its declared length before decoding)
      * @throws CompressionException when the payload can't be decompressed, including a snappy header the library
      *         refuses itself
      * @throws IllegalArgumentException when {@code maxLength} is negative

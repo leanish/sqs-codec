@@ -457,6 +457,7 @@ class SqsCodecInterceptorTest {
             CompressionAlgorithm compressionAlgorithm,
             String encodedPayload,
             String expectedMessage) {
+        // A usable l, as 0.6.0 writers send: corrupt compression is reported even when a length is present.
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(encodedPayload)
                 .messageAttributes(Map.of(
@@ -1251,6 +1252,7 @@ class SqsCodecInterceptorTest {
             CompressionAlgorithm compressionAlgorithm,
             String encodedPayload,
             String expectedMessage) {
+        // A usable l, as 0.6.0 writers send: corrupt compression is reported even when a length is present.
         ReceiveMessageResponse response = ReceiveMessageResponse.builder()
                 .messages(Message.builder()
                         .body(encodedPayload)
@@ -1265,6 +1267,22 @@ class SqsCodecInterceptorTest {
                 new ExecutionAttributes()))
                 .isInstanceOf(CompressionException.class)
                 .hasMessage(expectedMessage);
+    }
+
+    @Test
+    void defaultInterceptor_isOneSharedInstanceThatWithersLeaveUnchanged() {
+        SqsCodecInterceptor derived = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.GZIP);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(PAYLOAD)
+                .build();
+
+        SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(SqsCodecInterceptor.defaultInterceptor()).isSameAs(SqsCodecInterceptor.defaultInterceptor());
+        assertThat(derived).isNotSameAs(SqsCodecInterceptor.defaultInterceptor());
+        assertThat(sent.messageAttributes().get(CodecAttributes.META).stringValue()).startsWith("v=1;c=none;e=none;h=md5;");
     }
 
     @Test
@@ -1329,31 +1347,108 @@ class SqsCodecInterceptorTest {
                 .hasMessage("Decompressed payload with none exceeds 4 bytes");
     }
 
-    @Test
-    void modifyRequest_freshCompressedSendIsNotBoundedButAConsumerWithTheSameLimitRefusesIt() {
-        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
-                .withCompressionAlgorithm(CompressionAlgorithm.GZIP)
-                .withMaxDecodedPayloadBytes(512);
+    // 300 characters, 600 UTF-8 bytes: the limit applies to bytes, not characters.
+    private static final String MULTIBYTE_BODY = "é".repeat(300);
+    private static final int MULTIBYTE_BODY_BYTES = 600;
+
+    static Stream<Arguments> decodingOutboundConfigurations() {
+        SqsCodecInterceptor defaults = SqsCodecInterceptor.defaultInterceptor();
+        return Stream.of(
+                Arguments.of(defaults.withCompressionAlgorithm(CompressionAlgorithm.GZIP), "v=1;c=gzip;e=base64;"),
+                Arguments.of(defaults.withCompressionAlgorithm(CompressionAlgorithm.ZSTD), "v=1;c=zstd;e=base64;"),
+                Arguments.of(defaults.withEncodingAlgorithm(EncodingAlgorithm.BASE64), "v=1;c=none;e=base64;"),
+                Arguments.of(defaults.withEncodingAlgorithm(EncodingAlgorithm.ASCII85), "v=1;c=none;e=ascii85;"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("decodingOutboundConfigurations")
+    void modifyRequest_freshPayloadOverTheLimitIsRefusedBeforeEncoding(SqsCodecInterceptor configured, String metadataPrefix) {
+        SqsCodecInterceptor interceptor = configured.withMaxDecodedPayloadBytes(MULTIBYTE_BODY_BYTES - 1);
         SendMessageRequest request = SendMessageRequest.builder()
-                .messageBody("a".repeat(1024))
+                .messageBody(MULTIBYTE_BODY)
+                .build();
+
+        assertThatThrownBy(() -> interceptor.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Payload has 600 bytes, over the 599-byte maxDecodedPayloadBytes of "
+                        + "a send configured to compress or encode");
+    }
+
+    @ParameterizedTest
+    @MethodSource("decodingOutboundConfigurations")
+    void modifyRequest_freshPayloadAtTheLimitIsSentAndReadBack(SqsCodecInterceptor configured, String metadataPrefix) {
+        SqsCodecInterceptor interceptor = configured.withMaxDecodedPayloadBytes(MULTIBYTE_BODY_BYTES);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(MULTIBYTE_BODY)
                 .build();
 
         SendMessageRequest sent = (SendMessageRequest) interceptor.modifyRequest(
                 new ModifyRequestContext(request),
                 new ExecutionAttributes());
-        ReceiveMessageResponse received = ReceiveMessageResponse.builder()
-                .messages(Message.builder()
-                        .body(sent.messageBody())
-                        .messageAttributes(sent.messageAttributes())
-                        .build())
+        ReceiveMessageResponse received = (ReceiveMessageResponse) interceptor.modifyResponse(
+                new ModifyResponseContext(ReceiveMessageResponse.builder()
+                        .messages(Message.builder()
+                                .body(sent.messageBody())
+                                .messageAttributes(sent.messageAttributes())
+                                .build())
+                        .build()),
+                new ExecutionAttributes());
+
+        assertThat(sent.messageAttributes().get(CodecAttributes.META).stringValue()).startsWith(metadataPrefix);
+        assertThat(received.messages().get(0).body()).isEqualTo(MULTIBYTE_BODY);
+    }
+
+    @Test
+    void modifyRequest_freshPayloadOverTheLimitIsRefusedEvenWhenItWouldBeSentUncompressed() {
+        SqsCodecInterceptor interceptor = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.GZIP);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody("abc")
                 .build();
 
-        assertThat(sent.messageAttributes().get(CodecAttributes.META).stringValue())
-                .startsWith("v=1;c=gzip;e=base64;")
-                .endsWith(";l=1024");
-        assertThatThrownBy(() -> interceptor.modifyResponse(new ModifyResponseContext(received), new ExecutionAttributes()))
+        // Within the limit, gzip and Base64 make "abc" larger, so skipCompressionWhenLarger sends it as is...
+        SendMessageRequest sent = (SendMessageRequest) interceptor.withMaxDecodedPayloadBytes(3).modifyRequest(
+                new ModifyRequestContext(request),
+                new ExecutionAttributes());
+        assertThat(sent.messageAttributes().get(CodecAttributes.META).stringValue()).startsWith("v=1;c=none;e=none;");
+        // ...but over it, the configured codec decides, before the fallback is considered.
+        assertThatThrownBy(() -> interceptor.withMaxDecodedPayloadBytes(2)
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with gzip exceeds 512 bytes");
+                .hasMessage("Payload has 3 bytes, over the 2-byte maxDecodedPayloadBytes of "
+                        + "a send configured to compress or encode");
+    }
+
+    @Test
+    void modifyRequest_checksumOnlyPayloadOverTheLimitIsSent() {
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(MULTIBYTE_BODY)
+                .build();
+
+        SendMessageRequest sent = (SendMessageRequest) SqsCodecInterceptor.defaultInterceptor()
+                .withMaxDecodedPayloadBytes(1)
+                .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes());
+
+        assertThat(sent.messageBody()).isEqualTo(MULTIBYTE_BODY);
+        assertThat(sent.messageAttributes().get(CodecAttributes.META).stringValue()).startsWith("v=1;c=none;e=none;h=md5;");
+    }
+
+    @ParameterizedTest
+    @MethodSource("decodingOutboundConfigurations")
+    void modifyRequest_batchWithOneFreshEntryOverTheLimitIsRefusedAsAWhole(
+            SqsCodecInterceptor configured,
+            String metadataPrefix) {
+        SqsCodecInterceptor interceptor = configured.withMaxDecodedPayloadBytes(MULTIBYTE_BODY_BYTES - 1);
+        SendMessageBatchRequest request = SendMessageBatchRequest.builder()
+                .entries(
+                        SendMessageBatchRequestEntry.builder().id("1").messageBody("fits").build(),
+                        SendMessageBatchRequestEntry.builder().id("2").messageBody(MULTIBYTE_BODY).build())
+                .build();
+
+        assertThatThrownBy(() -> interceptor.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Payload has 600 bytes, over the 599-byte maxDecodedPayloadBytes of "
+                        + "a send configured to compress or encode");
     }
 
     @ParameterizedTest

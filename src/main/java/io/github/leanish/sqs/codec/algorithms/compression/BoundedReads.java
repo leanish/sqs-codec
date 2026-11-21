@@ -21,8 +21,9 @@ final class BoundedReads {
 
     /**
      * Reads {@code input} to the decoder's end, so it can verify the trailers and checksums of what it recognizes, and
-     * fails as soon as it yields more than {@code maxLength} bytes: the returned bytes, and the buffer collecting them,
-     * grow only with what was read within the limit (the decoder's own buffers are its own).
+     * fails as soon as it yields more than {@code maxLength} bytes: the accumulator stores at most {@code maxLength}
+     * bytes. Its backing capacity (which may grow past that count), the read buffer, the returned copy and the
+     * decoder's own buffers are separate allocations.
      */
     static byte[] readAtMost(InputStream input, int maxLength, String algorithm) throws IOException {
         requireNonNegative(maxLength);

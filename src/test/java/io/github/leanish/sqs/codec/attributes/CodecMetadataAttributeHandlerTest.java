@@ -231,6 +231,19 @@ class CodecMetadataAttributeHandlerTest {
                 .hasMessage("Unsupported codec version: " + version);
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {0, 2})
+    @SuppressWarnings("deprecation") // exercises the overload kept for 0.5.x callers, which wrote any version
+    void forOutbound_deprecatedOverloadRefusesAVersionReadersWouldRefuse(int version) {
+        CodecConfiguration configuration = new CodecConfiguration(
+                version, CompressionAlgorithm.GZIP, EncodingAlgorithm.BASE64, ChecksumAlgorithm.NONE);
+
+        assertThatThrownBy(() -> CodecMetadataAttributeHandler.forOutbound(
+                configuration, "payload".getBytes(StandardCharsets.UTF_8), true))
+                .isInstanceOf(UnsupportedCodecMetadataException.class)
+                .hasMessage("Unsupported codec version: " + version);
+    }
+
     private static Stream<Arguments> metadataCombinationCases() {
         return Arrays.stream(CompressionAlgorithm.values())
                 .flatMap(compressionAlgorithm -> Arrays.stream(ChecksumAlgorithm.values())

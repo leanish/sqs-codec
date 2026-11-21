@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -1361,7 +1362,8 @@ class SqsCodecInterceptorTest {
         String body = Base64PayloadCodec.instance().encodeToString(
                 compressionAlgorithm.implementation().compress(new byte[8 * 1024 * 1024]));
         // The raw length is the sender's claim, so it doesn't bound the decompression: the configured limit does. (The
-        // zstd frame's 8 MiB window is over what 1 MiB needs, so it's decoded in one step, bounded the same way.)
+        // zstd frame holds 8 MiB of content with a 2 MiB window, over the 1 MiB window a 1 MiB limit admits, so it's
+        // decoded in one step, bounded the same way.)
         ReceiveMessageResponse response = receivedWith(body, "v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=" + 8 * 1024 * 1024);
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
@@ -1434,6 +1436,32 @@ class SqsCodecInterceptorTest {
     }
 
     @ParameterizedTest
+    @ValueSource(ints = {-1, 1})
+    void modifyRequest_preEncodedPayloadWithAWrongRawLengthIsAMismatch(int offset) {
+        int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
+        Map<String, MessageAttributeValue> attributes = Map.of(
+                CodecAttributes.META,
+                MessageAttributeUtils.stringAttribute("v=1;c=gzip;e=base64;h=none;l=" + (length + offset)));
+        String body = compressedBody(CompressionAlgorithm.GZIP, PAYLOAD);
+        SendMessageRequest single = SendMessageRequest.builder().messageBody(body).messageAttributes(attributes).build();
+        SendMessageBatchRequest batch = SendMessageBatchRequest.builder()
+                .entries(SendMessageBatchRequestEntry.builder().id("1").messageBody(body).messageAttributes(attributes).build())
+                .build();
+        String mismatch = "Decompressed payload with gzip has " + length + " bytes, but its metadata declares " + (length + offset);
+
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(single), new ExecutionAttributes()))
+                .isInstanceOf(CompressionException.class)
+                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage(mismatch);
+        assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(batch), new ExecutionAttributes()))
+                .isInstanceOf(CompressionException.class)
+                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage(mismatch);
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"", ";l=", ";l=abc", ";l=-5", ";l=99999999999"})
     void modifyResponse_decodesACompressedPayloadWithoutAUsableRawLength(String rawLength) {
         ReceiveMessageResponse response = receivedWith(
@@ -1461,7 +1489,7 @@ class SqsCodecInterceptorTest {
     @Test
     void modifyResponse_readsA05xMaximumLevelFrameAtTheDefaultLimit() {
         // The maximum level streams with a 128 MiB window, over what the default 16 MiB limit needs, even for a few
-        // bytes: such a frame is decoded in one step, which allocates no window.
+        // bytes: such a frame is decoded in one step, which allocates no separate window buffer.
         int length = PAYLOAD.getBytes(StandardCharsets.UTF_8).length;
         ReceiveMessageResponse response = receivedWith(streamedZstdBody(PAYLOAD, 22), "v=1;c=zstd;e=base64;h=none;l=" + length);
 
@@ -1563,6 +1591,7 @@ class SqsCodecInterceptorTest {
 
     @ParameterizedTest
     @MethodSource("nonUtf8PayloadCases")
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the UTF-8 check loops
     void modifyResponse_refusesADecodedPayloadThatIsNotUtf8(String body, String metadata) {
         ReceiveMessageResponse response = receivedWith(body, metadata);
 
@@ -1574,6 +1603,7 @@ class SqsCodecInterceptorTest {
 
     @ParameterizedTest
     @MethodSource("nonUtf8PayloadCases")
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the UTF-8 check loops
     void modifyRequest_refusesAPreEncodedPayloadThatIsNotUtf8(String body, String metadata) {
         Map<String, MessageAttributeValue> attributes = Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute(metadata));
         SendMessageRequest single = SendMessageRequest.builder().messageBody(body).messageAttributes(attributes).build();
@@ -1623,8 +1653,11 @@ class SqsCodecInterceptorTest {
 
         String metadata = metadataOf(sent);
         assertThat(metadata).startsWith("v=1;" + expectedKeys);
-        assertThat(metadata.endsWith(";l=" + COMPRESSIBLE_PAYLOAD.getBytes(StandardCharsets.UTF_8).length))
-                .isEqualTo(!expectedKeys.startsWith("c=none"));
+        if (expectedKeys.startsWith("c=none")) {
+            assertThat(metadata).doesNotContain("l=");
+        } else {
+            assertThat(metadata).endsWith(";l=" + COMPRESSIBLE_PAYLOAD.getBytes(StandardCharsets.UTF_8).length);
+        }
         ReceiveMessageResponse decoded = (ReceiveMessageResponse) configured.modifyResponse(
                 new ModifyResponseContext(receivedWith(sent.messageBody(), metadata)),
                 new ExecutionAttributes());
@@ -1673,7 +1706,10 @@ class SqsCodecInterceptorTest {
         return request.messageAttributes().get(CodecAttributes.META).stringValue();
     }
 
-    /** One byte, 0xff, that is never valid UTF-8, behind each decoding path, with a valid checksum or none. */
+    /**
+     * One byte, 0xff, that is never valid UTF-8, behind each decoding path, with a valid checksum or none; and, after
+     * more valid text than the check's buffer holds, an invalid byte and a truncated character.
+     */
     private static Stream<Arguments> nonUtf8PayloadCases() {
         byte[] notUtf8 = {(byte) 0xff};
         String md5 = ChecksumAlgorithm.MD5.implementation().checksum(notUtf8);
@@ -1684,7 +1720,38 @@ class SqsCodecInterceptorTest {
                 Arguments.of(base64, "v=1;c=none;e=base64;h=none"),
                 Arguments.of(Ascii85PayloadCodec.instance().encodeToString(notUtf8), "v=1;c=none;e=ascii85;h=md5;s=" + md5),
                 Arguments.of(gzipBase64, "v=1;c=gzip;e=base64;h=md5;s=" + md5 + ";l=1"),
-                Arguments.of(gzipBase64, "v=1;c=gzip;e=base64;h=md5;s=" + md5));
+                Arguments.of(gzipBase64, "v=1;c=gzip;e=base64;h=md5;s=" + md5),
+                Arguments.of(gzipAfterLongText(notUtf8), "v=1;c=gzip;e=base64;h=none"),
+                Arguments.of(gzipAfterLongText(new byte[] {(byte) 0xe2, (byte) 0x82}), "v=1;c=gzip;e=base64;h=none"));
+    }
+
+    private static String gzipAfterLongText(byte[] tail) {
+        byte[] text = "a".repeat(10_000).getBytes(StandardCharsets.UTF_8);
+        byte[] payload = Arrays.copyOf(text, text.length + tail.length);
+        System.arraycopy(tail, 0, payload, text.length, tail.length);
+        return Base64PayloadCodec.instance().encodeToString(CompressionAlgorithm.GZIP.implementation().compress(payload));
+    }
+
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the UTF-8 check loops
+    void modifyResponseAndRequest_acceptMultibyteTextLongerThanTheUtf8CheckBuffer() {
+        // Two-, three- and four-byte characters, the last a surrogate pair, repeated past the check's 4096-char buffer;
+        // the leading "a" shifts them so a surrogate pair straddles each 4096-char boundary.
+        String payload = "a" + "é€🦊".repeat(3_000);
+        String metadata = "v=1;c=gzip;e=base64;h=none;l=" + payload.getBytes(StandardCharsets.UTF_8).length;
+        String body = compressedBody(CompressionAlgorithm.GZIP, payload);
+
+        ReceiveMessageResponse decoded = (ReceiveMessageResponse) SqsCodecInterceptor.defaultInterceptor()
+                .modifyResponse(new ModifyResponseContext(receivedWith(body, metadata)), new ExecutionAttributes());
+        SendMessageRequest preEncoded = SendMessageRequest.builder()
+                .messageBody(body)
+                .messageAttributes(Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute(metadata)))
+                .build();
+
+        assertThat(decoded.messages().get(0).body()).isEqualTo(payload);
+        assertThat(SqsCodecInterceptor.defaultInterceptor()
+                .modifyRequest(new ModifyRequestContext(preEncoded), new ExecutionAttributes()))
+                .isSameAs(preEncoded);
     }
 
     /** A zstd frame as 0.5.x wrote it: streamed, so it declares its level's window and no content size. */

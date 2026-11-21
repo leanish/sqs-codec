@@ -6,7 +6,10 @@
 package io.github.leanish.sqs.codec;
 
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -53,6 +56,7 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private static final int MAX_SQS_MESSAGE_ATTRIBUTES = 10;
+    private static final int UTF8_CHECK_BUFFER_CHARS = 4096;
     /** The default limit on a decoded payload: 16 MiB. */
     public static final int DEFAULT_MAX_DECODED_PAYLOAD_BYTES = 16 * 1024 * 1024;
 
@@ -263,19 +267,36 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
             return message;
         }
 
+        requireUtf8(payloadBytes);
         return message.toBuilder()
-                .body(requireUtf8(payloadBytes))
+                .body(new String(payloadBytes, StandardCharsets.UTF_8))
                 .build();
     }
 
-    /** The decoded payload as text: one that isn't valid UTF-8 is refused rather than altered. */
-    private static String requireUtf8(byte[] payloadBytes) {
+    /**
+     * Refuses a decoded payload that isn't valid UTF-8 rather than letting the {@code String} conversion alter it.
+     *
+     * <p>Decodes into a small reused buffer and discards the characters: decoding the whole payload at once would
+     * allocate a {@code char[]} as long as the payload, while {@code new String(bytes, UTF_8)} afterwards keeps
+     * the JDK's compact one-byte-per-character form for ASCII and Latin-1 text.
+     */
+    private static void requireUtf8(byte[] payloadBytes) {
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        ByteBuffer input = ByteBuffer.wrap(payloadBytes);
+        CharBuffer scratch = CharBuffer.allocate(UTF8_CHECK_BUFFER_CHARS);
         try {
-            return StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(payloadBytes))
-                    .toString();
+            CoderResult result;
+            do {
+                scratch.clear();
+                result = decoder.decode(input, scratch, true);
+                if (result.isError()) {
+                    result.throwException();
+                }
+            } while (result.isOverflow());
+            // No flush: with endOfInput, a truncated last character is already reported as malformed, and the UTF-8
+            // decoder keeps nothing else to flush; the decoder isn't reused.
         } catch (CharacterCodingException e) {
             throw new InvalidPayloadException("Decoded payload is not valid UTF-8", e);
         }

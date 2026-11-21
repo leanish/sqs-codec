@@ -10,7 +10,8 @@ import java.nio.charset.StandardCharsets;
 import com.google.errorprone.annotations.Immutable;
 
 /**
- * Strict canonical ASCII85 codec without framing, whitespace or shorthand forms.
+ * Strict ASCII85 codec without framing, whitespace or shorthand forms: it writes one canonical spelling, and reads it
+ * and the other spellings of a final partial group that decode to the same bytes.
  *
  * <p><b>Experimental:</b> This codec is still experimental and may change before a stable
  * release.

@@ -263,7 +263,7 @@ class CompressionTest {
         assertThat(Zstd.getFrameContentSize(compressed)).isEqualTo(payload.length);
         // The window the frame declares is within what a limit of exactly its length admits, so streaming decodes it
         // and the legacy one-step retry, to be removed in 0.7.0, isn't needed.
-        assertThat(declaredWindowSize(compressed)).isLessThanOrEqualTo(1L << ZstdCompressor.windowLogFor(payload.length));
+        assertThat(declaredWindowSize(compressed)).isLessThanOrEqualTo(payload.length);
         assertThat(compressor.decompress(compressed, payload.length)).isEqualTo(payload);
     }
 
@@ -395,7 +395,8 @@ class CompressionTest {
 
         assertThatThrownBy(() -> new ZstdCompressor().decompress(forged, Integer.MAX_VALUE))
                 .isInstanceOf(CompressionException.class)
-                .isNotInstanceOf(DecompressedPayloadTooLargeException.class);
+                .isNotInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Failed to decompress payload with zstd");
     }
 
     @Test

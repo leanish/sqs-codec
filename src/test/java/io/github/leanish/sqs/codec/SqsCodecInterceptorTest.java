@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -1361,8 +1362,8 @@ class SqsCodecInterceptorTest {
         String body = Base64PayloadCodec.instance().encodeToString(
                 compressionAlgorithm.implementation().compress(new byte[8 * 1024 * 1024]));
         // The raw length is the sender's claim, so it doesn't bound the decompression: the configured limit does. (The
-        // zstd frame holds 8 MiB of content with a 2 MiB window, over the 1 MiB a 1 MiB limit admits, so it's decoded
-        // in one step, bounded the same way.)
+        // zstd frame holds 8 MiB of content with a 2 MiB window, over the 1 MiB window a 1 MiB limit admits, so it's
+        // decoded in one step, bounded the same way.)
         ReceiveMessageResponse response = receivedWith(body, "v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=" + 8 * 1024 * 1024);
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
@@ -1590,6 +1591,7 @@ class SqsCodecInterceptorTest {
 
     @ParameterizedTest
     @MethodSource("nonUtf8PayloadCases")
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the UTF-8 check loops
     void modifyResponse_refusesADecodedPayloadThatIsNotUtf8(String body, String metadata) {
         ReceiveMessageResponse response = receivedWith(body, metadata);
 
@@ -1601,6 +1603,7 @@ class SqsCodecInterceptorTest {
 
     @ParameterizedTest
     @MethodSource("nonUtf8PayloadCases")
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the UTF-8 check loops
     void modifyRequest_refusesAPreEncodedPayloadThatIsNotUtf8(String body, String metadata) {
         Map<String, MessageAttributeValue> attributes = Map.of(CodecAttributes.META, MessageAttributeUtils.stringAttribute(metadata));
         SendMessageRequest single = SendMessageRequest.builder().messageBody(body).messageAttributes(attributes).build();
@@ -1730,10 +1733,11 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the UTF-8 check loops
     void modifyResponseAndRequest_acceptMultibyteTextLongerThanTheUtf8CheckBuffer() {
-        // Two-, three- and four-byte characters, the last a surrogate pair, repeated past the check's 4096-char buffer
-        // so characters fall on its boundary.
-        String payload = "é€🦊".repeat(3_000);
+        // Two-, three- and four-byte characters, the last a surrogate pair, repeated past the check's 4096-char buffer;
+        // the leading "a" shifts them so a surrogate pair straddles each 4096-char boundary.
+        String payload = "a" + "é€🦊".repeat(3_000);
         String metadata = "v=1;c=gzip;e=base64;h=none;l=" + payload.getBytes(StandardCharsets.UTF_8).length;
         String body = compressedBody(CompressionAlgorithm.GZIP, payload);
 

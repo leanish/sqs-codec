@@ -91,7 +91,7 @@ Defaults:
   received again once its visibility timeout ends, until the queue's retention period expires it or, if the queue has a
   redrive policy, it moves to the dead-letter queue (after `maxReceiveCount` receives).
 - The limit bounds each payload's decoded bytes, not memory: a receive returns up to ten messages, so its decoded payloads together can reach ten times the limit, before counting their `String` bodies, the encoded bodies, temporary buffers, native memory and concurrent receives.
-- A decoded payload (compressed or encoded) must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException` (once decoding, the `l` check and any checksum have passed: a checksum mismatch is reported first), on receive and when an already encoded message is validated before sending. A checksum-only or metadata-free body isn't decoded, so it isn't checked.
+- A decoded payload (compressed or encoded) must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException`, checked only after the `l` check and any checksum have passed (a checksum mismatch is reported first, as `ChecksumValidationException`), on receive and when an already encoded message is validated before sending. A checksum-only or metadata-free body isn't decoded, so it isn't checked.
 - Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. Compressing holds an output buffer about the size of the raw payload besides the payload itself, even when the result is small.
 - On receive, zstd's buffered streaming decoder may hold a window up to what `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window; a limit above 128 MiB lets it buffer a larger window than 0.5.x's default did); the frame decides what it actually allocates. Until 0.7.0, when streaming refuses a frame's window as larger, as with streamed frames from 0.5.x's `MAXIMUM` level, which declare a 128 MiB window whatever their size, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if smaller) and grows fourfold, decoding again, up to the limit or a conservative Java array ceiling (`Integer.MAX_VALUE - 64`), whichever is lower: zstd uses that output as its history and allocates no separate window buffer. The decoded output stays bounded by the limit either way.
 - Snappy parses and checks the declared length itself, refusing a header it can't read (`CompressionException`); the codec then refuses a declared length over `maxDecodedPayloadBytes` before allocating the decoded output array.
@@ -221,8 +221,7 @@ consumes). Fresh compressed sends always write `l`: `;l=` and its digits count t
 covers the body and the attributes together (and batch sends have a total limit too), so a message from a 0.5.x client
 that turned `l` off and filled the limit can now go over it, and the send fails; the one-pass zstd writer can also
 change the compressed body's size.
-Every public 0.5.x method is still there, so code built against 0.5.x links without recompiling (a harness compiled
-against 0.5.1 ran its main calls against 0.6.0): the 0.5.x methods that changed are kept, deprecated
+Every public 0.5.x method is still there, so code built against 0.5.x links without recompiling: the 0.5.x methods that changed are kept, deprecated
 (`withIncludeRawPayloadLength(boolean)` and the three-argument `CodecMetadataAttributeHandler.forOutbound` ignore their
 flag and write `l` whenever they compress, and the latter refuses a version other than `1`, as the two-argument form
 does), and the one-argument `decompress(byte[])` is still declared by the built-in compressors, and by `Compressor` as
@@ -272,7 +271,8 @@ one-step retry for zstd frames whose window streaming refuses, so such frames wi
 ## Error handling
 
 Every exception the codec throws for a message it refuses extends `CodecException`, with subtypes for targeted
-responses. Invalid configuration throws `IllegalArgumentException`, and JVM errors such as `OutOfMemoryError` aren't
+responses. Invalid configuration fails when it's set (a non-positive limit with `IllegalArgumentException`, a null
+argument with `NullPointerException`), and JVM errors such as `OutOfMemoryError` aren't
 translated.
 
 On receive, a codec rejection reaches the caller with the codec exception in its cause chain. With `SqsClient`, the

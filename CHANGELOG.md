@@ -82,7 +82,7 @@ All notable changes to this project are documented in this file.
   frames, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if
   smaller) and grows up to the limit (or a conservative Java array ceiling, if lower), which zstd uses as its history
   instead of a separate window buffer; 0.7.0 drops this retry (see the README's "Before 0.7.0"). 0.5.x `MAXIMUM` messages whose decoded payload fits the limit are therefore read with the default
-  configuration.
+  16 MiB limit.
 - Tests and PIT load Mockito at JVM startup (`-javaagent`), avoiding the dynamic-attach warning JDK 21+ prints and
   environments that forbid dynamic attach.
 - Removed the scheduled Dependabot version updates.
@@ -101,15 +101,15 @@ All notable changes to this project are documented in this file.
   release notes, since that refuses what earlier readers accepted) and accepts every minor from that minimum through
   `2147483647`; this version requires none. The README's "Metadata versions" gives the rules.
 - Public API for the bound and the raw length: `SqsCodecInterceptor.withMaxDecodedPayloadBytes(int)` and
-  `DEFAULT_MAX_DECODED_PAYLOAD_BYTES`, `DecompressedPayloadTooLargeException`, and
-  `CodecMetadataAttributeHandler.rawLength()`.
+  `DEFAULT_MAX_DECODED_PAYLOAD_BYTES`, `DecompressedPayloadTooLargeException`, `Compressor.decompress(byte[], int)`,
+  and `CodecMetadataAttributeHandler.rawLength()` and `forOutbound(configuration, payloadBytes)` (see Changed).
 - Added a `supply-chain` workflow that runs the pinned
   [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain check on pull requests,
   pushes to `main`, a daily schedule and manual runs.
 
 ### Fixed
-- A decoded (compressed or encoded) payload that isn't valid UTF-8 fails with `InvalidPayloadException` (once any
-  checksum has passed), on receive
+- A decoded (compressed or encoded) payload that isn't valid UTF-8 fails with `InvalidPayloadException` (once its usable `l`
+  and any checksum have passed), on receive
   and when an already encoded message is validated before sending. It used to be delivered with the invalid bytes replaced by U+FFFD, after its
   checksum had passed on the original bytes. Bodies the interceptor encodes are always valid UTF-8, so only messages
   built elsewhere are affected; like any decoding error, such a message fails the whole receive.

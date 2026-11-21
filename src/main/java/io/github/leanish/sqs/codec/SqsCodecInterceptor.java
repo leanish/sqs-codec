@@ -27,6 +27,7 @@ import io.github.leanish.sqs.codec.algorithms.CompressionAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.CompressionLevel;
 import io.github.leanish.sqs.codec.algorithms.EncodingAlgorithm;
 import io.github.leanish.sqs.codec.algorithms.compression.CompressionException;
+import io.github.leanish.sqs.codec.algorithms.compression.DecompressedPayloadTooLargeException;
 import io.github.leanish.sqs.codec.algorithms.encoding.InvalidPayloadException;
 import io.github.leanish.sqs.codec.attributes.ChecksumValidationException;
 import io.github.leanish.sqs.codec.attributes.CodecAttributes;
@@ -59,6 +60,13 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private static final int UTF8_CHECK_BUFFER_CHARS = 4096;
     /** The default limit on a decoded payload: 16 MiB. */
     public static final int DEFAULT_MAX_DECODED_PAYLOAD_BYTES = 16 * 1024 * 1024;
+    private static final SqsCodecInterceptor DEFAULT = new SqsCodecInterceptor(
+            CompressionAlgorithm.NONE,
+            null,
+            EncodingAlgorithm.NONE,
+            ChecksumAlgorithm.MD5,
+            /* skipCompressionWhenLarger= */ true,
+            DEFAULT_MAX_DECODED_PAYLOAD_BYTES);
 
     private final CompressionAlgorithm compressionAlgorithm;
     private final @Nullable CompressionLevel compressionLevel;
@@ -66,8 +74,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     private final ChecksumAlgorithm checksumAlgorithm;
     private final boolean skipCompressionWhenLarger;
     // The most bytes a payload may decode to, wherever this interceptor decodes one (received messages, and pre-encoded
-    // messages it validates before sending). A compressed payload that declares a usable raw length (l) must decode to
-    // exactly that length.
+    // messages it validates before sending), and the most a fresh payload it compresses or encodes may have. A
+    // compressed payload that declares a usable raw length (l) must decode to exactly that length.
     private final int maxDecodedPayloadBytes;
 
     private SqsCodecInterceptor(
@@ -96,13 +104,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
      * @return the default interceptor
      */
     public static SqsCodecInterceptor defaultInterceptor() {
-        return new SqsCodecInterceptor(
-                CompressionAlgorithm.NONE,
-                null,
-                EncodingAlgorithm.NONE,
-                ChecksumAlgorithm.MD5,
-                /* skipCompressionWhenLarger= */ true,
-                DEFAULT_MAX_DECODED_PAYLOAD_BYTES);
+        return DEFAULT;
     }
 
     /**
@@ -199,7 +201,14 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     private EncodedMessage encode(String originalBody, Map<String, MessageAttributeValue> originalAttributes) {
         byte[] payloadBytes = originalBody.getBytes(StandardCharsets.UTF_8);
-        EncodedPayload encodedPayload = encodeOutboundPayload(payloadBytes, configuration());
+        CodecConfiguration configuration = configuration();
+        if (shouldDecode(configuration) && payloadBytes.length > maxDecodedPayloadBytes) {
+            // Refused before compressing or encoding, rather than sending a message that receivers with this limit
+            // refuse, failing their whole receive. Checked on the configured codec, before skipCompressionWhenLarger
+            // could fall back to sending it as is, so the rule doesn't depend on how well the payload compresses.
+            throw DecompressedPayloadTooLargeException.outboundOverLimit(payloadBytes.length, maxDecodedPayloadBytes);
+        }
+        EncodedPayload encodedPayload = encodeOutboundPayload(payloadBytes, configuration);
         Map<String, MessageAttributeValue> attributes = outboundAttributes(
                 originalAttributes,
                 encodedPayload.configuration(),
@@ -277,8 +286,8 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
      * Refuses a decoded payload that isn't valid UTF-8 rather than letting the {@code String} conversion alter it.
      *
      * <p>Decodes into a small reused buffer and discards the characters: decoding the whole payload at once would
-     * allocate a {@code char[]} as long as the payload, while {@code new String(bytes, UTF_8)} afterwards keeps
-     * the JDK's compact one-byte-per-character form for ASCII and Latin-1 text.
+     * allocate a {@code char[]} as long as the payload, while {@code new String(bytes, UTF_8)} afterwards can use
+     * one byte per character for ASCII and Latin-1 text, with OpenJDK's compact strings enabled (the default).
      */
     private static void requireUtf8(byte[] payloadBytes) {
         CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()

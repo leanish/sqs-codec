@@ -9,15 +9,20 @@ All notable changes to this project are documented in this file.
   receive, since decoding had no byte limit. Decoding now fails with `DecompressedPayloadTooLargeException` once it
   passes `maxDecodedPayloadBytes` (default 16 MiB, set with `withMaxDecodedPayloadBytes(...)`), on receive and when
   validating already encoded outbound messages; the payload's raw length (`l`), which the sender controls, doesn't
-  bound it. Snappy's declared length is checked before the decoded output array is allocated. zstd's buffered
+  bound it. A fresh send that the interceptor is configured to compress or encode is refused with the same exception,
+  before compressing or encoding, when the payload's UTF-8 bytes exceed the limit (0.5.x sent it), so a producer
+  doesn't enqueue what receivers with its limit refuse; the request fails before reaching SQS (a batch fails as a
+  whole), even when `skipCompressionWhenLarger` would have sent the payload as is. Checksum-only sends aren't
+  checked. Snappy's declared length is checked before the decoded output array is allocated. zstd's buffered
   streaming decoder may hold a window up to what the limit needs, rounded up to a power of two (at least 1 KiB); until
-  0.7.0, when it refuses a frame's window (as for 0.5.x's streamed `MAXIMUM` frames, which declare 128 MiB), the
+  0.7.0, when it refuses a frame's window (as for 0.5.x's streamed `MAXIMUM` frames, which can declare 128 MiB), the
   payload is decoded again in one step into an output array of at most the limit, which zstd uses as its history
   instead of a separate window buffer.
-- The build moved to java-conventions `0.7.0` for its fix of
+- The build tooling's Guava is fixed for
   [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) and
-  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56) in the Guava its
-  build tooling used. The published library doesn't depend on Guava.
+  [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56): during this release
+  cycle the build moved to java-conventions `0.6.5`, whose Guava floor covers both, and later to `0.7.0`. The
+  published library doesn't depend on Guava.
 - Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. `1.1.10.10`, released on 2026-10-03 and
   adopted on 2026-10-07, is the first version with fixes for all seven advisories published in snappy-java's
   repository that day (out-of-bounds accesses, unbounded allocations, stream recursion and pooled-buffer reuse);
@@ -30,16 +35,17 @@ All notable changes to this project are documented in this file.
   - one published on 2026-11-08, fixed in `1.5.7-26` (GHSA-8hfr-vm4w-9gfg: an integer underflow in FASTCOVER
     dictionary training, which this library doesn't use);
   - three published on 2026-11-14 (GHSA-779h-x4xj-2f4f; GHSA-c62c-wjcx-gjxx, a follow-up to the October
-    multi-dictionary fix; GHSA-fh94-9rh7-3mwc), in response to which the project adopted `1.5.7-28`.
+    multi-dictionary fix; GHSA-fh94-9rh7-3mwc), in response to which the project adopted `1.5.7-28`, whose tag
+    contains the changes addressing them (the advisories don't all name a patched version).
 
-  The moves to `1.5.7-25` and `1.5.7-28` were taken before the seven-day release cooldown.
+  The moves to `1.5.7-25` and `1.5.7-28` were taken before their seven-day release cooldown ended.
 - The workflows use `gradle/actions` `v6.4.1`, which fixes
   [GHSA-chpw-2mqm-95cc](https://github.com/gradle/actions/security/advisories/GHSA-chpw-2mqm-95cc): the dependency
   graph's submit job, which holds a write token, trusted the graph file handed over by the job that runs the build.
 
 ### Changed
-- The build moved to java-conventions `0.7.0`, for the Guava fix above and newer build checks; no code changes were
-  needed.
+- The build moved to java-conventions `0.7.0` (from `0.6.2`, through `0.6.5`), for newer build checks and its publishing workflow; no
+  code changes were needed.
 - The repository's copy of an early java-conventions pre-commit hook (`scripts/git-hooks/pre-commit`) is removed, so
   `installGitHooks` (run by `./gradlew build`) installs the conventions' bundled hook instead, when the conventions'
   installation rules allow it (they leave a configured `core.hooksPath` and hooks they don't recognize alone);
@@ -55,12 +61,11 @@ All notable changes to this project are documented in this file.
   kept, deprecated, as a default method that the built-in compressors still declare, so code built against 0.5.x
   still links; for them, it's now bounded like a receive with the 16 MiB default (failing with
   `DecompressedPayloadTooLargeException` past 16 MiB), where 0.5.x had no limit.
-- `SqsCodecInterceptor.defaultInterceptor()` returns a new (immutable) interceptor on each call, instead of one shared
-  instance.
 - Fresh compressed sends always write the raw payload length (`l`), which 0.7.0 will require on compressed messages.
   `withIncludeRawPayloadLength(boolean)` is kept, deprecated, with no effect: `false` no longer omits `l`, so such
   clients' compressed messages carry `;l=` and its digits, which count toward SQS's size limit (body and attributes
-  together) and can take a message that filled it over. The metadata version stays `v=1`, so no producer has to wait
+  together) and can take a message that filled it, or a batch that filled its total limit, over (SQS rejects a
+  message or an oversized batch; check the per-entry results of batch sends). The metadata version stays `v=1`, so no producer has to wait
   for its consumers: once retained and incoming traffic passes the README's checks, clients can be upgraded from
   0.5.x, or rolled back to it, in any order (rolling back also needs every message that can reach a 0.5.x consumer to
   be one it reads; the README's "Upgrading from 0.5.x" says what to check).
@@ -77,7 +82,7 @@ All notable changes to this project are documented in this file.
   what has to happen before `l` becomes required.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
   than their payload (0.5.x's streamed frames, of unknown size, declared the level's window: 128 MiB at `MAXIMUM`, even
-  for a few bytes); 0.5.x reads them. Compressing in one pass holds an output buffer about the size of the raw payload.
+  for a few bytes of input); 0.5.x reads them. Compressing in one pass holds an output buffer about the size of the raw payload.
   Until 0.7.0, when streaming refuses a frame's window as larger than the configured limit needs, as for such 0.5.x
   frames, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if
   smaller) and grows up to the limit (or a conservative Java array ceiling, if lower), which zstd uses as its history

@@ -56,7 +56,8 @@ tasks.withType<Test>().configureEach {
     javaLauncher.set(testRuntimeLauncher)
     // Enables native access for zstd-jni on runtimes that restrict it (warnings now, failures in a future JDK).
     jvmArgs("--enable-native-access=ALL-UNNAMED")
-    // A local copy, so the configuration cache doesn't capture the build script.
+    // A local variable, so the lambda below captures the file collection rather than the build script, which the
+    // configuration cache can't store.
     val agent: FileCollection = mockitoAgent
     inputs.files(agent).withPropertyName("mockitoAgent").withNormalizer(ClasspathNormalizer::class.java)
     jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-javaagent:${agent.singleFile.absolutePath}") })

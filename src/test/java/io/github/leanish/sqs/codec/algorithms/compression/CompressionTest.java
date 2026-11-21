@@ -170,7 +170,8 @@ class CompressionTest {
         byte[] compressed = compressor.compress(payload);
 
         assertThat(compressor.decompress(compressed, payload.length)).isEqualTo(payload);
-        // Gzip, zstd and NoOp find out while producing output; snappy from the length it declares, up front.
+        // Gzip and zstd find out while producing output, NoOp from the existing array's length, and snappy from the
+        // length it declares, before allocating the decoded output.
         assertThatThrownBy(() -> compressor.decompress(compressed, payload.length - 1))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
                 .hasMessageContaining(String.valueOf(payload.length - 1));
@@ -368,7 +369,8 @@ class CompressionTest {
 
     @Test
     void decompress_snappyRefusesAHeaderTheLibraryCantRead() {
-        // A declared length of 2^32 + 5: past snappy's 32-bit varint, which snappy refuses before allocating anything.
+        // A declared length of 2^32 + 5: past snappy's 32-bit varint, which snappy refuses before allocating the
+        // decoded output.
         byte[] payload = {(byte) 0x85, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x10, 0x10, 'h', 'e', 'l', 'l', 'o'};
 
         assertThatThrownBy(() -> new SnappyCompressor().decompress(payload, MIB))

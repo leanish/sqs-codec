@@ -456,13 +456,13 @@ class SqsCodecInterceptorTest {
     void modifyRequest_alreadyPresentAttributes_invalidCompressedPayload(
             CompressionAlgorithm compressionAlgorithm,
             String encodedPayload,
+            String rawLength,
             String expectedMessage) {
-        // A usable l, as 0.6.0 writers send: corrupt compression is reported even when a length is present.
         SendMessageRequest request = SendMessageRequest.builder()
                 .messageBody(encodedPayload)
                 .messageAttributes(Map.of(
                         CodecAttributes.META,
-                        MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=1024")))
+                        MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none" + rawLength)))
                 .build();
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
@@ -1251,14 +1251,14 @@ class SqsCodecInterceptorTest {
     void modifyResponse_invalidCompressedPayload(
             CompressionAlgorithm compressionAlgorithm,
             String encodedPayload,
+            String rawLength,
             String expectedMessage) {
-        // A usable l, as 0.6.0 writers send: corrupt compression is reported even when a length is present.
         ReceiveMessageResponse response = ReceiveMessageResponse.builder()
                 .messages(Message.builder()
                         .body(encodedPayload)
                         .messageAttributes(Map.of(
                                 CodecAttributes.META,
-                                MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=1024")))
+                                MessageAttributeUtils.stringAttribute("v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none" + rawLength)))
                         .build())
                 .build();
 
@@ -1319,6 +1319,22 @@ class SqsCodecInterceptorTest {
                 .hasMessage("maxDecodedPayloadBytes must be positive: 0");
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor().withMaxDecodedPayloadBytes(-1))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void withMaxDecodedPayloadBytes_returnsTheSameInstanceForAnUnchangedLimitAndKeepsTheOtherSettings() {
+        SqsCodecInterceptor gzip = SqsCodecInterceptor.defaultInterceptor()
+                .withCompressionAlgorithm(CompressionAlgorithm.GZIP);
+        SqsCodecInterceptor limited = gzip.withMaxDecodedPayloadBytes(MULTIBYTE_BODY_BYTES - 1);
+        SendMessageRequest request = SendMessageRequest.builder()
+                .messageBody(MULTIBYTE_BODY)
+                .build();
+
+        assertThat(gzip.withMaxDecodedPayloadBytes(SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES)).isSameAs(gzip);
+        assertThat(limited).isNotSameAs(gzip);
+        // The derived interceptor still compresses with gzip, so the fresh payload over its limit is refused.
+        assertThatThrownBy(() -> limited.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class);
     }
 
     @Test
@@ -1918,20 +1934,25 @@ class SqsCodecInterceptorTest {
                         List.of("All")));
     }
 
+    // Each corrupt payload with a usable l, as 0.6.0 writers send, and without one, as 0.5.x writers could: corrupt
+    // compression is reported either way.
     private static Stream<Arguments> invalidCompressedPayloadCases() {
-        return Stream.of(
+        return Stream.of(";l=1024", "").flatMap(rawLength -> Stream.of(
                 Arguments.of(
                         CompressionAlgorithm.GZIP,
                         encodedGarbagePayload("not-gzip"),
+                        rawLength,
                         "Failed to decompress payload with gzip"),
                 Arguments.of(
                         CompressionAlgorithm.SNAPPY,
                         encodedGarbagePayload("not-snappy"),
+                        rawLength,
                         "Failed to decompress payload with snappy"),
                 Arguments.of(
                         CompressionAlgorithm.ZSTD,
                         encodedGarbagePayload("not-zstd"),
-                        "Failed to decompress payload with zstd"));
+                        rawLength,
+                        "Failed to decompress payload with zstd")));
     }
 
     private static String encodedGarbagePayload(String payload) {

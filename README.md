@@ -95,7 +95,7 @@ Defaults:
 - Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. Compressing holds an output buffer about the size of the raw payload besides the payload itself, even when the result is small.
 - On receive, zstd's buffered streaming decoder may hold a window up to what `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window; a limit above 128 MiB lets it buffer a larger window than 0.5.x's default did); the frame decides what it actually allocates. Until 0.7.0, when streaming refuses a frame's window as larger, as with streamed frames from 0.5.x's `MAXIMUM` level, which declare a 128 MiB window whatever their size, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if smaller) and grows fourfold, decoding again, up to the limit or a conservative Java array ceiling (`Integer.MAX_VALUE - 64`), whichever is lower: zstd uses that output as its history and allocates no separate window buffer. The decoded output stays bounded by the limit either way.
 - Snappy parses and checks the declared length itself, refusing a header it can't read (`CompressionException`); the codec then refuses a declared length over `maxDecodedPayloadBytes` before allocating the decoded output array.
-- `DecompressedPayloadTooLargeException` means the payload was refused against `maxDecodedPayloadBytes`: decoding produced more than it, or snappy's declared length is over it. It doesn't establish the payload's actual decoded size.
+- `DecompressedPayloadTooLargeException` means the payload was refused against `maxDecodedPayloadBytes`: decoding produced more than it (or than zstd's one-step array ceiling, for a limit within 64 bytes of `Integer.MAX_VALUE`), or snappy's declared length is over it. It doesn't establish the payload's actual decoded size.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if the compressed and encoded body would be the same size as the original body or larger, the interceptor sends the original body and falls back to `c=none,e=none`.
 - When outbound processing resolves to `c=none`, `e=none` and `h=none`, the interceptor does not add `x-codec-meta`.
 - Compression level is local send-side configuration only; it does not change codec metadata.
@@ -272,7 +272,7 @@ one-step retry for zstd frames whose window streaming refuses, so such frames wi
 
 Every exception the codec throws for a message it refuses extends `CodecException`, with subtypes for targeted
 responses. Invalid configuration fails when it's set (a non-positive limit with `IllegalArgumentException`, a null
-argument with `NullPointerException`), and JVM errors such as `OutOfMemoryError` aren't
+algorithm with `NullPointerException`; a null compression level is how `withoutCompressionLevel()` clears it), and JVM errors such as `OutOfMemoryError` aren't
 translated.
 
 On receive, a codec rejection reaches the caller with the codec exception in its cause chain. With `SqsClient`, the

@@ -267,6 +267,19 @@ class CompressionTest {
         assertThat(compressor.decompress(compressed, payload.length)).isEqualTo(payload);
     }
 
+    @Test
+    void compress_zstdDeclaresAWindowUnderALargePayloadsSize() {
+        byte[] payload = new byte[8 * MIB];
+
+        byte[] compressed = new ZstdCompressor().compress(payload);
+
+        // Not a single segment: the header carries a window descriptor, for the level's window (2 MiB at the default
+        // level), under the content size.
+        assertThat(compressed[4] & 0x20).isZero();
+        assertThat(declaredWindowSize(compressed)).isLessThan(payload.length);
+        assertThat(new ZstdCompressor().decompress(compressed, payload.length)).isEqualTo(payload);
+    }
+
     /** The window a zstd frame header declares (RFC 8878, 3.1.1.1): its content size when it's a single segment. */
     private static long declaredWindowSize(byte[] frame) {
         int descriptor = frame[4] & 0xff;

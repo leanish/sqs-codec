@@ -203,8 +203,8 @@ a later minor is meant not to break it:
   gets it only once every message it can receive, through a relay or redrive included, meets it. This version requires
   none, and neither does the change planned for 0.7.0 (see [Before 0.7.0](#before-070)), which requires a valid `l`
   instead.
-- A minor only reaches readers that accept it, so sending `1.<minor>` needs every consumer of the queue to accept that
-  minor and what the message uses (0.6.x accepts every minor; 0.5.x refuses every dotted version), whoever sends it: a
+- Before `1.<minor>` is sent, every consumer that may receive it must accept that minor and what the message uses (an
+  older consumer can still receive the message, and then refuses it) (0.6.x accepts every minor; 0.5.x refuses every dotted version), whoever sends it: a
   writer, or a relay or redrive that forwards an already encoded message, which the interceptor validates and then
   sends unchanged.
 - `CodecConfiguration.version()` is the major: metadata read as `1.y` reports `1`. To find messages with a minor, look
@@ -220,11 +220,11 @@ a later minor is meant not to break it:
 [Metadata versions](#metadata-versions)): once the traffic they read passes the checks below, clients can be
 upgraded, or rolled back to 0.5.x, in any order, including
 when writers and consumers form a cycle (services that send to each other, or a client that sends to a queue it also
-consumes). Fresh compressed sends always write `l`: `;l=` and its digits count toward SQS's message-size limit, which
+consumes), except for the FIFO deduplication caveat on zstd producers below. Fresh compressed sends always write `l`: `;l=` and its digits count toward SQS's message-size limit, which
 counts the body and the message attributes (not message system attributes; batch sends have a total limit too), so a message from a 0.5.x client
 that turned `l` off and filled the limit can now go over it: SQS rejects the message, or an oversized batch (check
 the per-entry results of batch sends too); the one-pass zstd writer can also change the compressed body's size.
-0.6.0 keeps the public method signatures of 0.5.x's API, so existing calls from external code built against 0.5.x still link without recompiling (selected such calls were exercised against 0.6.0): the 0.5.x methods that changed are kept, deprecated
+0.6.0 keeps the public method signatures of 0.5.x's API, and selected calls compiled against 0.5.1 were exercised on it: the 0.5.x methods that changed are kept, deprecated
 (`withIncludeRawPayloadLength(boolean)` and the three-argument `CodecMetadataAttributeHandler.forOutbound` ignore their
 flag and write `l` whenever they compress, and the latter refuses a version other than `1`, as the two-argument form
 does), and the one-argument `decompress(byte[])` is still declared by the built-in compressors, and by `Compressor` as
@@ -233,13 +233,13 @@ A producer configured to compress or encode now refuses, before sending, a paylo
 `maxDecodedPayloadBytes` (16 MiB by default), which 0.5.x attempted to send without a decoded-size check (SQS still
 applies its own size limits); raise the limit on producers and consumers together if such payloads are expected.
 A class implementing `Compressor` itself needs a compatible implementation of the two-argument `decompress` for
-callers to use that method: once recompiled it has to implement it, and one built against 0.5.x without such a method
-throws `AbstractMethodError` if it's called on it (the interceptor never calls it: it uses only the built-in
-compressors).
+callers to use that method; one built against 0.5.x without such a method throws `AbstractMethodError` if it's called
+on it (the interceptor never calls it: it uses only the built-in compressors).
 
 On a FIFO queue with content-based deduplication, SQS derives the deduplication ID from the message body, and 0.6.0's
-zstd writer produces a different body than 0.5.x's for the same payload, at every level. So an event that an
-application resubmits (after a lost acknowledgement, say) through the other version's writer, within the
+zstd writer can produce a different body than 0.5.x's for the same payload, at any compression level (it did at the
+default and `MAXIMUM` levels; a payload both send uncompressed keeps the same body). So an event that an application
+resubmits (after a lost acknowledgement, say) through the other version's writer, within SQS's five-minute
 deduplication interval, can be delivered twice; rolling a producer back has the same effect. Before mixing zstd
 writer versions, send the same explicit `MessageDeduplicationId` on the original send and every resubmission,
 starting before the cutover (the interceptor keeps it); or, where producers rely on body hashes, let outstanding

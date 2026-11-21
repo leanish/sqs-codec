@@ -18,7 +18,8 @@ All notable changes to this project are documented in this file.
   streaming decoder accepts a frame's declared window only up to what the limit needs, rounded up to a power of two
   (at least 1 KiB), which caps the window, not native memory; until 0.7.0, when it refuses a frame's window (as for
   0.5.x's streamed `MAXIMUM` frames, which can declare 128 MiB), the payload is decoded again in one step into an
-  output array of at most the limit, which zstd uses as its history instead of a separate window buffer.
+  output array of at most the limit, which zstd uses as its history instead of a separate window buffer (it still
+  allocates its decoder context).
 - For [GHSA-xxph-c9ww-hj94](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94) and
   [GHSA-v5x9-67m3-7m56](https://github.com/google/guava/security/advisories/GHSA-v5x9-67m3-7m56): java-conventions
   `0.6.5` raised the Guava floor for Error Prone and Checkstyle to `33.8.0-jre`, later carried by `0.7.0`, which the
@@ -58,19 +59,21 @@ All notable changes to this project are documented in this file.
 - Upgraded the Gradle wrapper from `9.8.0` to `9.9.1`, and `software.amazon.awssdk:bom` (compile-only and tests) from
   `2.55.10` to `2.57.13`.
 - `Compressor.decompress(byte[] payload, int maxLength)` is new, and the built-in compressors bound every decompression
-  with it; a class that implements `Compressor` itself needs a compatible implementation of it for callers to use it.
+  with it; a class that implements `Compressor` itself needs a compatible implementation of it for callers to use it,
+  and one built against 0.5.x without one throws `AbstractMethodError` if a caller uses it.
   The one-argument `decompress(byte[])` is kept, deprecated, as a default method that the built-in compressors still
-  declare, so existing calls from code built against 0.5.x still link; it applies the same refusal rules as
-  `decompress(payload, maxLength)` with a 16 MiB limit (failing with `DecompressedPayloadTooLargeException`), where
-  0.5.x had no limit.
+  declare (the 0.5.x signatures are kept, and selected calls compiled against 0.5.1 were exercised); it applies the
+  same refusal rules as `decompress(payload, maxLength)` with a 16 MiB limit (size-limit refusals throw
+  `DecompressedPayloadTooLargeException`), where 0.5.x had no limit.
 - Fresh compressed sends always write the raw payload length (`l`), which 0.7.0 will require on compressed messages.
   `withIncludeRawPayloadLength(boolean)` is kept, deprecated, with no effect: `false` no longer omits `l`, so such
   clients' compressed messages carry `;l=` and its digits, which count toward SQS's size limit (the body and message
-  attributes) and can take a message that filled it, or a batch that filled its total limit, over (SQS rejects a
+  attributes, not message system attributes) and can take a message that filled it, or a batch that filled its total limit, over (SQS rejects a
   message or an oversized batch; check the per-entry results of batch sends). The metadata version stays `v=1`, so no producer has to wait
   for its consumers: once retained and incoming traffic passes the README's checks, clients can be upgraded from
   0.5.x, or rolled back to it, in any order (rolling back also needs every message that can reach a 0.5.x consumer to
-  be one it reads; the README's "Upgrading from 0.5.x" says what to check).
+  be one it reads, and zstd producers on FIFO queues with content-based deduplication have the caveat below; the
+  README's "Upgrading from 0.5.x" says what to check).
 - `CodecMetadataAttributeHandler.forOutbound(configuration, payloadBytes)` is new and writes `l` exactly when the
   configuration compresses; it refuses a configuration whose version isn't `1`, which readers would refuse. The
   three-argument form is kept, deprecated, ignores `includeRawPayloadLength`, and refuses such a version too (0.5.x
@@ -88,11 +91,12 @@ All notable changes to this project are documented in this file.
   Until 0.7.0, when streaming refuses a frame's window as larger than the configured limit needs, as for such 0.5.x
   frames, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if
   smaller) and grows up to the limit (or a conservative Java array ceiling, if lower), which zstd uses as its history
-  instead of a separate window buffer; 0.7.0 drops this retry (see the README's "Before 0.7.0"). So with the default
-  16 MiB limit, 0.6.0 reads valid 0.5.x `MAXIMUM` frames whose decoded payload fits it, when the message also passes
-  the metadata and payload checks. One-pass compression has an input ceiling just below 2 GiB. Because zstd bodies
-  differ from 0.5.x's for the same payload, a FIFO queue with content-based deduplication can deliver an event twice
-  when it's resubmitted through the other version's writer within the deduplication interval; the README's
+  instead of a separate window buffer (besides its decoder context); 0.7.0 drops this retry (see the README's "Before
+  0.7.0"). So with the default 16 MiB limit, 0.6.0 reads valid 0.5.x `MAXIMUM` frames whose decoded payload fits it,
+  when the message also passes the metadata and payload checks. One-pass compression has an input ceiling just below
+  2 GiB. Because the zstd writer can produce a different body than 0.5.x's for the same payload, at any level, a FIFO
+  queue with content-based deduplication can deliver an event twice when it's resubmitted through the other
+  version's writer within SQS's five-minute deduplication interval, upgrading or rolling back; the README's
   "Upgrading from 0.5.x" says how to avoid it.
 - Tests and PIT load Mockito at JVM startup (`-javaagent`), avoiding the dynamic-attach warning JDK 21+ prints and
   environments that forbid dynamic attach.

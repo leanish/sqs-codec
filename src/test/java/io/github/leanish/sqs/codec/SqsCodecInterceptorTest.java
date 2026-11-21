@@ -1322,7 +1322,7 @@ class SqsCodecInterceptorTest {
     }
 
     @Test
-    void withMaxDecodedPayloadBytes_returnsTheSameInstanceForAnUnchangedLimitAndKeepsTheOtherSettings() {
+    void withMaxDecodedPayloadBytes_returnsTheSameInstanceForAnUnchangedLimitAndAppliesANewOne() {
         SqsCodecInterceptor gzip = SqsCodecInterceptor.defaultInterceptor()
                 .withCompressionAlgorithm(CompressionAlgorithm.GZIP);
         SqsCodecInterceptor limited = gzip.withMaxDecodedPayloadBytes(MULTIBYTE_BODY_BYTES - 1);
@@ -1332,7 +1332,7 @@ class SqsCodecInterceptorTest {
 
         assertThat(gzip.withMaxDecodedPayloadBytes(SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES)).isSameAs(gzip);
         assertThat(limited).isNotSameAs(gzip);
-        // The derived interceptor still compresses with gzip, so the fresh payload over its limit is refused.
+        // The derived interceptor applies the new limit to a fresh payload it's configured to compress.
         assertThatThrownBy(() -> limited.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class);
     }

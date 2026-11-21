@@ -117,9 +117,9 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
 
     /**
      * Sets the most bytes a payload may decode to, wherever this interceptor decodes one: received messages, and already
-     * encoded messages it validates before sending. A fresh payload it compresses or encodes is refused, before sending,
-     * when its UTF-8 bytes exceed it. The default is {@value #DEFAULT_MAX_DECODED_PAYLOAD_BYTES}. It bounds each payload's
-     * decoded bytes, not memory.
+     * encoded messages it validates before sending. When it's configured to compress or encode, a fresh payload whose
+     * UTF-8 bytes exceed it is refused before sending, even one it would have sent uncompressed. The default is
+     * {@value #DEFAULT_MAX_DECODED_PAYLOAD_BYTES}. It bounds each payload's decoded bytes, not memory.
      *
      * @param maxDecodedPayloadBytes the limit, in bytes; it must be positive
      * @return this interceptor if the limit is unchanged, otherwise a new interceptor with the limit and the same other

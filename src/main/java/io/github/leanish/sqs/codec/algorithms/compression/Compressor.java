@@ -36,8 +36,8 @@ public interface Compressor {
      *
      * @param payload the compressed bytes
      * @return the decompressed bytes
-     * @throws DecompressedPayloadTooLargeException when the payload decompresses to more than 16 MiB, or declares a
-     *         decoded length over it (snappy checks its declared length before decoding)
+     * @throws DecompressedPayloadTooLargeException under the same refusal rules as {@link #decompress(byte[], int)}
+     *         with a 16 MiB limit
      * @throws CompressionException when the payload can't be decompressed
      * @deprecated use {@link #decompress(byte[], int)}, which takes the limit
      */

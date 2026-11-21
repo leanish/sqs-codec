@@ -46,8 +46,8 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 @Testcontainers
 class SqsCodecInterceptorIntegrationTest {
 
-    // Pinned on purpose: LocalStack images published from 2026-03-23 on need an account and LOCALSTACK_AUTH_TOKEN
-    // (https://blog.localstack.cloud/2026-upcoming-pricing-changes/), and 4.14.0 still starts without one.
+    // Pinned on purpose: these tests run localstack/localstack:4.14.0 without an auth token (see LocalStack's
+    // https://blog.localstack.cloud/2026-upcoming-pricing-changes/ for its policy on later images).
     // Move on once CI has an auth token, or when this test moves off LocalStack.
     @Container
     private static final LocalStackContainer LOCALSTACK = new LocalStackContainer(

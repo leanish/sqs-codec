@@ -33,9 +33,10 @@ public class SnappyCompressor implements Compressor {
     public byte[] decompress(byte[] payload, int maxLength) {
         BoundedReads.requireNonNegative(maxLength);
         try {
-            // Snappy allocates the length a payload declares, so that length is checked before anything is allocated.
-            // Snappy itself refuses a header it can't read, or a length implausible for the payload (a CompressionException
-            // here); the negative check only guards against a declared length past Integer.MAX_VALUE getting through.
+            // Snappy allocates the length a payload declares, so that length is checked before the decoded output array is
+            // allocated. Snappy itself parses and checks the header first, refusing one it can't read or a length
+            // implausible for the payload (a CompressionException here); the negative check only guards against a
+            // dependency returning a declared length past Integer.MAX_VALUE.
             int declaredLength = Snappy.uncompressedLength(payload);
             if (declaredLength < 0 || declaredLength > maxLength) {
                 throw DecompressedPayloadTooLargeException.declaredOverLimit(

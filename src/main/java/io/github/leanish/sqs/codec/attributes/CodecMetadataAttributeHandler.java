@@ -81,6 +81,9 @@ public class CodecMetadataAttributeHandler {
      * @param payloadBytes the raw payload, before compression and encoding
      * @param includeRawPayloadLength ignored
      * @return the metadata to apply to the message
+     * @throws UnsupportedCodecMetadataException as {@link #forOutbound(CodecConfiguration, byte[])} does: when the
+     *         configuration's version isn't {@value CodecAttributes#VERSION_VALUE} (0.5.x wrote any version), or it
+     *         enables nothing
      * @deprecated {@code l} is written whenever the configuration compresses; use
      *             {@link #forOutbound(CodecConfiguration, byte[])}
      */

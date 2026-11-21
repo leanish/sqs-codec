@@ -30,8 +30,9 @@ Send with defaults (no compression, MD5 checksum); decode/validate based on meta
 ```java
 SqsAsyncClient client = SqsAsyncClient.builder()
         .overrideConfiguration(config -> config.addExecutionInterceptor(SqsCodecInterceptor.defaultInterceptor()))
-        // Required: the SDK would check SQS's MD5 of the encoded body against the decoded one. The interceptor checks
-        // its own checksum (h) over the payload instead, when one is set.
+        // Required on a client that receives bodies the interceptor decodes: the SDK would check SQS's MD5 of the wire
+        // body against the decoded one. This also turns off the SDK's other SQS MD5 checks (message attributes, sends
+        // and batch sends). The interceptor checks its own checksum (h) over the payload, when one is set.
         .checksumValidationEnabled(false)
         .build();
 ```
@@ -80,18 +81,20 @@ Defaults:
 - When compression is enabled and encoding remains `NONE`, the effective payload encoding is `BASE64`.
 - `ASCII85` is experimental; it's written in a canonical dialect without `<~ ~>` framing, whitespace, or `z`/`y` shorthands, which the decoder also refuses.
 - `ASCII85` is intentionally transport-focused between `sqs-codec` endpoints rather than interoperability-focused with third-party ASCII85 tools.
-- `ASCII85` encodes four bytes as five characters, where Base64 encodes three as four, so it's somewhat smaller; treat it as a niche transport option rather than a new default.
+- `ASCII85` encodes four bytes as five characters, where Base64 encodes three as four, so it's somewhat smaller for full groups (some short inputs tie); treat it as a niche transport option rather than a new default.
 - `MD5` and `SHA256` detect accidental corruption. They're unkeyed, so neither authenticates the producer: whoever can send to the queue can attach a matching checksum to any body, or send `h=none`. Control who can send with the queue's access policy.
 - `skipCompressionWhenLarger`: `true`
 - `maxDecodedPayloadBytes`: `16 MiB` (`SqsCodecInterceptor.DEFAULT_MAX_DECODED_PAYLOAD_BYTES`)
-- The interceptor rejects a decoded payload over `maxDecodedPayloadBytes` with `DecompressedPayloadTooLargeException`, wherever it decodes one: on receive, and when it validates an already encoded message before sending. The streaming decoders check the output after each read (of up to 8 KiB) and refuse a read that would pass the limit, so a small compressed message can't expand without bound; an encoding-only payload is bounded by its encoded size, and its decoded bytes are checked once decoded. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive. It bounds only what the interceptor decodes, that is compressed or encoded (`e` not `none`) payloads: a checksum-only (`c=none,e=none`) or metadata-free body is returned as received, and a fresh outbound body isn't checked against it. A producer can therefore send a compressed message whose `l` is over a consumer's limit, and that consumer refuses it; keep consumers' limits at least as large as what producers send.
+- The interceptor rejects a decoded payload over `maxDecodedPayloadBytes` with `DecompressedPayloadTooLargeException`, wherever it decodes one: on receive, and when it validates an already encoded message before sending. The streaming decoders check the output after each read (of up to 8 KiB) and refuse a read that would pass the limit, so a small compressed message can't expand without bound; an encoding-only payload is bounded by its encoded size, and its decoded bytes are checked once decoded. Set it with `withMaxDecodedPayloadBytes(...)`; it must be positive. It bounds only what the interceptor decodes, that is compressed or encoded (`e` not `none`) payloads: a checksum-only (`c=none,e=none`) or metadata-free body is returned as received, and a fresh outbound body isn't checked against it. A producer can therefore send a compressed message whose payload is larger than a consumer's limit, and that consumer refuses it once decoding passes the limit; keep consumers' limits at least as large as what producers send.
 - A compressed payload's raw length (`l`) is the sender's claim, so it never bounds decompression: `maxDecodedPayloadBytes` does. When `l` is usable (a non-negative integer that fits in a Java `int`), the payload must decode to exactly that many bytes, or it fails with `CompressionException`, on receive and when an already encoded message is validated before sending. 0.6.x still decodes a compressed payload whose `l` is missing or not a usable number, as 0.5.x writers could send; 0.7.0 will refuse it (see [Before 0.7.0](#before-070)). `l` is ignored when `c=none`.
 - A message that fails these checks fails the whole receive, as any decoding error does: it isn't deleted, so it can be
   received again once its visibility timeout ends, until the queue's retention period expires it or, if the queue has a
   redrive policy, it moves to the dead-letter queue (after `maxReceiveCount` receives).
-- The limit bounds decoded bytes, not total memory: each received message also becomes a `String`, and a receive returns up to ten.
-- A decoded payload (compressed or encoded) must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException`, on receive and when an already encoded message is validated before sending. A checksum-only or metadata-free body isn't decoded, so it isn't checked.
-- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. The streaming decoder accepts a window up to what `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window). Until 0.7.0, when streaming refuses a frame's window as larger, as with 0.5.x's streamed frames, which can declare 128 MiB (at the `MAXIMUM` level) whatever their size, the payload is decoded again in one step into a buffer that starts at 1 MiB (or the limit, if smaller) and grows, decoding again, up to the limit: zstd then uses that output as its window and allocates none. The output stays bounded by the limit either way. Snappy refuses a header it can't read itself (`CompressionException`); a declared length over `maxDecodedPayloadBytes` is refused before it allocates.
+- The limit bounds each payload's decoded bytes, not memory: a receive returns up to ten messages, so its decoded payloads together can reach ten times the limit, before counting their `String` bodies, the encoded bodies, temporary buffers, native memory and concurrent receives.
+- A decoded payload (compressed or encoded) must be valid UTF-8, since it becomes the message's `String` body; one that isn't fails with `InvalidPayloadException` (once decoding, the `l` check and any checksum have passed: a checksum mismatch is reported first), on receive and when an already encoded message is validated before sending. A checksum-only or metadata-free body isn't decoded, so it isn't checked.
+- Zstd compresses in one pass, so each frame records its content size and declares a window no larger than its payload. Compressing holds an output buffer about the size of the raw payload besides the payload itself, even when the result is small.
+- On receive, zstd's buffered streaming decoder may hold a window up to what `maxDecodedPayloadBytes` needs (rounded up to a power of two, at least 1 KiB, so a 3 MiB limit admits a 4 MiB window; a limit above 128 MiB lets it buffer a larger window than 0.5.x's default did); the frame decides what it actually allocates. Until 0.7.0, when streaming refuses a frame's window as larger, as with streamed frames from 0.5.x's `MAXIMUM` level, which declare a 128 MiB window whatever their size, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if smaller) and grows fourfold, decoding again, up to the limit or a conservative Java array ceiling (`Integer.MAX_VALUE - 64`), whichever is lower: zstd uses that output as its history and allocates no separate window buffer. The decoded output stays bounded by the limit either way.
+- Snappy parses and checks the declared length itself, refusing a header it can't read (`CompressionException`); the codec then refuses a declared length over `maxDecodedPayloadBytes` before allocating the decoded output array.
 - `DecompressedPayloadTooLargeException` means the payload was refused against `maxDecodedPayloadBytes`: decoding produced more than it, or snappy's declared length is over it. It doesn't establish the payload's actual decoded size.
 - When `withSkipCompressionWhenLarger(true)` (default) and compression is enabled, if the compressed and encoded body would be the same size as the original body or larger, the interceptor sends the original body and falls back to `c=none,e=none`.
 - When outbound processing resolves to `c=none`, `e=none` and `h=none`, the interceptor does not add `x-codec-meta`.
@@ -148,7 +151,7 @@ Notes:
 - On send, the default interceptor configuration uses checksum `md5`.
 - On send, the default interceptor configuration uses encoding `none`, which resolves to `base64` when compression is enabled.
 - `s` is required when `h` is not `none`.
-- `s` must be absent when `h=none`.
+- `s` must be absent when `h=none`; a present `s`, even blank, is refused, as is a blank `s` when `h` is set.
 - `s` is emitted as unpadded URL-safe Base64 on send.
 - If checksum values are produced or compared outside this library, use the canonical unpadded form; padded values are not normalized on read.
 - `l`, when `c` is not `none` and usable (a value `Integer.parseInt` reads, once trimmed, as a non-negative `int`, so
@@ -179,7 +182,7 @@ SQS attribute limit:
 
 ### Metadata versions
 
-`v` is `<major>` or `<major>.<minor>`, where the minor is `0` or an ASCII number without a leading zero (`1.0`, `1.1`,
+`v`, once trimmed, is `<major>` or `<major>.<minor>`, where the minor is `0` or an ASCII number without a leading zero (`1.0`, `1.1`,
 `1.10`; not `1.01`, `1.+1` or `1.`). This version writes `1` and reads `1` and every such `1.<minor>` as `1`, so that
 a later minor is meant not to break it:
 - A minor may only add what a reader of an earlier `1.x` can ignore: that reader must still accept the message,
@@ -191,15 +194,16 @@ a later minor is meant not to break it:
 - A reader may require a minimum minor of its major, once it relies on what that minor guarantees; a bare `1` counts as
   `1.0`. Its version check then accepts every minor from that minimum through `2147483647`, and the message is still
   validated as usual. Writers that originate a dotted version keep its minor within that range, so a reader that
-  compares minors as numbers may refuse a larger one; this version accepts any minor spelled as above, and a relay
-  forwards whatever it received. Requiring a minimum refuses messages earlier readers accepted (a
+  compares minors as numbers may refuse a larger one; this version accepts any minor spelled as above, and the
+  interceptor, once it has validated an already encoded message, sends its version unchanged. Requiring a minimum refuses messages earlier readers accepted (a
   minimum of `1.1` would refuse the `v=1` that 0.6.0 sends), so its release notes say so, as above, and a consumer
   gets it only once every message it can receive, through a relay or redrive included, meets it. This version requires
   none, and neither does the change planned for 0.7.0 (see [Before 0.7.0](#before-070)), which requires a valid `l`
   instead.
-- A minor only reaches readers that accept it, so sending `1.<minor>` needs every consumer of the queue on 0.6.0 or
-  later, whoever sends it: a writer, or a relay or redrive that forwards an already encoded message, which the
-  interceptor sends unchanged. 0.5.x refuses every dotted version.
+- A minor only reaches readers that accept it, so sending `1.<minor>` needs every consumer of the queue to accept that
+  minor and what the message uses (0.6.x accepts every minor; 0.5.x refuses every dotted version), whoever sends it: a
+  writer, or a relay or redrive that forwards an already encoded message, which the interceptor validates and then
+  sends unchanged.
 - `CodecConfiguration.version()` is the major: metadata read as `1.y` reports `1`. To find messages with a minor, look
   at the raw `x-codec-meta`. `CodecMetadataAttributeHandler.applyTo` writes only the keys this version knows and
   writes the version as `v=1`, so copying metadata through it drops a minor and any key this version doesn't know
@@ -213,12 +217,16 @@ a later minor is meant not to break it:
 [Metadata versions](#metadata-versions)): once the traffic they read passes the checks below, clients can be
 upgraded, or rolled back to 0.5.x, in any order, including
 when writers and consumers form a cycle (services that send to each other, or a client that sends to a queue it also
-consumes). Fresh compressed sends always write `l`, a few bytes more than 0.5.x clients that turned it off sent: a
-message that filled SQS's message-size limit exactly can now go over it, and the send fails.
-Calls from code built against 0.5.x to the methods it used still link without recompiling: the 0.5.x methods that
-changed are kept, deprecated (`withIncludeRawPayloadLength(boolean)` and the three-argument
-`CodecMetadataAttributeHandler.forOutbound` ignore their flag and write `l` whenever they compress), and the built-in
-compressors still declare the one-argument `decompress(byte[])`, now bounded like a receive with the 16 MiB default.
+consumes). Fresh compressed sends always write `l`: `;l=` and its digits count toward SQS's message-size limit, which
+covers the body and the attributes together (and batch sends have a total limit too), so a message from a 0.5.x client
+that turned `l` off and filled the limit can now go over it, and the send fails; the one-pass zstd writer can also
+change the compressed body's size.
+Every public 0.5.x method is still there, so code built against 0.5.x links without recompiling (a harness compiled
+against 0.5.1 ran its main calls against 0.6.0): the 0.5.x methods that changed are kept, deprecated
+(`withIncludeRawPayloadLength(boolean)` and the three-argument `CodecMetadataAttributeHandler.forOutbound` ignore their
+flag and write `l` whenever they compress, and the latter refuses a version other than `1`, as the two-argument form
+does), and the one-argument `decompress(byte[])` is still declared by the built-in compressors, and by `Compressor` as
+a default method, now bounded like a receive with the 16 MiB default.
 A class implementing `Compressor` itself has to implement the two-argument `decompress` once recompiled; one built
 against 0.5.x and not recompiled throws `AbstractMethodError` if that method is called on it (the interceptor never
 calls it: it uses only the built-in compressors).
@@ -228,17 +236,21 @@ refused), and one message it refuses fails the whole receive. Before
 replacing consumers, check retained messages, and traffic from 0.5.x clients that keep sending during the upgrade:
 - a compressed or encoded payload must decode to valid UTF-8 (raising `maxDecodedPayloadBytes` doesn't help);
 - a compressed or encoded payload must decode to at most `maxDecodedPayloadBytes`;
-- a numeric, non-negative `l` must equal the decoded length in bytes (0.5.x ignored mismatches; raising the limit
-  doesn't bypass this);
+- on a compressed message, an `l` that parses as a non-negative Java `int` must equal the decoded length in bytes
+  (0.5.x ignored mismatches; raising the limit doesn't bypass this);
 - the version, once trimmed, must be `1` or `1.<minor>`, spelled exactly (0.5.x also accepted other spellings of `1`,
-  such as `01`, `+1` or non-ASCII digits; it always wrote `1`, so only metadata built elsewhere is affected).
+  such as `01`, `+1` or non-ASCII digits; its fresh sends wrote `1`, so only metadata built elsewhere, possibly
+  forwarded by a 0.5.x relay, is affected).
 
 Pause producers and drain incompatible messages with 0.5.x consumers, or correct and replay them, before cutover.
 
-Rolling back a consumer to 0.5.x also needs that no message with a minor version (`v=1.<minor>`) can still reach it,
-counting retained, delayed and in-flight messages, dead-letter queues and replay: 0.5.x refuses them. 0.6.x's fresh
-sends write only `1`, so such messages come only from a later writer or from metadata built elsewhere, possibly
-forwarded by a relay. Look for them in the raw `x-codec-meta`, since `CodecConfiguration.version()` reports `1`.
+Rolling back a consumer to 0.5.x needs every message that can still reach it to be one 0.5.x reads, counting retained,
+delayed and in-flight messages, dead-letter queues and replay, and what was sent during the upgrade. In particular:
+- no message with a minor version (`v=1.<minor>`), which 0.5.x refuses. 0.6.x's fresh sends write only `1`, so such
+  messages come only from a later writer or from metadata built elsewhere, possibly forwarded by a relay. Look for
+  them in the raw `x-codec-meta`, since `CodecConfiguration.version()` reports `1`;
+- no zstd frame from an encoder outside this library that 0.6.x reads only through its one-step retry: 0.5.x's
+  streaming decoder can refuse its window.
 
 ### Before 0.7.0
 
@@ -254,15 +266,17 @@ one-step retry for zstd frames whose window streaming refuses, so such frames wi
   dead-letter queue or replay that can bring them back;
 - no zstd frame whose window is larger than the consumer's limit needs can still reach it, valid `l` or not: such frames
   come from 0.5.x writers (which can declare 128 MiB at the `MAXIMUM` level, whatever the message's size) and from encoders outside this
-  library, so those writers stop or upgrade, and retained, forwarded and replayed ones are drained as above.
+  library, so those writers stop or upgrade, and retained, forwarded and replayed ones are drained as above. This is
+  a conservative check: zstd can still decode some such frames in a single pass, but which ones depends on the frame.
 
 ## Error handling
 
-All codec failures extend `CodecException`, with subtypes for targeted
-responses.
+Every exception the codec throws for a message it refuses extends `CodecException`, with subtypes for targeted
+responses. Invalid configuration throws `IllegalArgumentException`, and JVM errors such as `OutOfMemoryError` aren't
+translated.
 
-On receive, a failure in the interceptor reaches the caller with the codec exception in its cause chain. With
-`SqsClient`, the SDK throws an `SdkClientException` ("Unable to unmarshall response"); with `SqsAsyncClient`, the
+On receive, a codec rejection reaches the caller with the codec exception in its cause chain. With `SqsClient`, the
+SDK (as observed with 2.57.13) throws an `SdkClientException` ("Unable to unmarshall response"); with `SqsAsyncClient`, the
 returned future completes exceptionally, so `join()` throws a `CompletionException` and `get()` an
 `ExecutionException`. Either way, look for the `CodecException` among the causes:
 ```java
@@ -302,7 +316,7 @@ CI (`ci.yml`) runs full `build` on JDK 25.
 The supply-chain workflow (`supply-chain.yml`) runs the pinned [leanish/leanish-development](https://github.com/leanish/leanish-development) supply-chain check on pull requests, pushes to `main`, a daily schedule and manual runs; that repository documents what it checks.
 Legacy runtime checks (`testing-legacy-jdk.yml`) run tests on JDK 17 and 21, and can be run manually or are required by publishing.
 The build, mutation testing, dependency graph and legacy-JDK workflows use GitHub-hosted `ubuntu-26.04` runners; the publishing jobs' runners are set by java-conventions' workflow.
-Publishing (`publishing-github.yml`, run by hand: releases from their `vX.Y.Z` tag, SNAPSHOTs from `main`) runs after `Build` and the legacy-JDK tests and delegates to [java-conventions' reusable publishing workflow](https://github.com/leanish/java-conventions#plugin-project-ci-maintainers), which stages the publication in `build/publication-staging` (the build's `Staging` repository) and uploads it from a separate job. Locally, use `./gradlew publishToMavenLocal`: a plain `./gradlew publish` also targets GitHub Packages, which java-conventions configures for the owner it infers.
+Publishing (`publishing-github.yml`, run by hand: final releases from their matching `vX.Y.Z` tag, which the workflow enforces, and, by project convention, SNAPSHOTs from `main`) runs after `Build` and the legacy-JDK tests and delegates to [java-conventions' reusable publishing workflow](https://github.com/leanish/java-conventions#plugin-project-ci-maintainers), which stages the publication in `build/publication-staging` (the build's `Staging` repository) and uploads it from a separate job. Locally, use `./gradlew publishToMavenLocal`: a plain `./gradlew publish` also targets GitHub Packages, which java-conventions configures for the owner it infers.
 
 Run full checks (tests, checkstyle, spotless, jacoco):
 ```bash

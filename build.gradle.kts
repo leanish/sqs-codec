@@ -54,7 +54,7 @@ val testRuntimeLauncher = project.extensions.getByType<JavaToolchainService>().l
 tasks.withType<Test>().configureEach {
     // Keep test runtime aligned with the workflow matrix.
     javaLauncher.set(testRuntimeLauncher)
-    // Required for zstd-jni native access on JDK 21+ to avoid future hard failures.
+    // Enables native access for zstd-jni on runtimes that restrict it (warnings now, failures in a future JDK).
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     // A local copy, so the configuration cache doesn't capture the build script.
     val agent: FileCollection = mockitoAgent

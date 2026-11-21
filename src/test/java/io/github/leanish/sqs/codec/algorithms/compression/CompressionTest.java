@@ -18,6 +18,7 @@ import java.util.zip.Deflater;
 import java.util.zip.ZipException;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -260,8 +261,22 @@ class CompressionTest {
         byte[] compressed = compressor.compress(payload);
 
         assertThat(Zstd.getFrameContentSize(compressed)).isEqualTo(payload.length);
-        // Bounded by its exact length, as the interceptor decodes it, the frame's window fits.
+        // The window the frame declares is within what a limit of exactly its length admits, so streaming decodes it
+        // and the legacy one-step retry, to be removed in 0.7.0, isn't needed.
+        assertThat(declaredWindowSize(compressed)).isLessThanOrEqualTo(1L << ZstdCompressor.windowLogFor(payload.length));
         assertThat(compressor.decompress(compressed, payload.length)).isEqualTo(payload);
+    }
+
+    /** The window a zstd frame header declares (RFC 8878, 3.1.1.1): its content size when it's a single segment. */
+    private static long declaredWindowSize(byte[] frame) {
+        int descriptor = frame[4] & 0xff;
+        boolean singleSegment = (descriptor & 0x20) != 0;
+        if (singleSegment) {
+            return Zstd.getFrameContentSize(frame);
+        }
+        int windowDescriptor = frame[5] & 0xff;
+        long base = 1L << (10 + (windowDescriptor >>> 3));
+        return base + (base / 8) * (windowDescriptor & 0x07);
     }
 
     @Test
@@ -287,6 +302,7 @@ class CompressionTest {
     }
 
     @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the growth loop never ends
     void decompress_zstdOneStepGrowsPastItsFirstBuffer() throws IOException {
         // Over the one-step decoder's first 1 MiB buffer, so it has to grow (and decode again) to fit.
         byte[] payload = TestPayloadBytes.mixed(3 * MIB);
@@ -296,6 +312,7 @@ class CompressionTest {
     }
 
     @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the growth loop never ends
     void decompress_zstdOneStepRefusesOutputThatOutgrowsTheLimitAfterGrowing() throws IOException {
         // 5 MiB doesn't fit the first 1 MiB buffer, nor the 4 MiB limit it then grows to.
         byte[] streamed = streamedZstd(TestPayloadBytes.mixed(5 * MIB), Zstd.maxCompressionLevel());
@@ -318,7 +335,8 @@ class CompressionTest {
     void oneStepBuffer_growsFourfoldUpToAnAllocatableCeiling() {
         int ceiling = ZstdCompressor.oneStepCeiling(Integer.MAX_VALUE);
 
-        // Under HotSpot's smallest maximum byte[] length, 2^31 - 32 (with 256-byte object alignment).
+        // A conservative ceiling chosen for HotSpot, whose smallest maximum byte[] length is 2^31 - 32 (with 256-byte
+        // object alignment); it doesn't promise that a JVM can allocate that much.
         assertThat(ceiling).isEqualTo(Integer.MAX_VALUE - 64);
         assertThat(ZstdCompressor.oneStepCeiling(16 * MIB)).isEqualTo(16 * MIB);
         assertThat(ZstdCompressor.nextCapacity(MIB, 16 * MIB)).isEqualTo(4 * MIB);
@@ -339,6 +357,7 @@ class CompressionTest {
     }
 
     @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD) // fails, rather than hangs, if the growth loop never ends
     void decompress_zstdOneStepStopsABombAtTheLimit() throws IOException {
         byte[] bomb = streamedZstd(new byte[64 * MIB], Zstd.maxCompressionLevel());
 
@@ -369,10 +388,9 @@ class CompressionTest {
     }
 
     @Test
-    void decompress_zstdOneStepDoesNotAllocateTheWholeLimitUpFront() {
-        // A window (log 32) over what Integer.MAX_VALUE needs sends it to the one-step decoder. Allocating the whole limit
-        // up front would fail with OutOfMemoryError (no JVM array is that large); starting from a small buffer, zstd
-        // refuses the header itself.
+    void decompress_zstdOneStepRefusesAnInvalidWindowUnderTheLargestLimit() {
+        // A window (log 32) over what Integer.MAX_VALUE admits sends it to the one-step decoder, where zstd refuses the
+        // header itself: a decode failure, not a size refusal. (This doesn't measure what the decoder allocates.)
         byte[] forged = {0x28, (byte) 0xb5, 0x2f, (byte) 0xfd, 0x00, (byte) 0xb0, 0x01, 0x00, 0x00};
 
         assertThatThrownBy(() -> new ZstdCompressor().decompress(forged, Integer.MAX_VALUE))

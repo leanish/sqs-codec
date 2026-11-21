@@ -59,7 +59,8 @@ Reasoning:
 
 - the dialect is small and explicit
 - external implementations vary in behavior
-- the project only needs one strict transport-oriented form
+- the project only needs one strict transport-oriented form to write (the reader
+  also accepts the equivalent final partial groups described above)
 - keeping the codec local makes the accepted wire format obvious in tests and code
 
 ### Transport-focused scope
@@ -71,7 +72,8 @@ the transport format stable between `sqs-codec` endpoints.
 ### Size trade-off
 
 `ASCII85` encodes four bytes as five characters, where Base64 encodes three as
-four, so it's somewhat smaller. The feature exists as an optional transport
+four, so it's somewhat smaller for full groups; some short inputs tie with
+unpadded Base64. The feature exists as an optional transport
 trade-off, not as a new default encoding for every payload.
 
 ## Non-decisions
@@ -80,7 +82,8 @@ The library does not currently try to optimize for:
 
 - interoperability with third-party ASCII85 tools
 - copy/paste compatibility with Adobe-style examples
-- accepting alternate spellings of the same encoded payload
+- accepting alternate spellings of the same encoded payload, beyond the
+  equivalent final partial groups the decoder already reads
 
 If that changes in the future, it should be treated as an intentional wire
 format compatibility decision, not as a parser convenience tweak.

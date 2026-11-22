@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "io.github.leanish"
-version = "0.6.1-SNAPSHOT"
+version = "0.6.1"
 description = "AWS SQS payload interceptor for automatic compression and encoding."
 
 // Mockito loads as a JVM agent instead of attaching itself at runtime, which JDK 21+ warns about and sandboxes forbid.

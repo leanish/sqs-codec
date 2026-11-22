@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.6.1 - 2026-11-22
+
 ### Changed
 - When zstd's one-step retry (for 0.5.x frames whose window streaming refuses) reports that its largest permitted
   output array is too small, `DecompressedPayloadTooLargeException` now says that (`zstd's one-step decoder reported

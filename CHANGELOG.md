@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Changed
+- When zstd's one-step retry (for 0.5.x frames whose window streaming refuses) reports that its largest permitted
+  output array is too small, `DecompressedPayloadTooLargeException` now says that (`zstd's one-step decoder reported
+  its largest permitted output buffer (N bytes) too small`) instead of `Decompressed payload with zstd exceeds N
+  bytes`, which read as a measured size. The exception type is unchanged.
+- A fresh send configured to compress or encode is refused before its UTF-8 conversion when the body has more UTF-16
+  code units than `maxDecodedPayloadBytes`, since each takes at least one UTF-8 byte, so a huge body fails with
+  `DecompressedPayloadTooLargeException` (new message, from the new
+  `DecompressedPayloadTooLargeException.outboundCodeUnitsOverLimit`) instead of first allocating its UTF-8 copy. A body
+  within that count is still converted, then checked on its bytes as before.
+- `DecompressedPayloadTooLargeException` pins its `serialVersionUID` to 0.6.0's value.
+- PIT runs on the test runtime JDK again: `-PsqsCodec.testRuntimeJdkVersion` applies to the `pitest` task as well as to
+  `Test` tasks. The 0.6.0 entry about `JavaExec` tasks is corrected.
+- The publishing workflow's concurrency group keeps up to 100 waiting runs (`queue: max`) instead of one, so a later
+  dispatch no longer cancels a pending publish.
+
 ## 0.6.0 - 2026-11-22
 
 ### Security
@@ -57,7 +73,9 @@ All notable changes to this project are documented in this file.
 - The repository's own Checkstyle files (`config/checkstyle/`) are removed, so Checkstyle uses the conventions'
   configuration, which adds a Jackson 2 import rule to the removed one; Checkstyle passes without the removed
   suppressions. Without it, Spotless also orders imports like Checkstyle's `ImportOrder`; no file needed changes.
-- The build no longer configures `JavaExec` tasks, which this library doesn't have.
+- The build no longer configures `JavaExec` tasks (their test runtime JDK and native access). PIT's task is one, so
+  it ran on the conventions' default JDK even with `-PsqsCodec.testRuntimeJdkVersion` until 0.6.1; native access for
+  PIT's test JVMs moved to PIT's own JVM arguments.
 - Upgraded the Gradle wrapper from `9.8.0` to `9.9.1`, and `software.amazon.awssdk:bom` (compile-only and tests) from
   `2.55.10` to `2.57.13`.
 - `Compressor.decompress(byte[] payload, int maxLength)` is new, and the built-in compressors bound every decompression

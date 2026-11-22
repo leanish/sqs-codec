@@ -128,7 +128,7 @@ public class ZstdCompressor implements Compressor {
                     throw CompressionException.decompress(ALGORITHM, e);
                 }
                 if (capacity == ceiling) {
-                    throw DecompressedPayloadTooLargeException.exceeds(ALGORITHM, ceiling);
+                    throw DecompressedPayloadTooLargeException.oneStepOutputTooSmall(ALGORITHM, ceiling);
                 }
                 capacity = nextCapacity(capacity, ceiling);
             }

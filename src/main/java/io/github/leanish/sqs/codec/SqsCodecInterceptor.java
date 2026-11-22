@@ -225,12 +225,19 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
     }
 
     private EncodedMessage encode(String originalBody, Map<String, MessageAttributeValue> originalAttributes) {
-        byte[] payloadBytes = originalBody.getBytes(StandardCharsets.UTF_8);
         CodecConfiguration configuration = configuration();
-        if (shouldDecode(configuration) && payloadBytes.length > maxDecodedPayloadBytes) {
-            // Refused before compressing or encoding, rather than sending a message that receivers with this limit
-            // refuse, failing their whole receive. Checked on the configured codec, before skipCompressionWhenLarger
-            // could fall back to sending it as is, so the rule doesn't depend on how well the payload compresses.
+        boolean limited = shouldDecode(configuration);
+        // Refused before compressing or encoding, rather than sending a message that receivers with this limit refuse,
+        // failing their whole receive. Checked on the configured codec, before skipCompressionWhenLarger could fall back
+        // to sending it as is, so the rule doesn't depend on how well the payload compresses. Every UTF-16 code unit
+        // takes at least one UTF-8 byte, so a body with more code units than the limit is refused before converting it.
+        if (limited && originalBody.length() > maxDecodedPayloadBytes) {
+            throw DecompressedPayloadTooLargeException.outboundCodeUnitsOverLimit(
+                    originalBody.length(),
+                    maxDecodedPayloadBytes);
+        }
+        byte[] payloadBytes = originalBody.getBytes(StandardCharsets.UTF_8);
+        if (limited && payloadBytes.length > maxDecodedPayloadBytes) {
             throw DecompressedPayloadTooLargeException.outboundOverLimit(payloadBytes.length, maxDecodedPayloadBytes);
         }
         EncodedPayload encodedPayload = encodeOutboundPayload(payloadBytes, configuration);

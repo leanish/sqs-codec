@@ -3,15 +3,26 @@
 Limitations and evidence gaps that remained when each release shipped, with their impact. Planned fixes are noted where
 agreed.
 
+## 0.6.1
+
+Reviewed: the full change from `v0.6.0` to `v0.6.1-rc.2`, through two candidates. `docs/validation.md` lists the
+reviews and real runs. 0.6.1 is rc.2 with only release metadata changed.
+
+- The entries below marked "Fixed in 0.6.1" or "Partly fixed in 0.6.1" changed in this release. The other entries are
+  0.6.0 observations; they weren't re-checked one by one against 0.6.1.
+- GitHub accepted `queue: max` when 0.6.1 was published; the queueing of several waiting runs wasn't exercised.
+- The supply-chain checks still have no merge veto: in the rulesets read after the release, the only required status
+  checks are still `Build` and `PIT`.
+
 ## 0.6.0
 
 Reviewed: the full change from `v0.5.1` to `v0.6.0-rc.6`, through six candidates. `docs/validation.md` lists the
 reviews and real runs. 0.6.0 is rc.6 with only release metadata and a CI configuration file changed. These remained.
-Entries marked "Planned for 0.6.1" have an agreed fix.
+Entries marked "Fixed in 0.6.1" or "Partly fixed in 0.6.1" changed in that release.
 
 ### Behavior
 
-- **zstd retry exhaustion reads as a measured size.** Planned for 0.6.1.
+- **zstd retry exhaustion reads as a measured size.** Fixed in 0.6.1.
   - When zstd reports that the one-step retry's largest permitted array is too small, `DecompressedPayloadTooLargeException`
     says the payload "exceeds" that array ceiling, which can be below the configured limit.
   - The class Javadoc says this case doesn't establish the decoded size, and neither does the diagnostic, but the
@@ -34,9 +45,12 @@ Entries marked "Planned for 0.6.1" have an agreed fix.
 - **Memory under the decode limit.** The limit bounds decoded bytes, not total heap or native memory. A sufficiently
   high limit also lets zstd's buffered streaming accept windows above the 0.5.1 decoder's 128 MiB default. Actual
   memory use depends on the frame and the decoder path.
-- **The fresh-send size check runs after the UTF-8 conversion.** Planned for 0.6.1. For a fresh send configured to compress or encode, the
-  check runs after `String.getBytes(UTF_8)` and before that entry's payload is processed. It applies even when the body
-  would have been sent uncompressed. So the conversion of a huge body can exhaust the heap before the typed refusal, and
+- **The fresh-send size check runs after the UTF-8 conversion.** Partly fixed in 0.6.1: for a fresh send configured
+  to compress or encode, a body whose UTF-16 code unit count already proves it too large is refused before the
+  conversion. Other bodies are still converted before the exact byte check, and earlier entries of a batch can already
+  have been processed. In 0.6.0, for a fresh send configured to compress or encode, the check runs after
+  `String.getBytes(UTF_8)` and before that entry's payload is processed. It applies even when the body would have been
+  sent uncompressed. So the conversion of a huge body can exhaust the heap before the typed refusal, and
   earlier entries of a batch may already have been processed. 0.5.x converted the body the same way. A UTF-16 length
   pre-check could refuse definitely oversized bodies first, as long as it doesn't report the character count as a byte
   count.
@@ -58,17 +72,18 @@ Entries marked "Planned for 0.6.1" have an agreed fix.
 
 ### Build and release
 
-- **PIT ignores `-PsqsCodec.testRuntimeJdkVersion`.** Planned for 0.6.1. Since the move to java-conventions 0.7.0, the property sets the
+- **PIT ignores `-PsqsCodec.testRuntimeJdkVersion`.** Fixed in 0.6.1. Since the move to java-conventions 0.7.0, the property sets the
   launcher for `Test` tasks only.
   - The PIT task extends `JavaExec` and uses the conventions' default JDK. So a combined `test pitest` run with the
     property can run tests on one JDK and mutation testing on another.
   - No workflow combines them: the legacy-JDK workflow runs `test` only.
   - The CHANGELOG's "doesn't have JavaExec tasks" is wrong, since the PIT task is one.
-- **A SNAPSHOT dispatch can replace a pending release publish.** Planned for 0.6.1. The publishing workflow's concurrency group is shared
-  by all refs, and GitHub keeps one pending run per group.
+- **A SNAPSHOT dispatch can replace a pending release publish.** Fixed in 0.6.1 with `queue: max`; GitHub accepted the
+  setting, and the queueing itself wasn't exercised. The publishing workflow's concurrency group is shared by all refs,
+  and GitHub kept one pending run per group.
   - With one publish running and a release publish pending, a third dispatch replaces the pending one.
   - The replaced run uploaded nothing and can be dispatched again.
-  - Fix: `queue: max`. Until then, don't dispatch a SNAPSHOT while a release publish is pending.
+  - Fix: `queue: max`. Before 0.6.1, don't dispatch a SNAPSHOT while a release publish is pending.
 - **The supply-chain checks had no merge veto.** In the rulesets inspected for 0.6.0, `Build` and `PIT` were required
   and CodeQL was enforced. `supply-chain / supply-chain` and `supply-chain / cooldown` weren't required, though the
   gate's documentation recommends requiring both. 0.5.1 had no supply-chain workflow, so nothing existing was weakened.
@@ -95,7 +110,7 @@ Entries marked "Planned for 0.6.1" have an agreed fix.
 
 ### Documentation
 
-These texts claim more than the code does and need narrower wording. Planned for 0.6.1:
+These texts claimed more than the code does and needed narrower wording. All were corrected in 0.6.1:
 
 - **Custom compressors:** the upgrade guide describes what happens when a caller uses the new
   `decompress(byte[], int)` on an old binary. It doesn't say that a class written for 0.5.x, with only `compress` and

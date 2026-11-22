@@ -6,13 +6,81 @@ from real runs, including the checks after publishing. Known limitations are in 
 Reviewers, by role:
 - **Haiku:** Claude Haiku sub-agents, read-only, each checking one area: claims, a checklist, or gaps.
 - **Sol:** Codex reviews. Sol A reviews correctness, Sol B scope, and Sol C claims and docs, each in its own thread.
-- **Astra:** a Codex model that challenged the earlier reviews on rc.5 and rc.6.
+- **Astra:** a Codex model that challenged the earlier reviews on 0.6.0's rc.5 and rc.6.
 
 Claude Opus implemented the changes and settled the findings with the reviewers. It sent the Haiku findings it
 dismissed to Sol to confirm.
 
 The usage table covers the logged Haiku, Sol and Astra reviews. Codex input is mostly cached thread context, so its
 uncached share is given too. No prices are applied.
+
+## 0.6.1 - 2026-11-22
+
+Two candidates, from `v0.6.0`; the release is `v0.6.1` at `8ad5ea4`. The owner asked for the usual review of a patch
+rather than an exhaustive pass, with no Astra: rc.1 had three Haiku reviewers and an unprimed Sol review, and rc.2 a
+Sol check of its changes in the same thread.
+
+| Candidate | Date | Why the next candidate was cut |
+| --- | --- | --- |
+| rc.1 | 2026-11-22 | Reviewers asked for narrower wording in comments, test text and a README example; rc.2 changed no production code. |
+| rc.2 | 2026-11-22 | No blocker remained: released. |
+
+rc.2's tree is the same as `main`'s just before the release PR (#220), which changed only the version and the
+CHANGELOG headings.
+
+### What each reviewer added
+
+- **#218 and #219, before the candidates** (Sol on the plan and the diffs, Haiku on the diffs):
+  - Sol found that the `serialVersionUID` first pinned came from a jar built at an earlier commit, not from the
+    published 0.6.0 jar. The constant and its test pin the published jar's value.
+  - Sol asked for evidence that PIT's worker JVMs run on the requested JDK. A verbose PIT run with the JDK 17 property
+    showed every worker on Corretto 17.0.19.
+  - Sol sharpened the wording for custom `Compressor` classes and the zstd retry-exhaustion message.
+  - Haiku found that the publish queue keeps up to 100 waiting runs, not every one, and an awkward sentence in the
+    CHANGELOG's Security wording. Sol agreed with Claude's dispositions of the Haiku findings it dismissed.
+- **rc.1**
+  - All three Haiku reviewers and Sol asked for the PIT evidence on JDK 17 to be repeated on the candidate. The rerun
+    showed all 22 worker `java.home` lines on Corretto 17.0.19.
+  - All three Haiku reviewers and Sol asked for narrower wording in comments and test text, which rc.2 made.
+  - Sol found that a README example's comment missed the new retry-exhaustion refusal, fixed in rc.2.
+  - Claude dismissed Haiku findings already settled in #218 and #219 (snappy advisory records, zstd wording); Sol
+    agreed with those dispositions.
+- **rc.2**
+  - Sol confirmed that rc.2 made exactly the agreed edits, with no production code change.
+
+### Rough cost per model
+
+| Reviewer | Calls | Input tokens | Of which uncached | Output tokens |
+| --- | --- | --- | --- | --- |
+| Haiku, #218 and #219 | 3 reviews | 1.52M | - | 78K |
+| Haiku, rc.1 | 3 reviews | 1.30M | - | 72K |
+| Sol | 7 calls, 6 with recorded usage | 9.64M | 0.64M | 96K |
+
+Haiku's 2.82M input is 2.40M cache reads, 0.42M cache writes and about 200 ordinary input tokens.
+
+### Real runs
+
+- **rc.1**
+  - `./gradlew clean build pitest` on JDK 25 passed: 427 tests across 15 suites, none skipped, including the 8
+    LocalStack integration tests. PIT detected 303 of 306 mutations, counting timeouts.
+  - `test` with the JDK 17 and JDK 21 properties: 427 tests each, none skipped or failed. `pitest` with the JDK 17
+    property detected 303 of 306 mutations as well.
+  - A fresh consumer resolved the candidate from Maven local only. Calling the interceptor directly, checksum-only,
+    gzip and zstd messages round-tripped, and over-limit fresh sends were refused by the code-unit pre-check and by the
+    byte check.
+- **rc.2**
+  - The same build on JDK 25 and the tests on JDK 17 and 21 passed, with the same counts.
+  - Its jar's 46 class files were byte-identical to rc.1's; the consumer run and the JDK 17 PIT run weren't repeated.
+- **On `main` before the release PR:** hosted CI passed (Build, PIT, CodeQL, supply-chain, dependency graph).
+- **The release itself:**
+  - #220's `clean check` passed: 427 tests across 15 suites, including the 8 LocalStack integration tests, with no
+    skips. CI passed on #220 and on the merge commit.
+  - The publish from `v0.6.1` passed its JDK 25 build and its JDK 17 and 21 tests, then staged and uploaded the
+    publication. GitHub accepted `queue: max`.
+  - A fresh consumer resolved `io.github.leanish:sqs-codec:0.6.1` from GitHub Packages only. The same round trips and
+    both refusals behaved as on rc.1.
+- **Not exercised:** live AWS and FIFO delivery. The cross-version LocalStack runs weren't repeated, since 0.6.1
+  changes no wire format.
 
 ## 0.6.0 - 2026-11-22
 

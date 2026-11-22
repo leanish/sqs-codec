@@ -6,7 +6,7 @@ from real runs, including the checks after publishing. Known limitations are in 
 Reviewers, by role:
 - **Haiku:** Claude Haiku sub-agents, read-only, each checking one area: claims, a checklist, or gaps.
 - **Sol:** Codex reviews. Sol A reviews correctness, Sol B scope, and Sol C claims and docs, each in its own thread.
-- **Astra:** a larger Codex model, used last on rc.5 and rc.6 to challenge the earlier findings.
+- **Astra:** a Codex model that challenged the earlier reviews on rc.5 and rc.6.
 
 Claude Opus implemented the changes and settled the findings with the reviewers. It sent the Haiku findings it
 dismissed to Sol to confirm.
@@ -37,8 +37,8 @@ whose seven-day wait had ended.
   - Sol's blocker: writing `v=2` left clients that both send and receive, across queues, with no upgrade order that
     works.
     - A first fix that let senders keep writing `v=1` (#207) was closed.
-    - The owner decided instead that every fresh send writes `v=1`, and fresh compressed sends always write `l` too
-      (#208). Readers accept canonical `1.<minor>` (#209).
+    - The owner decided instead that fresh sends that emit codec metadata write `v=1`, and fresh compressed sends also
+      write `l` (#208). Readers accept canonical `1.<minor>` (#209).
   - Sol also found the limit above 1 GiB on zstd-jni's 32-bit native builds, which rc.2 took up.
   - Sol found that the new publishing path had no staging evidence. A staging run in settlement showed the
     expected 25-file inventory. Sol corrected a stale publisher pin in the records, and recorded two limitations: strict

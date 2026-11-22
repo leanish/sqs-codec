@@ -4,11 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Documentation
+- Corrected texts that claimed more than the code does: in the 0.6.0 entries below, how far gzip payloads could
+  decode, the snappy-java advisory records, custom `Compressor` classes, and 0.5.x's zstd frames; in the README, custom
+  `Compressor` classes, the deprecated `withIncludeRawPayloadLength(boolean)`, the zstd check before 0.7.0, and a send
+  without a body; and the one-step zstd decoder's Javadoc on frame windows.
+
 ## 0.6.0 - 2026-11-22
 
 ### Security
-- Decompression is bounded. A small gzip or zstd payload could decode to gigabytes and exhaust a consumer's memory on
-  receive, since decoding had no byte limit. Decoding now fails with `DecompressedPayloadTooLargeException` once it
+- Decompression is bounded. A small payload could exhaust a consumer's memory on receive, since decoding had no byte
+  limit: a zstd payload can decode to gigabytes, and a gzip one within SQS's message size to hundreds of megabytes. Decoding now fails with `DecompressedPayloadTooLargeException` once it
   passes `maxDecodedPayloadBytes` (default 16 MiB, set with `withMaxDecodedPayloadBytes(...)`), on receive and when
   validating already encoded outbound messages; the payload's raw length (`l`), which the sender controls, doesn't
   bound it. A fresh send that the interceptor is configured to compress or encode is refused with the same exception,
@@ -29,8 +35,9 @@ All notable changes to this project are documented in this file.
   Guava dependency.
 - Upgraded `org.xerial.snappy:snappy-java` from `1.1.10.8` to `1.1.10.12`. `1.1.10.10`, released on 2026-10-03 and
   adopted on 2026-10-07, is the first version with fixes for all seven advisories published in snappy-java's
-  repository that day (out-of-bounds accesses, unbounded allocations, stream recursion and pooled-buffer reuse);
-  CVE-2026-90559, one of them, was fixed in `1.1.10.9`.
+  repository that day (out-of-bounds accesses, unbounded allocations, stream recursion and pooled-buffer reuse). One
+  of them, GHSA-wmgv-28fv-894x (CVE-2026-90559), was fixed in `1.1.10.9`; that CVE also has an earlier record of its
+  own, GHSA-mrhq-xxpp-qf7j, published on 2026-09-12.
 - Upgraded `com.github.luben:zstd-jni` from `1.5.7-20` to `1.5.7-28`, for advisories published in zstd-jni's
   repository:
   - three published on 2026-10-28, fixed in `1.5.7-25` (GHSA-5p5w-hg9r-gx2p, GHSA-8v5f-66rc-52f5,
@@ -61,8 +68,9 @@ All notable changes to this project are documented in this file.
 - Upgraded the Gradle wrapper from `9.8.0` to `9.9.1`, and `software.amazon.awssdk:bom` (compile-only and tests) from
   `2.55.10` to `2.57.13`.
 - `Compressor.decompress(byte[] payload, int maxLength)` is new, and the built-in compressors bound every decompression
-  with it; a class that implements `Compressor` itself needs a compatible implementation of it for callers to use it,
-  and one built against 0.5.x without one throws `AbstractMethodError` if a caller uses it.
+  with it. It's abstract, so a concrete class that implements `Compressor` itself must implement (or inherit) it to
+  compile against 0.6.x; one compiled against 0.5.x without it, run unchanged, throws `AbstractMethodError` if a caller
+  uses it.
   The one-argument `decompress(byte[])` is kept, deprecated, as a default method that the built-in compressors still
   declare (the 0.5.x signatures are kept, and selected calls compiled against 0.5.1 were exercised); it applies the
   same refusal rules as `decompress(payload, maxLength)` with a 16 MiB limit (size-limit refusals throw
@@ -88,8 +96,8 @@ All notable changes to this project are documented in this file.
   error already did. The README's "Upgrading from 0.5.x" says what to check in retained messages, and "Before 0.7.0"
   what has to happen before `l` becomes required.
 - Zstd compresses in one pass instead of streaming, so frames record their content size and declare a window no larger
-  than their payload (0.5.x's streamed frames, of unknown size, declared the level's window: 128 MiB at `MAXIMUM`, even
-  for a few bytes of input); 0.5.x reads them. Compressing in one pass holds an output buffer about the size of the raw payload.
+  than their payload (0.5.x's streamed frames of non-empty payloads can omit their size and declare the level's window,
+  128 MiB at `MAXIMUM`, even for a few bytes of input; an empty payload's frame can carry its size); 0.5.x reads them. Compressing in one pass holds an output buffer about the size of the raw payload.
   Until 0.7.0, when streaming refuses a frame's window as larger than the configured limit needs, as for such 0.5.x
   frames, the payload is decoded again in one step into an output array that starts at 1 MiB (or the limit, if
   smaller) and grows up to the limit (or a conservative Java array ceiling, if lower), which zstd uses as its history

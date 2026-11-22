@@ -353,7 +353,7 @@ public class SqsCodecInterceptor implements ExecutionInterceptor {
                 configuration.compressionAlgorithm(),
                 configuration.encodingAlgorithm());
         // The raw length (l) is sender-controlled, and 0.5.x writers may omit it, so the configured limit, not l, bounds
-        // the decompression (and zstd's window: 0.5.x streamed frames with the level's window).
+        // the decompression (and zstd's window: 0.5.x's streamed frames can declare the level's window).
         byte[] decoded = codec.decode(messageBodyBytes, maxDecodedPayloadBytes);
         OptionalInt declaredLength = metadata.rawLength();
         if (declaredLength.isPresent() && decoded.length != declaredLength.getAsInt()) {

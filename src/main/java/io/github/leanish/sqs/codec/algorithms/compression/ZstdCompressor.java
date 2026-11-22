@@ -45,10 +45,10 @@ public class ZstdCompressor implements Compressor {
     }
 
     /**
-     * Compresses in one pass, so the frame records its content size and declares a window no larger than the payload,
-     * so a limit {@link #decompress} is given that allows the payload also allows its window (where the loaded native
-     * build supports the window log that limit needs). It holds an output buffer about the size of the payload while
-     * compressing, which gives one-pass compression an input ceiling just below 2 GiB.
+     * Compresses in one pass, so the frame records its content size and declares a window no larger than the payload.
+     * A limit given to {@link #decompress} that allows the payload therefore allows its window too, where the loaded
+     * native build supports the window log that limit needs. Compressing holds an output buffer about the size of the
+     * payload, which gives one-pass compression an input ceiling just below 2 GiB.
      */
     @Override
     public byte[] compress(byte[] payload) {
@@ -99,11 +99,12 @@ public class ZstdCompressor implements Compressor {
     /**
      * Decodes the whole payload in one step into an output array of at most {@code maxLength} bytes (or the ceiling of
      * {@link #oneStepCeiling}, if lower), after streaming refused a frame's window. zstd then uses the output as its
-     * history instead of a separate window buffer, whatever window the frames declare (it still allocates its context),
-     * and an output shorter than the array is copied into a trimmed one. The array starts at the smaller of 1 MiB and
-     * the ceiling, and grows fourfold, decoding the payload again, only while zstd reports it too small; it may reach
-     * the ceiling, for valid input as for malformed input. If zstd still reports it too small at the ceiling, the
-     * payload is refused without establishing its decoded size.
+     * history instead of a separate window buffer, so streaming's window limit doesn't apply here, though native zstd
+     * still validates each frame's parameters (and it still allocates its context). An output shorter than the array is
+     * copied into a trimmed one. The array starts at the smaller of 1 MiB and the ceiling, and grows fourfold, decoding
+     * the payload again, only while zstd reports it too small; it may reach the ceiling, for valid input as for
+     * malformed input. If zstd still reports it too small at the ceiling, the payload is refused without establishing
+     * its decoded size.
      */
     private static byte[] decompressInOneStep(byte[] payload, int maxLength) {
         try (ZstdDecompressCtx context = new ZstdDecompressCtx()) {

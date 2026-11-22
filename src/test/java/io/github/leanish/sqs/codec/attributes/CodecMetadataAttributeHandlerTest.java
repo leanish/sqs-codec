@@ -52,8 +52,8 @@ class CodecMetadataAttributeHandlerTest {
     }
 
     @ParameterizedTest
-    @MethodSource("ignoredRawLengthCases")
-    void fromAttributes_rawLengthIgnoredWithoutCompression(
+    @MethodSource("rawLengthCases")
+    void fromAttributes_keepsTheRawLengthOnlyWithCompression(
             String rawMetadata,
             CodecConfiguration expectedConfiguration,
             String expectedChecksumValue,
@@ -276,7 +276,7 @@ class CodecMetadataAttributeHandlerTest {
                         }));
     }
 
-    private static Stream<Arguments> ignoredRawLengthCases() {
+    private static Stream<Arguments> rawLengthCases() {
         CodecConfiguration md5Configuration = new CodecConfiguration(
                 CodecAttributes.VERSION_VALUE,
                 CompressionAlgorithm.NONE,

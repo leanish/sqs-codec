@@ -225,16 +225,18 @@ counts the body and the message attributes (not message system attributes; batch
 that turned `l` off and filled the limit can now go over it: SQS rejects the message, or an oversized batch (check
 the per-entry results of batch sends too); the one-pass zstd writer can also change the compressed body's size.
 0.6.0 keeps the public method signatures of 0.5.x's API, and selected calls compiled against 0.5.1 were exercised on it: the 0.5.x methods that changed are kept, deprecated
-(`withIncludeRawPayloadLength(boolean)` and the three-argument `CodecMetadataAttributeHandler.forOutbound` ignore their
-flag and write `l` whenever they compress, and the latter refuses a version other than `1`, as the two-argument form
-does), and the one-argument `decompress(byte[])` is still declared by the built-in compressors, and by `Compressor` as
+(`withIncludeRawPayloadLength(boolean)` has no effect, since fresh compressed sends always write `l`; the
+three-argument `CodecMetadataAttributeHandler.forOutbound` ignores its flag, writes `l` whenever the configuration
+compresses and refuses a version other than `1`, as the two-argument form does), and the one-argument `decompress(byte[])` is still declared by the built-in compressors, and by `Compressor` as
 a default method, now bounded like a receive with the 16 MiB default.
 A producer configured to compress or encode now refuses, before sending, a payload whose UTF-8 bytes exceed its
 `maxDecodedPayloadBytes` (16 MiB by default), which 0.5.x attempted to send without a decoded-size check (SQS still
 applies its own size limits); raise the limit on producers and consumers together if such payloads are expected.
-A class implementing `Compressor` itself needs a compatible implementation of the two-argument `decompress` for
-callers to use that method; one built against 0.5.x without such a method throws `AbstractMethodError` if it's called
-on it (the interceptor never calls it: it uses only the built-in compressors).
+A concrete class implementing `Compressor` itself must implement (or inherit) the two-argument
+`decompress(byte[], int)` to compile against 0.6.x, since it's abstract; one written for 0.5.x, with only `compress` and
+`decompress(byte[])`, doesn't compile until it does. A class compiled against 0.5.x without that overload, run
+unchanged on 0.6.x, throws `AbstractMethodError` if it's called on it (the interceptor never calls it: it uses only the
+built-in compressors).
 
 On a FIFO queue with content-based deduplication, SQS derives the deduplication ID from the message body, and 0.6.0's
 zstd writer can produce a different body than 0.5.x's for the same payload, at any compression level (it did at the
@@ -284,8 +286,10 @@ one-step retry for zstd frames whose window streaming refuses, so such frames wi
   interceptor validates such a message and sends it unchanged, so 0.6.x doesn't add a missing `l`;
 - retained compressed messages without a valid `l` are drained, counting delayed and in-flight messages and any
   dead-letter queue or replay that can bring them back;
-- no zstd frame whose window is larger than the consumer's limit needs can still reach it, valid `l` or not: such frames
-  come from 0.5.x writers (which can declare 128 MiB at the `MAXIMUM` level, even for a few bytes of input) and from encoders outside this
+- no zstd frame whose decoded payload fits the consumer's limit but whose window is larger than that limit needs can
+  still reach it, valid `l` or not (a frame whose payload is over the limit is refused either way; keep producers' and
+  consumers' limits aligned, since a 0.6.x producer with a higher limit can already send payloads a lower-limit
+  consumer refuses): such frames come from 0.5.x writers (which can declare 128 MiB at the `MAXIMUM` level, even for a few bytes of input) and from encoders outside this
   library, so those writers stop or upgrade, and retained, forwarded and replayed ones are drained as above. This is
   a conservative check: zstd can still decode some such frames in a single pass, but which ones depends on the frame.
 
@@ -294,7 +298,8 @@ one-step retry for zstd frames whose window streaming refuses, so such frames wi
 Every exception the codec throws for a message it refuses extends `CodecException`, with subtypes for targeted
 responses. Invalid configuration fails when it's set (a non-positive limit with `IllegalArgumentException`, a null
 algorithm with `NullPointerException`; a null compression level is how `withoutCompressionLevel()` clears it), and JVM errors such as `OutOfMemoryError` aren't
-translated.
+translated. A send without a body (a null `messageBody`) isn't a refused message: it can fail with a
+`NullPointerException` from the send-side processing instead of a `CodecException`.
 
 On receive, a codec rejection reaches the caller with the codec exception in its cause chain. With AWS SDK for Java v2
 `2.57.13`, the sync response handler wraps it: `SqsClient` throws an `SdkClientException` ("Unable to unmarshall

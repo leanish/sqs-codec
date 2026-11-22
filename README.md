@@ -318,7 +318,8 @@ try {
     if (cause instanceof InvalidPayloadException) {
         // bad payload data, consider DLQ or logging
     } else if (cause instanceof DecompressedPayloadTooLargeException) {
-        // refused: too much output, or a declared length over the limit
+        // refused: too much output, a declared length over the limit, or zstd's one-step decoder reporting its
+        // largest permitted buffer too small
     } else if (cause instanceof CompressionException) {
         // decompression failed, or the decoded length doesn't match a usable l
     } else if (cause instanceof ChecksumValidationException checksumFailure) {

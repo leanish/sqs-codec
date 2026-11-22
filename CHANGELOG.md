@@ -23,8 +23,9 @@ All notable changes to this project are documented in this file.
 ### Documentation
 - Corrected texts that claimed more than the code does: in the 0.6.0 entries below, how far gzip payloads could
   decode, the snappy-java advisory records, custom `Compressor` classes, and 0.5.x's zstd frames; in the README, custom
-  `Compressor` classes, the deprecated `withIncludeRawPayloadLength(boolean)`, the zstd check before 0.7.0, and a send
-  without a body; and the one-step zstd decoder's Javadoc on frame windows.
+  `Compressor` classes, the deprecated `withIncludeRawPayloadLength(boolean)`, the zstd check before 0.7.0, a send
+  without a body, and what a receive's `DecompressedPayloadTooLargeException` can mean; and the one-step zstd decoder's
+  Javadoc on frame windows.
 
 ## 0.6.0 - 2026-11-22
 

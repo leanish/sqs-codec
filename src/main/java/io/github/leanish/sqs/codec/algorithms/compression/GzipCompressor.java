@@ -5,14 +5,11 @@
  */
 package io.github.leanish.sqs.codec.algorithms.compression;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Objects;
 import java.util.zip.Deflater;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import org.jspecify.annotations.Nullable;
@@ -55,9 +52,8 @@ public class GzipCompressor implements Compressor {
     @Override
     public byte[] decompress(byte[] payload, int maxLength) {
         BoundedReads.requireNonNegative(maxLength);
-        try (ByteArrayInputStream compressedStream = new ByteArrayInputStream(payload);
-                InputStream inputStream = new GZIPInputStream(compressedStream)) {
-            return BoundedReads.readAtMost(inputStream, maxLength, ALGORITHM);
+        try {
+            return GzipMembers.inflate(payload, maxLength, ALGORITHM);
         } catch (DecompressedPayloadTooLargeException e) {
             throw e;
         } catch (IOException | RuntimeException e) {

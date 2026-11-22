@@ -15,13 +15,15 @@ package io.github.leanish.sqs.codec.algorithms.compression;
  */
 public class DecompressedPayloadTooLargeException extends CompressionException {
 
+    // 0.6.0's computed value, pinned so adding factories doesn't change it.
+    private static final long serialVersionUID = 5148972657466750515L;
+
     private DecompressedPayloadTooLargeException(String message) {
         super(message);
     }
 
     /**
-     * Decoding passed {@code maxLength} bytes, or zstd's one-step retry couldn't fit the output in {@code maxLength}
-     * bytes (its largest permitted array).
+     * Decoding passed {@code maxLength} bytes.
      *
      * @param algorithm the compression algorithm's id
      * @param maxLength the limit that was passed
@@ -30,6 +32,20 @@ public class DecompressedPayloadTooLargeException extends CompressionException {
     public static DecompressedPayloadTooLargeException exceeds(String algorithm, int maxLength) {
         return new DecompressedPayloadTooLargeException(
                 "Decompressed payload with " + algorithm + " exceeds " + maxLength + " bytes");
+    }
+
+    /**
+     * zstd's one-step retry reported its largest permitted output array too small. That's what zstd reported, not a
+     * measured size: a malformed frame can report it too.
+     *
+     * @param algorithm the compression algorithm's id
+     * @param ceiling the largest output array the retry may use
+     * @return the exception to throw
+     */
+    static DecompressedPayloadTooLargeException oneStepOutputTooSmall(String algorithm, int ceiling) {
+        return new DecompressedPayloadTooLargeException(
+                algorithm + "'s one-step decoder reported its largest permitted output buffer (" + ceiling
+                        + " bytes) too small");
     }
 
     /**
@@ -56,6 +72,20 @@ public class DecompressedPayloadTooLargeException extends CompressionException {
     public static DecompressedPayloadTooLargeException outboundOverLimit(int payloadLength, int maxLength) {
         return new DecompressedPayloadTooLargeException(
                 "Payload has " + payloadLength + " bytes, over the " + maxLength
+                        + "-byte maxDecodedPayloadBytes of a send configured to compress or encode");
+    }
+
+    /**
+     * A fresh payload to compress or encode has more UTF-16 code units than {@code maxLength}, so more UTF-8 bytes too
+     * (each code unit takes at least one byte), refused before converting it to UTF-8.
+     *
+     * @param codeUnits the payload's length in UTF-16 code units ({@link String#length()})
+     * @param maxLength the limit in bytes it's over
+     * @return the exception to throw
+     */
+    public static DecompressedPayloadTooLargeException outboundCodeUnitsOverLimit(int codeUnits, int maxLength) {
+        return new DecompressedPayloadTooLargeException(
+                "Payload has " + codeUnits + " UTF-16 code units, so more UTF-8 bytes than the " + maxLength
                         + "-byte maxDecodedPayloadBytes of a send configured to compress or encode");
     }
 }

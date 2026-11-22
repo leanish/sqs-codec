@@ -82,6 +82,11 @@ pitest {
     }
 }
 
+// PIT's task is a JavaExec rather than a Test, so it needs the test runtime set separately.
+tasks.named<JavaExec>("pitest") {
+    javaLauncher.set(testRuntimeLauncher)
+}
+
 // The publishing workflow's prepare job stages the publications here; its publish job uploads exactly these files.
 publishing {
     repositories {

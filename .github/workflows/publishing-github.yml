@@ -9,10 +9,12 @@ permissions:
   contents: read
 
 # Versions share the coordinate-level maven-metadata.xml: one run of this workflow at a time. It doesn't serialize
-# against publishing from elsewhere (another workflow or a local `./gradlew publish`).
+# against publishing from elsewhere (another workflow or a local `./gradlew publish`). `queue: max` keeps up to 100
+# waiting runs instead of only the latest, so a later dispatch doesn't cancel a pending release publish.
 concurrency:
   group: publish-${{ github.repository }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   check-java-25:

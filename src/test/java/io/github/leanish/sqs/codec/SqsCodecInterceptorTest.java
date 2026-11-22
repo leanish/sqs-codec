@@ -1431,8 +1431,27 @@ class SqsCodecInterceptorTest {
         assertThatThrownBy(() -> interceptor.withMaxDecodedPayloadBytes(2)
                 .modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Payload has 3 bytes, over the 2-byte maxDecodedPayloadBytes of "
-                        + "a send configured to compress or encode");
+                .hasMessage("Payload has 3 UTF-16 code units, so more UTF-8 bytes than the 2-byte "
+                        + "maxDecodedPayloadBytes of a send configured to compress or encode");
+    }
+
+    @ParameterizedTest
+    @MethodSource("decodingOutboundConfigurations")
+    void modifyRequest_freshPayloadWithMoreCodeUnitsThanTheLimitIsRefusedBeforeConverting(
+            SqsCodecInterceptor configured,
+            String metadataPrefix) {
+        // As many code units as the multibyte body has bytes: refused on its code units, before the UTF-8 conversion.
+        SqsCodecInterceptor interceptor = configured.withMaxDecodedPayloadBytes(MULTIBYTE_BODY_BYTES - 1);
+        SendMessageBatchRequest request = SendMessageBatchRequest.builder()
+                .entries(
+                        SendMessageBatchRequestEntry.builder().id("1").messageBody("fits").build(),
+                        SendMessageBatchRequestEntry.builder().id("2").messageBody("a".repeat(MULTIBYTE_BODY_BYTES)).build())
+                .build();
+
+        assertThatThrownBy(() -> interceptor.modifyRequest(new ModifyRequestContext(request), new ExecutionAttributes()))
+                .isInstanceOf(DecompressedPayloadTooLargeException.class)
+                .hasMessage("Payload has 600 UTF-16 code units, so more UTF-8 bytes than the 599-byte "
+                        + "maxDecodedPayloadBytes of a send configured to compress or encode");
     }
 
     @Test
@@ -1474,14 +1493,17 @@ class SqsCodecInterceptorTest {
                 compressionAlgorithm.implementation().compress(new byte[8 * 1024 * 1024]));
         // The raw length is the sender's claim, so it doesn't bound the decompression: the configured limit does. (The
         // zstd frame holds 8 MiB of content with a 2 MiB window, over the 1 MiB window a 1 MiB limit admits, so it's
-        // decoded in one step, bounded the same way.)
+        // decoded in one step, bounded the same way, and refused when its largest permitted output is too small.)
         ReceiveMessageResponse response = receivedWith(body, "v=1;c=" + compressionAlgorithm.id() + ";e=base64;h=none;l=" + 8 * 1024 * 1024);
+        String expectedMessage = compressionAlgorithm == CompressionAlgorithm.ZSTD
+                ? "zstd's one-step decoder reported its largest permitted output buffer (1048576 bytes) too small"
+                : "Decompressed payload with gzip exceeds 1048576 bytes";
 
         assertThatThrownBy(() -> SqsCodecInterceptor.defaultInterceptor()
                 .withMaxDecodedPayloadBytes(1024 * 1024)
                 .modifyResponse(new ModifyResponseContext(response), new ExecutionAttributes()))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with " + compressionAlgorithm.id() + " exceeds 1048576 bytes");
+                .hasMessage(expectedMessage);
     }
 
     @Test

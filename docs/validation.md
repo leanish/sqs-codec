@@ -1,12 +1,12 @@
 # Release validation
 
-How each release was checked before it shipped: its candidates, what each reviewer added, the rough cost per model and
-the evidence from real runs. Known limitations are in `docs/coverage-gaps.md`.
+How each release and its candidates were checked: what each reviewer added, the rough cost per model, and the evidence
+from real runs, including the checks after publishing. Known limitations are in `docs/coverage-gaps.md`.
 
 Reviewers, by role:
 - **Haiku:** Claude Haiku sub-agents, read-only, each checking one area: claims, a checklist, or gaps.
 - **Sol:** Codex reviews. Sol A reviews correctness, Sol B scope, and Sol C claims and docs, each in its own thread.
-- **Astra:** a Codex model that costs much more than Sol. It challenged the earlier findings on rc.5 and rc.6.
+- **Astra:** a larger Codex model, used last on rc.5 and rc.6 to challenge the earlier findings.
 
 Claude Opus implemented the changes and settled the findings with the reviewers. It sent the Haiku findings it
 dismissed to Sol to confirm.
@@ -37,9 +37,10 @@ whose seven-day wait had ended.
   - Sol's blocker: writing `v=2` left clients that both send and receive, across queues, with no upgrade order that
     works.
     - A first fix that let senders keep writing `v=1` (#207) was closed.
-    - The owner decided instead that fresh compressed sends keep `v=1` and always write `l` (#208), and that readers
-      accept canonical `1.<minor>` (#209).
-  - Sol also found that the new publishing path had no staging evidence. A staging run in settlement showed the
+    - The owner decided instead that every fresh send writes `v=1`, and fresh compressed sends always write `l` too
+      (#208). Readers accept canonical `1.<minor>` (#209).
+  - Sol also found the limit above 1 GiB on zstd-jni's 32-bit native builds, which rc.2 took up.
+  - Sol found that the new publishing path had no staging evidence. A staging run in settlement showed the
     expected 25-file inventory. Sol corrected a stale publisher pin in the records, and recorded two limitations: strict
     version spelling and the publish queue.
   - All three Haiku reviewers spotted the snappy-java version gap in the CHANGELOG.
@@ -51,9 +52,10 @@ whose seven-day wait had ended.
   - Sol A found the reflection regression: `getDeclaredMethod("decompress", byte[].class)` failed on the built-in
     compressors. Sol A also found gaps in the evidence: no candidate publish or legacy-JDK run, and the cross-version
     runs only as a summary.
-    - Saved transcripts and legacy-JDK runs closed the evidence gaps. Registry publication moved to release
-      verification.
-    - Sol A's limit above 1 GiB on zstd-jni's 32-bit native builds was recorded on the owner's call, not fixed.
+    - Saved transcripts closed the cross-version gap, and legacy-JDK runs closed the JDK gap. Registry publication
+      stayed a separate check at release time.
+    - Sol A first rated the 32-bit limit from rc.1 as blocking. The owner deferred it, and it was recorded rather than
+      fixed.
   - Sol B independently made legacy `MAXIMUM` frames its main scope issue: they were refused at the default limit,
     because 0.5.x declares a 128 MiB window for them. Sol B also raised the separate window-versus-output-budget
     question. Sol A rated the `MAXIMUM` refusal a rollout blocker too.
@@ -86,12 +88,12 @@ whose seven-day wait had ended.
   - The fix review overturned a claim that the Lombok-generated `withMaxDecodedPayloadBytes` was missing.
   - Sol C contributed documentation corrections. Some test and behavior gaps were left as known limitations.
 - **rc.5**
-  - Astra first identified, in the reviewed record, that 0.6.0's zstd bodies differ from 0.5.x's for the same payload.
-    So on FIFO queues with content-based deduplication, a resubmission through the other version's writer can be
-    delivered twice.
+  - Astra identified what the different zstd bodies mean for FIFO queues. That 0.6.0's bodies differ from 0.5.x's for
+    the same payload had been observed since rc.1. Astra saw that on queues with content-based deduplication, a
+    resubmission through the other version's writer can be delivered twice.
   - Astra also elevated Sol C's Guava finding to a blocker. The CHANGELOG's Guava entry claimed a build-tool fix
     broader than the evidence: it covered Error Prone and Checkstyle, while an older Guava remained a Spotless input.
-    The published library has no Guava dependency.
+    The publication descriptors declare no Guava dependency.
   - #213 added FIFO cutover guidance and narrowed the Guava entry; runtime behavior didn't change.
   - Sol A re-rated its own 2 GiB compression-ceiling finding as non-blocking, and Astra concurred.
   - Sol B traced how the three rc.4 blockers were closed.
@@ -108,7 +110,8 @@ whose seven-day wait had ended.
     raised the test-name and Javadoc issues.
   - Sol A and Astra rebutted Haiku's claim that the legacy readers hadn't read rc.6's one-pass zstd: the runs show both
     did.
-  - Sol B identified a possible length check before the UTF-8 conversion.
+  - Sol B identified a possible length check before the UTF-8 conversion. It also noted that the summaries of earlier
+    candidates established the main fixes, but not the closure of each unnamed rc.4 and rc.5 finding.
   - Sol C separated seven wording corrections in the published text from corrections to the run notes.
   - The remaining public limitations are in `docs/coverage-gaps.md`.
 
@@ -116,12 +119,12 @@ whose seven-day wait had ended.
 
 | Reviewer | Calls | Input tokens | Of which uncached | Output tokens |
 | --- | --- | --- | --- | --- |
-| Haiku, candidate reviews | 36 reviews | 29.9M | mostly cache reads | 1.22M |
-| Haiku, fix-PR and PR-text reviews | 30 reviews | 26.1M | mostly cache reads | 1.10M |
+| Haiku, candidate reviews | 36 reviews | 29.9M | - | 1.22M |
+| Haiku, fix-PR and PR-text reviews | 30 reviews | 26.1M | - | 1.10M |
 | Sol | 65 logged calls, 64 with recorded usage | 137.4M | 4.9M | 520K |
 | Astra | 3 calls (rc.5, and two rounds on rc.6) | 4.7M | 0.23M | 21K |
 
-Haiku's input counts cached input and cache writes, about 7M of the 56M.
+Haiku's 56.0M input is 49.0M cache reads, 7.0M cache writes and about 3K ordinary input tokens.
 
 Per candidate:
 - **Haiku:** 3 to 7 reviews of each candidate, with about 3M to 7M input and 150K to 250K output.
@@ -144,8 +147,8 @@ These were on rc.6 unless noted.
   - The tiny forced-zstd probes returned the expected short text.
   - rc.6 accepted a hand-built `v=1.3` message that 0.5.1 refused.
 - **zstd frames:** the captured fixtures differed in framing.
-  - rc.6's small and ordinary frames were single-segment with a content size. The unit tests also cover an 8 MiB
-    one-pass frame, which declares a window.
+  - rc.6's small and ordinary frames were single-segment, with a content size that implies their window. The unit tests
+    also cover an 8 MiB one-pass frame, which has a separate window descriptor.
   - 0.5.x's frames declared 2 MiB or 128 MiB windows and no content size.
   - That difference is behind the FIFO note.
 - **Refusals:** rc.6 refused zstd and gzip bombs, `v=2`, and invalid UTF-8. A real SDK client pointed at LocalStack
@@ -153,8 +156,10 @@ These were on rc.6 unless noted.
 - **Binary compatibility:** selected calls compiled against 0.5.1 ran on rc.6, some checked only by length. The
   sorted `javap` member listings matched rc.5's.
 - **Legacy JDKs:** the legacy-JDK workflow passed on the rc.6 tag, on JDK 17 and 21.
-- **Not repeated on rc.6:** the relay forwarding a pre-encoded message without `l` (recorded on rc.2 to rc.5), every
-  legacy tiny-frame receive, and the SNAPSHOT publish and consumer resolution (rc.5).
+- **Not repeated on rc.6:**
+  - the relay forwarding a pre-encoded message without `l`, recorded on rc.2 to rc.5;
+  - the two tiny-frame cases for the legacy readers that were covered only on rc.5 (rc.6 repeated one per reader);
+  - the SNAPSHOT publish and consumer resolution, on rc.5.
 - **The release itself:**
   - #214's `clean check` passed: 390 tests across 14 suites, including the 8 LocalStack integration tests, with no
     skips.
@@ -163,4 +168,4 @@ These were on rc.6 unless noted.
   - A fresh consumer resolved `io.github.leanish:sqs-codec:0.6.0` from GitHub Packages. Calling the interceptor
     directly, gzip, zstd and checksum-only messages round-tripped, and an over-limit send was refused.
 - **Not exercised:** live AWS, FIFO delivery, and an async receive. Async receive was checked against the SDK 2.57.13
-  source only.
+  source only; the SDK probe exercised sync and async send refusal.

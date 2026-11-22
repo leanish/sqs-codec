@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.6.0 - 2026-11-22
+
 ### Security
 - Decompression is bounded. A small gzip or zstd payload could decode to gigabytes and exhaust a consumer's memory on
   receive, since decoding had no byte limit. Decoding now fails with `DecompressedPayloadTooLargeException` once it

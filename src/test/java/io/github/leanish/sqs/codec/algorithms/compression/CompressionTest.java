@@ -39,6 +39,13 @@ class CompressionTest {
                 .isEqualTo(-8112723582884947926L);
     }
 
+    @Test
+    void decompressedPayloadTooLargeException_keepsTheSerialVersionUidOf060() {
+        // serialver of the 0.6.0 jar, so instances serialized by 0.6.0 still deserialize.
+        assertThat(ObjectStreamClass.lookup(DecompressedPayloadTooLargeException.class).getSerialVersionUID())
+                .isEqualTo(5148972657466750515L);
+    }
+
     @ParameterizedTest
     @MethodSource("compressorCases")
     void compress_happyCase(Compressor compressor) {
@@ -320,7 +327,7 @@ class CompressionTest {
         assertThat(new ZstdCompressor().decompress(streamed, payload.length)).isEqualTo(payload);
         assertThatThrownBy(() -> new ZstdCompressor().decompress(streamed, payload.length - 1))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with zstd exceeds " + (payload.length - 1) + " bytes");
+                .hasMessage(oneStepOutputTooSmall(payload.length - 1));
     }
 
     @Test
@@ -341,7 +348,7 @@ class CompressionTest {
 
         assertThatThrownBy(() -> new ZstdCompressor().decompress(streamed, 4 * MIB))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with zstd exceeds " + 4 * MIB + " bytes");
+                .hasMessage(oneStepOutputTooSmall(4 * MIB));
     }
 
     @Test
@@ -387,7 +394,7 @@ class CompressionTest {
         assertThat(bomb.length).isLessThan(MIB / 4);
         assertThatThrownBy(() -> new ZstdCompressor().decompress(bomb, MIB))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with zstd exceeds " + MIB + " bytes");
+                .hasMessage(oneStepOutputTooSmall(MIB));
     }
 
     @Test
@@ -402,7 +409,7 @@ class CompressionTest {
         assertThat(compressor.decompress(concatenated, total)).isEqualTo(concat(first, second));
         assertThatThrownBy(() -> compressor.decompress(concatenated, total - 1))
                 .isInstanceOf(DecompressedPayloadTooLargeException.class)
-                .hasMessage("Decompressed payload with zstd exceeds " + (total - 1) + " bytes");
+                .hasMessage(oneStepOutputTooSmall(total - 1));
         byte[] truncated = Arrays.copyOf(concatenated, concatenated.length - 3);
         assertThatThrownBy(() -> compressor.decompress(truncated, total))
                 .isInstanceOf(CompressionException.class)
@@ -482,6 +489,11 @@ class CompressionTest {
             zstd.write(payload);
         }
         return bytes.toByteArray();
+    }
+
+    /** The refusal when zstd's one-step retry reports its largest permitted output too small, unlike a measured overrun. */
+    private static String oneStepOutputTooSmall(int ceiling) {
+        return "zstd's one-step decoder reported its largest permitted output buffer (" + ceiling + " bytes) too small";
     }
 
     private static byte[] concat(byte[] first, byte[] second) {
